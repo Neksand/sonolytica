@@ -647,6 +647,57 @@ fn video_fixture_path() -> PathBuf {
 }
 
 #[test]
+fn brief_maps_overlap_spans() {
+    let media = MediaInfo {
+        path: "/tmp/query-overlap.wav".into(),
+        duration: Some(MediaTime::from_millis(10_000)),
+        ..MediaInfo::default()
+    };
+    let mut builder = DocumentBuilder::new(media, AnalysisConfig::default());
+    let run = builder.add_run(run_record(
+        Capability::Diarize,
+        "sortformer-4spk-v2",
+        RunStatus::Complete,
+    ));
+    let track = builder.add_track(TrackKind::SpeakerTurn, "speaker_turns", run);
+    for (start, end, id, overlap) in [
+        (1.0, 4.0, "S1", true),
+        (2.5, 5.0, "S2", true),
+        (6.0, 7.0, "S1", false),
+    ] {
+        builder.add_segment(
+            track,
+            TimeRange::from_secs(start, end),
+            SegmentKind::SpeakerTurn {
+                speaker: SpeakerId::new(id),
+                text: "x".into(),
+                overlap,
+            },
+            Confidence::new(0.9),
+            run,
+        );
+    }
+    let path = std::env::temp_dir().join(format!(
+        "sonolytica-query-overlap-{}.json",
+        std::process::id()
+    ));
+    let document = builder.finish().expect("overlap fixture must be valid");
+    std::fs::write(&path, document.to_json_pretty().unwrap()).expect("write fixture");
+
+    let json = query_json(&["query", "brief", path.to_str().unwrap(), "--json"]);
+    let overlaps = json["speech"]["overlaps"].as_array().unwrap();
+    assert_eq!(overlaps.len(), 1, "touching turns merge into one span");
+    assert_eq!(overlaps[0]["start_us"], 1_000_000);
+    assert_eq!(overlaps[0]["end_us"], 5_000_000);
+    assert_eq!(overlaps[0]["speakers"], serde_json::json!(["S1", "S2"]));
+
+    let text = String::from_utf8_lossy(&query(&["query", "brief", path.to_str().unwrap()]).stdout)
+        .into_owned();
+    assert!(text.contains("overlaps   1 total"), "{text}");
+    assert!(text.contains("00:00:01.000–00:00:05.000  S1,S2"), "{text}");
+}
+
+#[test]
 fn brief_maps_scene_cuts_and_one_ocr_line_per_keyframe() {
     let path = video_fixture_path();
     let json = query_json(&["query", "brief", path.to_str().unwrap(), "--json"]);

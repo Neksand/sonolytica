@@ -1000,6 +1000,10 @@ const BRIEF_CHAPTER_GAP: MediaTime = MediaTime::from_millis(1_200);
 const BRIEF_SCENE_CUTS: usize = 50;
 /// One OCR line per keyframe, capped: the full list is `timeline --type text_overlay`.
 const BRIEF_OCR_LINES: usize = 10;
+/// Overlap spans mapped by `brief`; crowded audio can hold many.
+const BRIEF_OVERLAPS: usize = 20;
+/// Turns that touch within this gap belong to one overlap span.
+const OVERLAP_MERGE_GAP: MediaTime = MediaTime::from_millis(50);
 
 fn analysis_speech(doc: &Document) -> Option<&SpeechSummary> {
     doc.analyses.iter().find_map(|block| match block {
@@ -1042,6 +1046,53 @@ fn brief_ocr(doc: &Document) -> Vec<BriefOcr> {
         .collect()
 }
 
+/// Overlap spans: speaker turns flagged `overlap: true`, merged when they touch.
+/// `brief` is a map, so it lists the spans (longest first, capped) with the
+/// speakers involved; the individual turns stay in `timeline --type speaker_turn`.
+fn brief_overlaps(doc: &Document) -> Vec<BriefOverlap> {
+    let mut turns: Vec<(MediaTime, MediaTime, &str)> = doc
+        .segments_of_kind("speaker_turn")
+        .filter_map(|segment| match &segment.kind {
+            SegmentKind::SpeakerTurn {
+                speaker,
+                overlap: true,
+                ..
+            } => Some((segment.range.start, segment.range.end, speaker.as_str())),
+            _ => None,
+        })
+        .collect();
+    turns.sort_unstable_by_key(|(start, end, _)| (*start, *end));
+
+    let mut spans: Vec<(MediaTime, MediaTime, Vec<String>)> = Vec::new();
+    for (start, end, speaker) in turns {
+        match spans.last_mut() {
+            Some((_, span_end, speakers))
+                if start <= span_end.saturating_add(OVERLAP_MERGE_GAP) =>
+            {
+                *span_end = (*span_end).max(end);
+                if !speakers.iter().any(|known| known == speaker) {
+                    speakers.push(speaker.to_string());
+                }
+            }
+            _ => spans.push((start, end, vec![speaker.to_string()])),
+        }
+    }
+
+    if spans.len() > BRIEF_OVERLAPS {
+        spans.sort_unstable_by_key(|(start, end, _)| end.saturating_sub(*start));
+        spans.truncate(BRIEF_OVERLAPS);
+    }
+    spans.sort_unstable_by_key(|(start, _, _)| *start);
+    spans
+        .into_iter()
+        .map(|(start, end, speakers)| BriefOverlap {
+            start_us: start.micros(),
+            end_us: end.micros(),
+            speakers,
+        })
+        .collect()
+}
+
 fn brief(doc: &Document, json: bool) -> Result<()> {
     let summary = analysis_speech(doc);
     let speech_segments: Vec<&Segment> = doc.segments_of_kind("speech").collect();
@@ -1080,6 +1131,7 @@ fn brief(doc: &Document, json: bool) -> Result<()> {
         speaker_count,
         speech_ratio: summary.map(|speech| speech.speech_ratio),
         speech_duration_us: summary.map(|speech| speech.speech_duration.micros()),
+        overlaps: brief_overlaps(doc),
     });
 
     let all_chapters = chapter_views(doc, BRIEF_CHAPTER_GAP);
@@ -1267,6 +1319,23 @@ fn brief(doc: &Document, json: bool) -> Result<()> {
         }
         if speaker_total > BRIEF_SPEAKERS {
             println!("           … {} more", speaker_total - BRIEF_SPEAKERS);
+        }
+    }
+
+    if let Some(speech) = &speech {
+        if !speech.overlaps.is_empty() {
+            println!("overlaps   {} total", speech.overlaps.len());
+            for span in speech.overlaps.iter().take(5) {
+                println!(
+                    "           {}–{}  {}",
+                    MediaTime::from_micros(span.start_us),
+                    MediaTime::from_micros(span.end_us),
+                    span.speakers.join(",")
+                );
+            }
+            if speech.overlaps.len() > 5 {
+                println!("           … {} more", speech.overlaps.len() - 5);
+            }
         }
     }
 
@@ -1756,6 +1825,15 @@ struct BriefSpeech {
     speaker_count: u32,
     speech_ratio: Option<f32>,
     speech_duration_us: Option<i64>,
+    /// Spans where two or more turns talk at once, in time order (capped).
+    overlaps: Vec<BriefOverlap>,
+}
+
+#[derive(Debug, Serialize)]
+struct BriefOverlap {
+    start_us: i64,
+    end_us: i64,
+    speakers: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]

@@ -39,6 +39,8 @@ questions. Nothing is inferred beyond counts:
   ratio is `null`);
 - `speakers`: id, speaking time, turns, first/last (up to 8; `speaker_count` is
   the true total);
+- `speech.overlaps`: spans with two or more simultaneous turns, in time order
+  (capped at 20), each with its speakers;
 - `chapters`: up to 5 structural chapters (same rule as `query chapters`), with
   `chapter_count` as the true total;
 - `video`: scene, keyframe and text-overlay counts, `scene_cuts` (start of each
@@ -55,7 +57,7 @@ JSON:
   "complete": true,
   "runs": [ { "capability": "vad", "provider": "silero-vad", "status": "complete", "duration_ms": 120 } ],
   "warnings": [],
-  "speech": { "word_count": 402, "language": "en", "speaker_count": 2, "speech_ratio": 0.61, "speech_duration_us": 94900000 },
+  "speech": { "word_count": 402, "language": "en", "speaker_count": 2, "speech_ratio": 0.61, "speech_duration_us": 94900000, "overlaps": [ { "start_us": 1158470000, "end_us": 1159510000, "speakers": ["S1", "S2"] } ] },
   "speaker_count": 2,
   "speakers": [ { "id": "S1", "speech_duration_us": 52000000, "speech_display": "00:00:52.000", "turn_count": 12, "first_start_us": 1200000, "last_end_us": 149000000 } ],
   "chapter_count": 4,

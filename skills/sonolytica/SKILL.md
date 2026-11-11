@@ -157,7 +157,8 @@ the stem first. Full protocol: `references/citation-rules.md`.
   warning makes the count approximate — say "at least N".
 - `overlap: true` means two people spoke at once. Sortformer returns two
   simultaneous turns, the pyannote fallback only flags; the transcript is one
-  ASR stream, so never invent separate words per speaker.
+  ASR stream, so never invent separate words per speaker. `brief` lists the
+  spans (`speech.overlaps`): report every span, not the first one.
 - Text-only model: say you cannot see images; never claim to have looked at a
   frame or "visually confirmed" OCR. OCR is a fact read at one instant.
 - BPM/key/chords are heuristic scores, sections are technical boundaries, not
@@ -196,5 +197,4 @@ call, screencast, DJ set, video navigation and on-screen text.
 ## 14. Accuracy claims
 
 Only from an actual run, naming dataset, subset, model and date, e.g.
-`sonolytica-eval report --document doc.json`. Never quote a number you did not
-produce in this session.
+`sonolytica-eval report --document doc.json`. Never quote an unproduced number.
