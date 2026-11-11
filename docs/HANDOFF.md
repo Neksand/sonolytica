@@ -1,7 +1,7 @@
 # Handoff — SONOLYTICA after the media/agent cycle
 
 Last updated: 2026-11-11. Branch `main`, working tree clean, **no remote
-configured** (the user pushes). Latest commit: `e2f5592`.
+configured** (the user pushes). Latest code commit: `e2f5592`; the handoff commit (`docs: handoff for a fresh session`) follows it.
 
 Read this first, then `docs/STATUS.md` (numbers), `docs/EVAL.md` (methods),
 `docs/BENCHMARK.md` (agent tests), `docs/OCR.md` (OCR), `docs/SCHEMA.md`
