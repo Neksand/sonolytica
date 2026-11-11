@@ -1516,9 +1516,9 @@ fn verify(doc: &Document, claims_path: Option<&Path>, json: bool) -> Result<()> 
                 let start = segment.range.start.micros();
                 let end = segment.range.end.micros();
                 if claim.start_us == claim.end_us {
-                    overlapping = (start..=end).contains(&claim.start_us);
+                    overlapping |= (start..=end).contains(&claim.start_us);
                 } else {
-                    overlapping = start < claim.end_us && claim.start_us < end;
+                    overlapping |= start < claim.end_us && claim.start_us < end;
                 }
                 matches.push(VerifyMatch {
                     kind: segment.kind.kind_name().to_string(),

@@ -355,9 +355,11 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                         CORE_MODELS
                             .iter()
                             .map(|id| {
-                                sonolytica_providers::find_model(id).expect("core model is pinned")
+                                sonolytica_providers::find_model(id).ok_or_else(|| {
+                                    anyhow::anyhow!("core preset names unknown model `{id}`")
+                                })
                             })
-                            .collect()
+                            .collect::<Result<Vec<_>>>()?
                     } else {
                         if ids.is_empty() {
                             bail!("name one or more model ids, or pass --all");

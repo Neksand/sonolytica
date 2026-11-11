@@ -35,6 +35,9 @@ fn fixture_dir() -> PathBuf {
         b"JPEG",
     )
     .unwrap();
+    std::fs::create_dir_all(dir.join("other")).unwrap();
+    std::fs::write(dir.join("other/frame_0001.jpg"), b"SECOND").unwrap();
+    std::fs::write(dir.join("secret.jpg"), b"SECRET").unwrap();
     dir
 }
 
@@ -76,14 +79,20 @@ fn write_document(dir: &Path) -> PathBuf {
         Confidence::new(0.9),
         text,
     );
-    builder.add_artifact(Artifact {
-        kind: "keyframe".into(),
-        path: "doc.json.artifacts/frames/frame_0001.jpg".into(),
-        range: TimeRange::empty(MediaTime::from_secs_f64(2.0)),
-        sha256: None,
-        width: Some(640),
-        height: Some(360),
-    });
+    for (path, at) in [
+        ("doc.json.artifacts/frames/frame_0001.jpg", 2.0),
+        ("other/frame_0001.jpg", 4.0),
+        ("../secret.jpg", 6.0),
+    ] {
+        builder.add_artifact(Artifact {
+            kind: "keyframe".into(),
+            path: path.into(),
+            range: TimeRange::empty(MediaTime::from_secs_f64(at)),
+            sha256: None,
+            width: Some(640),
+            height: Some(360),
+        });
+    }
 
     let document = builder.finish().expect("report fixture must be valid");
     let path = dir.join("doc.json");
@@ -118,7 +127,7 @@ fn report_is_self_contained_and_escapes_text() {
         "S1",
         "QUARTERLY REVENUE",
         "&lt;script&gt;alert(&#39;x&#39;)&lt;/script&gt;",
-        "report.html.artifacts/frames/frame_0001.jpg",
+        "report.html.artifacts/frames/00000-frame_0001.jpg",
     ] {
         assert!(html.contains(needle), "missing `{needle}` in report");
     }
@@ -130,10 +139,25 @@ fn report_is_self_contained_and_escapes_text() {
         !html.contains("http://") && !html.contains("https://"),
         "a report must not depend on the network"
     );
+    let frames_dir = dir.join("report.html.artifacts/frames");
     assert!(
-        dir.join("report.html.artifacts/frames/frame_0001.jpg")
-            .exists(),
-        "keyframes must travel with the report"
+        frames_dir.join("00000-frame_0001.jpg").exists()
+            && frames_dir.join("00001-frame_0001.jpg").exists(),
+        "same basenames must not overwrite each other: {:?}",
+        std::fs::read_dir(&frames_dir)
+            .map(|entries| entries
+                .filter_map(|entry| entry.ok())
+                .map(|entry| entry.file_name())
+                .collect::<Vec<_>>())
+            .unwrap_or_default()
+    );
+    assert!(
+        !html.contains("secret.jpg"),
+        "a document must not copy files from outside its directory"
+    );
+    assert!(
+        !frames_dir.join("secret.jpg").exists(),
+        "path traversal must be refused"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -72,5 +72,16 @@ fn dry_run_writes_nothing() {
     assert!(!home.join(".claude").exists());
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("would write"), "{stdout}");
+
+    assert!(install(&home, &["--target", "claude"]).status.success());
+    assert!(
+        install(&home, &["--target", "claude", "--uninstall", "--dry-run"])
+            .status
+            .success()
+    );
+    assert!(
+        home.join(".claude/skills/sonolytica").exists(),
+        "a dry-run uninstall must not delete anything"
+    );
     let _ = std::fs::remove_dir_all(&home);
 }

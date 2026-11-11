@@ -456,6 +456,67 @@ fn human_output_is_plain_and_readable() {
 }
 
 #[test]
+fn verify_accepts_a_quote_that_also_appears_elsewhere() {
+    // The same sentence at 0-1 s and 10-11 s: a claim on the second copy must
+    // not be downgraded by the first, non-overlapping match.
+    let media = MediaInfo {
+        path: "/tmp/query-duplicate.wav".into(),
+        duration: Some(MediaTime::from_millis(12_000)),
+        ..MediaInfo::default()
+    };
+    let mut builder = DocumentBuilder::new(media, AnalysisConfig::default());
+    let run = builder.add_run(run_record(
+        Capability::Transcribe,
+        "whisper-base.en",
+        RunStatus::Complete,
+    ));
+    let track = builder.add_track(TrackKind::Speech, "asr", run);
+    for (start, end) in [(0.0_f64, 1.0_f64), (10.0, 11.0)] {
+        builder.add_segment(
+            track,
+            TimeRange::from_secs(start, end),
+            SegmentKind::Speech {
+                text: "same words".into(),
+                words: Vec::new(),
+                language: Some("en".into()),
+                no_speech_prob: None,
+            },
+            Confidence::new(0.9),
+            run,
+        );
+    }
+    let dir = std::env::temp_dir().join(format!("sonolytica-verify-dup-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let doc = dir.join("doc.json");
+    let document = builder.finish().expect("duplicate fixture must be valid");
+    std::fs::write(&doc, document.to_json_pretty().unwrap()).unwrap();
+    let claims = dir.join("claims.json");
+    std::fs::write(
+        &claims,
+        r#"{"claims":[{"quote":"same words","start_us":10000000,"end_us":11000000}]}"#,
+    )
+    .unwrap();
+
+    let output = query(&[
+        "query",
+        "verify",
+        doc.to_str().unwrap(),
+        "--claims",
+        claims.to_str().unwrap(),
+        "--json",
+    ]);
+    assert!(
+        output.status.success(),
+        "second occurrence must verify: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["claims"][0]["status"], "ok");
+    assert_eq!(json["claims"][0]["matches"].as_array().unwrap().len(), 2);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn verify_checks_quotes_and_ranges() {
     let path = fixture_path();
     let claims =

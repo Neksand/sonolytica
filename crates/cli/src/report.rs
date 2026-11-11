@@ -5,7 +5,7 @@
 //! `<report>.artifacts/frames/` so the folder can be moved as a unit.
 
 use std::fmt::Write as _;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use anyhow::{Context, Result};
 use sonolytica_core::{AnalysisBlock, Document, MediaTime, SegmentKind};
@@ -59,18 +59,38 @@ fn copy_keyframes(
         if artifact.kind != "keyframe" {
             continue;
         }
-        let source = base.join(&artifact.path);
+        let Some(relative) = safe_relative(&artifact.path) else {
+            continue;
+        };
+        let source = base.join(relative);
         let Some(name) = source.file_name() else {
             continue;
         };
+        // Two scenes can carry frames with the same basename; the index keeps
+        // them apart and makes the copy order reproducible.
+        let unique = format!("{index:05}-{}", name.to_string_lossy());
         std::fs::create_dir_all(&dir)
             .with_context(|| format!("could not create {}", dir.display()))?;
-        let target = dir.join(name);
-        if std::fs::copy(&source, &target).is_ok() {
-            copied.push((index, format!("{assets}/frames/{}", name.to_string_lossy())));
+        let target = dir.join(&unique);
+        match std::fs::copy(&source, &target) {
+            Ok(_) => copied.push((index, format!("{assets}/frames/{unique}"))),
+            Err(error) => eprintln!("warning: keyframe {} not copied: {error}", source.display()),
         }
     }
     Ok(copied)
+}
+
+/// Artifact paths are relative to the document. Refuse absolute paths and
+/// `..` so a crafted document cannot copy files from outside its directory.
+fn safe_relative(path: &str) -> Option<&Path> {
+    let path = Path::new(path);
+    if path.is_absolute() {
+        return None;
+    }
+    let ok = path
+        .components()
+        .all(|component| matches!(component, Component::Normal(_) | Component::CurDir));
+    ok.then_some(path)
 }
 
 fn render(document: &Document, frames: &[(usize, String)]) -> String {

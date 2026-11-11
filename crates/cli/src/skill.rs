@@ -101,6 +101,10 @@ pub fn run(options: &Options) -> Result<()> {
     for target in targets {
         let base = base_dir(target, &home, options.project);
         if options.uninstall {
+            if options.dry_run {
+                println!("{:<8} would remove {}", label(target), display(&base));
+                continue;
+            }
             let removed = if target == Target::Cursor {
                 remove_file(&base.join(format!("{NAME}.mdc")))?
             } else {
