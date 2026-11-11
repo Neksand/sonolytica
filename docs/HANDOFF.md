@@ -22,14 +22,14 @@ OCR text, and provenance on every segment. Agents read it via
 
 | | |
 |---|---|
-| Rust | 16 088 lines, 7 crates: `providers` (4.3k), `cli` (3.8k), `engine` (2.6k), `core` (2.1k), `dsp` (1.4k), `media` (1.2k), `eval` (0.7k) |
+| Rust | 17 161 lines, 7 crates: `providers` (4.3k), `cli` (4.8k), `engine` (2.6k), `core` (2.1k), `dsp` (1.4k), `media` (1.2k), `eval` (0.7k) |
 | Binary | `sonolytica` (`sonolytica-cli`) |
 | SDK | `sonolytica-engine` (`Engine::analyze`) |
 | Schema | **1.4.0**, additive 1.0 → 1.4 |
 | Models | 10, SHA-256 pinned, in `~/.cache/sonolytica/models` |
-| Query commands | 14: brief, timeline, at, search, transcript, words, speakers, chapters, frames, music, acoustic, runs, summary, help |
+| Commands | 14 query subcommands (brief … help) + `report`, `install-skill`, `analyze`, `models`, `doctor`, `inspect`, `schema` |
 | Skill | `skills/sonolytica/` (SKILL.md 200 lines + 5 references + 5 workflows) |
-| Tests | **137** model-free / **152** all-features |
+| Tests | **141** model-free / **156** all-features |
 
 Features: `sonolytica-cli --features full-metal` = whisper + silero + diarize +
 ocr + align + metal. `cargo test --workspace` runs without models/cmake/ORT.
@@ -75,12 +75,11 @@ whisper/tesseract/sonolytica (8 tasks, max 16):
 `*` one false "visually confirmed" claim, fixed in the skill: text-only models
 must not claim sight.
 
-`query brief` v2 (2026-11-12, reproducible prompts): the hard fixture scores
-**16/16 at 14 145 fresh in 13 commands** (median of 14 773 and 13 517; v1 used
-22 410); the easy fixture scores **8/8 at 8 626 fresh** (8 434 / 8 818; v1 used
-9 521). A new 20-minute real meeting (VoxConverse `fvhrk`) scores 15/16 at
-17 741 with the slim core versus 16/16 at 17 633 with the old one — the lost
-point is a truncated overlap range. Details and caveats: BENCHMARK.
+`query brief` v2 + overlap map (2026-11-12, reproducible prompts, one run per
+fixture): hard **16/16 at 10 393 fresh in 9 commands** (22 410 before), easy
+**8/8 at 7 517 in 7** (9 521), long 20-minute meeting **16/16 at 11 308 in 8**
+(17 633). The overlap spans in `brief` fixed the only lost point and cut the
+long session from 22 commands to 8. Details and caveats: BENCHMARK.
 
 ## 3. Things that must not regress
 
@@ -96,10 +95,10 @@ point is a truncated overlap range. Details and caveats: BENCHMARK.
   failure warns `diarization_vad_gate_unavailable` and leaves turns ungated.
 - Sortformer files longer than 10 minutes carry `diarization_speaker_cap`; an
   agent must say "at least N" there, never an exact count.
-- Skill cost/quality baseline: hard **16/16 / 14 145 fresh / 13 commands**,
-  easy **8/8 / 8 626 fresh / 9 commands**, long 20 min **15/16 / 17 741**.
-  Re-run the paired benchmark (`scripts/bench/prepare_agent_fixture.sh`, same
-  prompt file) before claiming an improvement; do not preload reference files.
+- Skill cost/quality baseline: hard **16/16 / 10 393 fresh / 9 commands**,
+  easy **8/8 / 7 517 / 7**, long 20 min **16/16 / 11 308 / 8**. Re-run the
+  paired benchmark (`scripts/bench/prepare_agent_fixture.sh`, same prompt file)
+  before claiming an improvement; do not preload reference files.
 - `ort` pinned `=2.0.0-rc.15`; one environment per process; **shared session
   builder uses `AutoDevicePolicy::PreferCPU`** (CoreML silently mis-executes
   dynamic-shape graphs: PP-OCRv5 detection collapsed, recognition blank; VAD
@@ -261,23 +260,21 @@ line per keyframe), a 200-line `SKILL.md` with modality detail moved to
 
 Results (medians, DeepSeek V4.1 Flash, one clean directory per run):
 
-| Fixture | Before | After | Gate | Verdict |
+| Fixture | Before | After (round 2) | Gate | Verdict |
 |---|---|---|---|---|
-| hard 4 min | 16/16, 22 410 | **16/16, 14 145** | ≤18 000 | met |
-| easy 14.4 s | 8/8, 9 521 | **8/8, 8 626** | ≤8 000 | missed by 7.8 % |
-| long 20 min | 16/16, 17 633 | **15/16, 17 741** | score ≥, cost ≤+10 % | score −1 |
+| hard 4 min | 16/16, 22 410 | **16/16, 10 393** | ≤18 000 | met |
+| easy 14.4 s | 8/8, 9 521 | **8/8, 7 517** | ≤8 000 | met |
+| long 20 min | 16/16, 17 633 | **16/16, 11 308** | score ≥, ≤+10 % | met |
 
 Open, in priority order:
 
-1. **Overlap mapping.** The long run lost a point on a truncated overlap range
-   and spent ~7 commands grepping the raw JSON for `overlap: true`. Add the
-   overlap spans to `brief` (or a `query overlaps`) only if a paired run shows
-   fewer commands and no score loss — `brief` must stay ≤4 KB compact.
-2. **Easy fixed cost.** 8 626 vs the 8 000 gate; the remainder is the harness
-   prompt plus the 200-line core. Cutting more prose risks the score, so the
-   next attempt needs a measurement, not a guess.
-3. **The long fixture needs a second session per skill version** before treating
-   the one-point loss as systematic.
+1. **Video depth.** Objects and faces (detection only, no identity), dense
+   frames for long static shots, opt-in local VLM captions. Schema 1.5.0,
+   additive; every heavy model opt-in with a RAM warning.
+2. **Music depth.** Notes (basic-pitch), stems if ONNX parity holds, technical
+   highlight windows with confidence — never a taste claim.
+3. **Long-file streaming.** AOSC cache for >10-minute files; the fixture
+   `fvhrk` still reports 2 labels against 4 annotated speakers.
 
 ### Capability roadmap after the skill cycle (by payoff)
 
@@ -360,10 +357,9 @@ and record it in `docs/EVAL.md`.
 ## 9. For the next agent
 
 Start with `git status`, `docs/HANDOFF.md` (this file), `docs/STATUS.md`, then
-§7 above. The skill cycle is closed: hard 16/16 at 14 145 fresh, easy 8/8 at
-8 626 (gate 8 000 missed), long 20 min 15/16 at 17 741. First objective is the
-lost overlap mapping on the long fixture — add overlap spans to `brief` (or a
-`query overlaps`) and prove it on a paired run. Do not re-litigate the rejected
+§7 above. The skill cycle is closed: hard 16/16 at 10 393 fresh, easy 8/8 at
+7 517, long 20 min 16/16 at 11 308. First objective is video depth (objects,
+faces without identity, dense frames) and long-file streaming. Do not re-litigate the rejected
 experiments (VAD gate at 0.45, merge tie-break, count heuristics) and do not
 preload reference files. Keep the model-free build and the docs-as-tests green.
 If a change is not measured on a licensed or reproducible fixture, it is not

@@ -302,6 +302,26 @@ Reading it:
   but the routing did not: the old core had a "minimum commands" table that the
   new core delegates to the cheatsheet.
 
+### Round 2: overlap map in `brief` (same day)
+
+`brief` now carries `speech.overlaps`: merged spans of turns flagged
+`overlap: true`, in time order, capped at 20. `brief --json` grew to 2.8 KB on
+the 20-minute document; the text output grew by one line per span. Same method,
+same model, one run per fixture:
+
+| Fixture | Score | Commands | Fresh | Round 1 |
+|---|---|---|---|---|
+| easy 14.4 s | **8/8** | 7 | **7 517** | 8 434 / 8 818 |
+| hard 4 min | **16/16** | 9 | **10 393** | 14 773 / 13 517 |
+| long 20 min | **16/16** | 8 | **11 308** | 17 741 |
+
+The long session is the direct evidence for the change: it reported all three
+overlap spans (00:19:18.470–00:19:19.599, 00:19:19.910–00:19:26.559,
+00:19:26.650–00:19:31.780), scored 16/16, and made 8 commands instead of 22. The
+hard and easy sessions also got cheaper, but part of that is run variance: the
+skill gained one line and the fixed prompt is unchanged. Treat the direction as
+solid and the exact percentages as single runs.
+
 Caveat: one long session per skill version, manual scoring, one model. The
 20-minute fixture is VoxConverse `fvhrk` (CC BY 4.0): a real 4-speaker debate
 (RTTM), 4 annotated speakers, one participant speaking 18.5 s, no overlap

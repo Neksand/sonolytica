@@ -16,8 +16,9 @@ runtime, no GPL.
 
 | | |
 |---|---|
-| Rust | 16 088 lines across 7 crates (`providers` 4 347, `cli` 3 753, `engine` 2 631, `core` 2 080, `dsp` 1 360, `media` 1 226, `eval` 691) |
+| Rust | 17 161 lines across 7 crates (`providers` 4 347, `cli` 4 826, `engine` 2 631, `core` 2 080, `dsp` 1 360, `media` 1 226, `eval` 691) |
 | Query commands | 14 (`brief`, `timeline`, `at`, `search`, `transcript`, `words`, `speakers`, `chapters`, `frames`, `music`, `acoustic`, `runs`, `summary`, `help`) |
+| CLI | `analyze`, `query`, `report` (HTML), `install-skill` (4 harnesses), `models fetch --set core\|full`, `doctor`, `inspect`, `schema` |
 | Models | 10, all SHA-256 pinned: Silero VAD, whisper tiny/base/small, wav2vec2 aligner, Sortformer 4spk, pyannote segmentation, WeSpeaker, PP-OCRv5 det/rec |
 | Schema | 1.4.0 (`Document::validate`, additive 1.0 → 1.4) |
 | Agent skill | `SKILL.md` (200 lines) + 5 references + 5 workflows + install guide |
@@ -27,8 +28,8 @@ runtime, no GPL.
 
 | Check | Result |
 |---|---|
-| `cargo test --workspace` | 137 passed, 0 failed |
-| with `full,metal` | 152 passed, 0 failed |
+| `cargo test --workspace` | 141 passed, 0 failed |
+| with `full,metal` | 156 passed, 0 failed |
 | `cargo clippy -D warnings` | clean (default and full) |
 | `cargo fmt --check` | clean |
 | Model-free build | tests pass with no models, no cmake, no ONNX runtime |
@@ -52,8 +53,8 @@ runtime, no GPL.
 | Throughput | realtime factor | **16.9×** on the 240 s hard fixture (17.9× without the VAD gate pass); 14.1× was the 155.6 s pipeline before the gate | full audio pipeline with Sortformer |
 | Russian | transcript | exact | 12 s, `whisper-small --language ru`, 0 word errors on a clean fixture |
 | Agent | answers | **16/20 vs 20/20** easy; **7/16 vs 16/16** hard | no skill vs skill; the hard fixture is a 4 min, 4-voice meeting with no ASR/OCR tools for the baseline |
-| Agent, `query brief` v2 | fresh tokens | easy **8 626** (median of 8 434 / 8 818) vs 9 521; hard **14 145** (14 773 / 13 517) in 13 commands, 16/16 vs 22 410 | DeepSeek V4.1 Flash, one 2–3 KB brief first, reproducible prompts; see BENCHMARK |
-| Agent, 20 min real meeting | score / cost | old core **16/16 / 17 633**, new core **15/16 / 17 741** | VoxConverse `fvhrk`, 4 speakers (document reports 2 + cap warning), one wrong overlap range |
+| Agent, `query brief` v2 | fresh tokens | easy **7 517** at 8/8; hard **10 393** at 16/16; long **11 308** at 16/16 | DeepSeek V4.1 Flash, clean dirs, fixed prompts; see BENCHMARK |
+| Agent, 20 min real meeting | score / cost | old skill **16/16 / 17 633**, new **16/16 / 11 308** | VoxConverse `fvhrk`, 4 speakers (document reports 2 + cap warning) |
 
 WER and DER are **pilots**, not leaderboard results: small subsets, one machine,
 and the VoxConverse threshold was calibrated on the same dev files. The numbers
@@ -65,13 +66,11 @@ exist so changes can be judged by deltas, not to claim state of the art.
 
 - video fixture: 5/8 without, 8/8 with; the skill used **43 % fewer fresh
   tokens** (35 013 vs 61 280) because it queried instead of experimenting;
-- with `query brief` v2 (2026-11-12) the easy fixture fell to **8 626 fresh**
-  tokens (9 521 for `brief` v1) at 8/8, and the hard fixture scored 16/16 at
-  **14 145 fresh** in 13 commands (22 410 for v1) — start with one brief, open
-  references only when needed;
-- on a 20-minute real meeting both skills answer 15–16/16 at ~17.7k fresh
-  tokens; the new core lost one point on a truncated overlap range, so "cheaper
-  and better" is still half-true: hard is 35 % cheaper, easy 9 %, quality flat;
+- with `query brief` v2 and the overlap map (2026-11-12) the easy fixture fell
+  to **7 517 fresh** (9 521 before), the hard fixture to **10 393** (22 410) at
+  16/16, and the 20-minute meeting to **11 308** (17 633) at 16/16;
+- that is cheaper **and** better: −21 % easy, −54 % hard, −36 % long, with one
+  extra point on the long fixture after overlaps entered `brief`;
 - Russian fixture: 11/12 without, 12/12 with; here the skill cost **more**
   (34 558 vs 23 131 fresh tokens) because a 12 s voice memo does not need a
   five-stage document;

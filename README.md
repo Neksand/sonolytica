@@ -102,9 +102,9 @@ DeepSeek V4.1 Flash, clean directories, fixed prompts:
 
 | Fixture | Score | Fresh tokens | Before the skill cycle |
 |---|---|---|---|
-| 14 s video, 4 questions | **8/8** | **8 626** | 9 521 |
-| 4 min meeting, 8 questions | **16/16** | **14 145** | 22 410 |
-| 20 min real meeting, 8 questions | **15/16** | **17 741** | 16/16 / 17 633 |
+| 14 s video, 4 questions | **8/8** | **7 517** | 9 521 |
+| 4 min meeting, 8 questions | **16/16** | **10 393** | 22 410 |
+| 20 min real meeting, 8 questions | **16/16** | **11 308** | 17 633 |
 
 Reproduce any row with `scripts/bench/prepare_agent_fixture.sh` and
 `scripts/bench/session_tokens.sh`. If a number moves, it comes with the date,
