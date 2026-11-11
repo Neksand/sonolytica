@@ -1,0 +1,6 @@
+# ONNX Runtime's prebuilt macOS binaries (CoreML execution provider) are built
+# against macOS 13.4. Linking them with the default 11.0 deployment target
+# fails with `___isPlatformVersionAtLeast` undefined. Users can override this
+# with their own MACOSX_DEPLOYMENT_TARGET; the variable is ignored elsewhere.
+[env]
+MACOSX_DEPLOYMENT_TARGET = "13.4"

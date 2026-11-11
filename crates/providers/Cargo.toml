@@ -1,0 +1,47 @@
+[package]
+name = "sonolytica-providers"
+description = "Model providers for SONOLYTICA: VAD, ASR, diarization, embeddings; local-first with ONNX Runtime and whisper.cpp."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[features]
+default = []
+# Silero VAD through ONNX Runtime (no cmake required).
+silero = ["dep:ort", "dep:ndarray"]
+# Whisper through whisper.cpp (requires cmake + clang at build time).
+whisper = ["dep:whisper-rs", "dep:hound"]
+# pyannote segmentation + WeSpeaker embeddings through ONNX Runtime (requires cmake for fbank).
+diarize = ["dep:ort", "dep:ndarray", "dep:knf-rs", "dep:hound"]
+# Everything, for a full local pipeline.
+full = ["silero", "whisper", "diarize"]
+# Apple Silicon GPU inference for whisper.cpp.
+metal = ["whisper-rs?/metal"]
+
+[dependencies]
+sonolytica-core = { workspace = true }
+ndarray = { workspace = true, optional = true }
+ort = { workspace = true, optional = true }
+hound = { workspace = true, optional = true }
+knf-rs = { version = "0.3.2", optional = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+ureq = { workspace = true }
+whisper-rs = { workspace = true, optional = true }
+
+[dev-dependencies]
+sonolytica-media = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+
+[lints]
+workspace = true
+
+[[example]]
+name = "asr_probe"
+required-features = ["whisper"]

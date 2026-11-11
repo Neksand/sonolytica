@@ -1,0 +1,32 @@
+[package]
+name = "sonolytica-engine"
+description = "Analysis orchestration for SONOLYTICA: planning, failure isolation, timeline assembly."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[features]
+default = []
+silero = ["sonolytica-providers/silero"]
+whisper = ["sonolytica-providers/whisper"]
+diarize = ["sonolytica-providers/diarize"]
+metal = ["sonolytica-providers/metal"]
+full = ["sonolytica-providers/full"]
+
+[dependencies]
+sonolytica-core = { workspace = true }
+sonolytica-dsp = { workspace = true }
+sonolytica-media = { workspace = true }
+sonolytica-providers = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

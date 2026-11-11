@@ -1,0 +1,56 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  core:
+    name: core (no models, no native runtime)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.99.0"
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Test without any model feature
+        run: cargo test --workspace
+
+  full:
+    name: full pipeline (macOS, Metal, native runtimes)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.99.0"
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: brew install cmake
+      - run: cargo clippy --workspace --all-targets --features "sonolytica-engine/full,sonolytica-engine/metal,sonolytica-cli/full-metal" -- -D warnings
+      - name: Test with every provider compiled in
+        run: cargo test --workspace --features "sonolytica-engine/full,sonolytica-engine/metal,sonolytica-cli/full-metal"
+      # Model-backed tests are opt-in: they need pinned artifacts and macOS `say`.
+      # Run them locally with:
+      #   SONOLYTICA_E2E=1 cargo test -p sonolytica-engine --features "full,metal" --test e2e_speech
+
+  licenses:
+    name: licenses and sources
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check licenses bans sources
+          arguments: --all-features

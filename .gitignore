@@ -1,0 +1,5 @@
+/target
+.planning/
+.cache/
+*.sonolytica.json
+.DS_Store
