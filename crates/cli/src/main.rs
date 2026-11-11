@@ -15,6 +15,7 @@ use tracing_subscriber::EnvFilter;
 
 mod query;
 mod report;
+mod skill;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -48,6 +49,8 @@ enum Command {
     Query(query::QueryArgs),
     /// Render a human-readable HTML report for an analysed document
     Report(ReportArgs),
+    /// Install the agent skill into Claude Code, Codex, OpenCode and Cursor
+    InstallSkill(InstallSkillArgs),
     /// List or fetch pinned models
     Models {
         #[command(subcommand)]
@@ -57,6 +60,22 @@ enum Command {
     Doctor,
     /// Print the document schema example
     Schema,
+}
+
+#[derive(Debug, Args)]
+struct InstallSkillArgs {
+    /// Harness to install into
+    #[arg(long, value_enum, default_value_t = skill::Target::All)]
+    target: skill::Target,
+    /// Install into the current directory instead of the home directory
+    #[arg(long)]
+    project: bool,
+    /// Print what would be written, change nothing
+    #[arg(long)]
+    dry_run: bool,
+    /// Remove the installed skill
+    #[arg(long)]
+    uninstall: bool,
 }
 
 #[derive(Debug, Args)]
@@ -383,6 +402,15 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                 "minimal (DSP only)"
             };
             println!("build: {build}");
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::InstallSkill(args) => {
+            skill::run(&skill::Options {
+                target: args.target,
+                project: args.project,
+                dry_run: args.dry_run,
+                uninstall: args.uninstall,
+            })?;
             Ok(ExitCode::SUCCESS)
         }
         Command::Report(args) => {

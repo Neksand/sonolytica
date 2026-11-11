@@ -16,18 +16,33 @@ Put `target/release/sonolytica` on `PATH` (or symlink it). The skill invokes
 
 ## 2. Install the skill where your agent looks
 
+The CLI carries the skill inside itself:
+
+```bash
+sonolytica install-skill                 # Claude Code, Codex, OpenCode, Cursor
+sonolytica install-skill --target opencode
+sonolytica install-skill --project       # into ./.claude, ./.codex, ./.opencode, ./.cursor
+sonolytica install-skill --dry-run       # print paths, write nothing
+sonolytica install-skill --uninstall
+```
+
 | Runtime | Directory |
 |---|---|
-| OpenCode, Codex, Gemini CLI | `~/.agents/skills/sonolytica` |
-| Claude Code | `~/.claude/skills/sonolytica` |
+| Claude Code | `~/.claude/skills/sonolytica/` |
+| Codex | `~/.codex/skills/sonolytica/` |
+| OpenCode | `~/.config/opencode/skills/sonolytica/` |
+| Cursor | `~/.cursor/rules/sonolytica.mdc` |
+| Gemini CLI / others | copy the directory to `~/.agents/skills/` by hand |
+
+Manual copy still works and symlinks survive `git pull`:
 
 ```bash
 mkdir -p ~/.agents/skills
 cp -R skills/sonolytica ~/.agents/skills/
 ```
 
-Symlinks work too and survive `git pull`. The directory name should stay
-`sonolytica`: it matches the `name` in the frontmatter.
+The directory name should stay `sonolytica`: it matches the `name` in the
+frontmatter.
 
 ## 3. Fetch models and check
 
