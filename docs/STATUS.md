@@ -48,7 +48,7 @@ runtime, no GPL.
 | Music | tempo / key / sections | 120.3 vs 120 BPM; C major correct; A–B–A boundaries within 160 ms | synthetic clicks, triads and a 30 s C–G–C track |
 | Throughput | realtime factor | **21.64×** | 121.7 s full pipeline, 8.28 s wall, all stages complete |
 | Russian | transcript | exact | 12 s, `whisper-small --language ru`, 0 word errors on a clean fixture |
-| Agent | answers | **16/20 vs 20/20** | no skill vs skill across two fixtures, 0 invented facts in both |
+| Agent | answers | **16/20 vs 20/20** easy; **7/16 vs 16/16** hard | no skill vs skill; the hard fixture is a 4 min, 4-voice meeting with no ASR/OCR tools for the baseline |
 
 WER and DER are **pilots**, not leaderboard results: small subsets, one machine,
 and the VoxConverse threshold was calibrated on the same dev files. The numbers
@@ -56,7 +56,7 @@ exist so changes can be judged by deltas, not to claim state of the art.
 
 ## What agents gain
 
-`docs/BENCHMARK.md` compares the same model with and without the skill:
+`docs/BENCHMARK.md` compares the same model with and without the skill. On the hard 4-minute meeting the multimodal baseline scored 7/16 and the text-only baseline 4/16; both models with the skill scored 16/16, and the multimodal skill run used fewer fresh tokens than its no-skill baseline (41 139 vs 91 952).
 
 - video fixture: 5/8 without, 8/8 with; the skill used **43 % fewer fresh
   tokens** (35 013 vs 61 280) because it queried instead of experimenting;

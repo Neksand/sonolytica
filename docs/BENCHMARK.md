@@ -1,8 +1,8 @@
 # Benchmark: does the skill make an agent better at media?
 
-Date: 2026-11-11. Two fixtures (video with slides, Russian speech), ten tasks,
-seven scored sessions across three models, and two contaminated attempts that
-are recorded as failures rather than hidden.
+Date: 2026-11-11. Three fixtures (a 14 s clip, Russian speech, a 4 min meeting),
+18 tasks, eleven scored sessions across three models, and two contaminated
+attempts that are recorded as failures rather than hidden.
 
 The benchmark measures the **agent + skill + CLI** as a system, not a model on a
 leaderboard. The question is whether an agent with the skill answers media
@@ -176,11 +176,47 @@ Reading it, honestly:
   padded segment time. That is why alignment exists, and why the skill says to
   use `words[].range` or `--align` for "when exactly".
 
+## Hard fixture: 4-minute meeting
+
+Full method, generator and ground truth: `scripts/bench/README.md`. The fixture
+is 4 minutes, 4 voices, 6 slides, a 1.4 s overlap and a music intro. Baseline
+sessions had `ffmpeg` and Python but **no** `whisper`, `tesseract` or
+`sonolytica` — the realistic "agent without a media stack" case.
+
+Eight tasks: Friday's event, slide text at 00:01:30, find "pricing", budget
+change, budget cut (absent), slide changes, screen change 1:10–1:30, final-copy
+quote. 0–2 per task.
+
+| Session | Model | Native media | Skill | Score | Fresh tokens | Total |
+|---|---|---|---|---|---|---|
+| A | Nemotron 3.5 Super VL | yes | no | **7/16** | 91 952 | 328 238 |
+| B | Nemotron 3.5 Super VL | yes | yes | **16/16** | 41 139 | 141 335 |
+| C | DeepSeek V4.1 Flash | no | no | **4/16** | 7 403 | 139 982 |
+| D | DeepSeek V4.1 Flash | no | yes | **16/16** | 15 813 | 253 094 |
+
+Reading it:
+
+- **Without the skill, neither model can answer the speech questions.** The
+  multimodal baseline read the slides (Q2, Q4) but could not quote anyone; the
+  text-only baseline could only detect pixel changes (Q6, Q7, both exact).
+- **Frame sampling without the document is imprecise.** The multimodal baseline
+  placed the pricing slide at ~01:03 (actual cut 00:40) and the legal slide at
+  ~01:29 (actual 01:20); it sampled arbitrary seconds instead of cut times.
+- **Both skill sessions scored 16/16** with exact OCR text and word ranges. They
+  also volunteered the right caveats: 7 diarization labels for 4 voices, ASR
+  errors ("preaching page"), and OCR taken at 00:01:21, not 00:01:30.
+- **The skill was cheaper than the no-skill multimodal run** (41 139 vs 91 952
+  fresh tokens) and 2.1× the text-only baseline (15 813 vs 7 403) for four
+  times the score. Cost per correct answer favours the skill.
+- **Product gaps exposed, not hidden:** diarization made 7 labels from 4 voices,
+  and the overlapped line ("The budget also covers the partner webinar") is
+  missing from the transcript entirely. No task scores those; they are recorded
+  as the next work.
+
 ## Limits
 
-- Two fixtures, ten questions, seven sessions. This is a smoke benchmark, not
-  a statistical claim; one fixture is synthetic slides, the other a synthetic
-  single voice.
+- Three fixtures, 18 questions, eleven sessions. This is a smoke benchmark, not
+  a statistical claim; all fixtures are synthetic.
 - Sessions use different models: Nemotron VL and DeepSeek on the video fixture,
   Nemotron VL on Russian, LongCat once. Only comparisons within one model are
   controlled.
@@ -189,8 +225,10 @@ Reading it, honestly:
 - Scoring is manual, by comparing each answer with the reference document.
 - The baseline had a `whisper` CLI available; in a shell without it, A would
   score lower. That is a fair part of "what an agent can do with a shell".
-- The video fixture has no motion, no subtitles and only one cut; the Russian
-  fixture has one speaker. Neither stresses diarization or long media.
+- The fixtures are synthetic: no motion, no real accents, no background noise.
+  The hard fixture stresses diarization (and exposes its over-segmentation) but
+  the overlapped words are missing from the transcript, so overlap splitting is
+  not measured.
 
 ## Reproduce
 
