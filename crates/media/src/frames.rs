@@ -13,12 +13,14 @@ use tokio::io::AsyncReadExt;
 use crate::error::MediaError;
 use crate::tools::MediaTools;
 
-/// Signature frame size. Small on purpose: 64x36 gray is 2.3 KB per frame, so
-/// two hours of video at 2 fps is ~33 MB of pipe traffic.
+/// Signature frame size. Small on purpose: 64x36 RGB is 6.9 KB per frame, so
+/// two hours of video at 2 fps is ~100 MB of pipe traffic.
 pub const FRAME_WIDTH: usize = 64;
 pub const FRAME_HEIGHT: usize = 36;
-const FRAME_BYTES: usize = FRAME_WIDTH * FRAME_HEIGHT;
-const HIST_BINS: usize = 16;
+const FRAME_BYTES: usize = FRAME_WIDTH * FRAME_HEIGHT * 3;
+/// RGB histogram: 4 levels per channel, 4^3 bins. Luma alone misses a cut
+/// between two dark scenes of different hue (a red slide and a blue slide).
+const HIST_BINS: usize = 64;
 
 /// A cut must be at least this far from the previous one.
 const MIN_SCENE_S: f32 = 0.5;
@@ -76,7 +78,7 @@ pub async fn sample_video(
     }
     let timeout = Duration::from_secs(opts.timeout_secs.clamp(5, 3_600));
     let filter = format!(
-        "fps={},scale={FRAME_WIDTH}:{FRAME_HEIGHT}:flags=area,format=gray",
+        "fps={},scale={FRAME_WIDTH}:{FRAME_HEIGHT}:flags=area,format=rgb24",
         opts.fps
     );
 
@@ -106,7 +108,7 @@ pub async fn sample_video(
             "-f",
             "rawvideo",
             "-pix_fmt",
-            "gray",
+            "rgb24",
             "pipe:1",
         ])
         .stdin(std::process::Stdio::null())
@@ -165,21 +167,26 @@ pub async fn sample_video(
     Ok(signatures(&bytes, opts.fps))
 }
 
-/// Split a raw gray stream into per-frame signatures. A trailing partial frame
+/// Split a raw RGB stream into per-frame signatures. A trailing partial frame
 /// (FFmpeg can stop mid-frame) is ignored rather than treated as data.
 fn signatures(bytes: &[u8], fps: f32) -> Vec<FrameSignature> {
     bytes
         .chunks_exact(FRAME_BYTES)
         .enumerate()
         .map(|(index, frame)| {
+            let luma = |x: usize, y: usize| -> f32 {
+                let offset = (y * FRAME_WIDTH + x) * 3;
+                0.299 * f32::from(frame[offset])
+                    + 0.587 * f32::from(frame[offset + 1])
+                    + 0.114 * f32::from(frame[offset + 2])
+            };
             let mut dhash = 0_u64;
             for row in 0..8_usize {
                 let y = (row * FRAME_HEIGHT / 8).min(FRAME_HEIGHT - 1);
-                let base = y * FRAME_WIDTH;
-                let mut previous = frame[base];
+                let mut previous = luma(0, y);
                 for column in 1..9_usize {
                     let x = (column * FRAME_WIDTH / 9).min(FRAME_WIDTH - 1);
-                    let value = frame[base + x];
+                    let value = luma(x, y);
                     dhash <<= 1;
                     if value > previous {
                         dhash |= 1;
@@ -188,11 +195,13 @@ fn signatures(bytes: &[u8], fps: f32) -> Vec<FrameSignature> {
                 }
             }
             let mut hist = [0.0_f32; HIST_BINS];
-            for &value in frame {
-                let bin = (usize::from(value) * HIST_BINS / 256).min(HIST_BINS - 1);
+            for pixel in frame.chunks_exact(3) {
+                let bin = (usize::from(pixel[0]) >> 6) * 16
+                    + (usize::from(pixel[1]) >> 6) * 4
+                    + (usize::from(pixel[2]) >> 6);
                 hist[bin] += 1.0;
             }
-            let total = FRAME_BYTES as f32;
+            let total = (FRAME_WIDTH * FRAME_HEIGHT) as f32;
             for bin in &mut hist {
                 *bin /= total;
             }
@@ -342,15 +351,14 @@ mod tests {
     use super::*;
 
     fn signature(index: u64, fill: u8) -> FrameSignature {
+        let level = usize::from(fill) >> 6;
+        let mut hist = [0.0_f32; HIST_BINS];
+        hist[level * 16 + level * 4 + level] = 1.0;
         FrameSignature {
             index,
             time_s: index as f32 / 2.0,
             dhash: if fill > 128 { u64::MAX } else { 0 },
-            hist: {
-                let mut hist = [0.0_f32; HIST_BINS];
-                hist[usize::from(fill) * HIST_BINS / 256] = 1.0;
-                hist
-            },
+            hist,
         }
     }
 
@@ -388,9 +396,13 @@ mod tests {
 
     #[test]
     fn hashes_differ_between_structure_and_its_inverse() {
-        let frame: Vec<u8> = (0..FRAME_BYTES)
-            .map(|index| ((index % FRAME_WIDTH) * 255 / FRAME_WIDTH) as u8)
-            .collect();
+        let mut frame: Vec<u8> = Vec::with_capacity(FRAME_BYTES);
+        for _y in 0..FRAME_HEIGHT {
+            for x in 0..FRAME_WIDTH {
+                let value = (x * 255 / FRAME_WIDTH) as u8;
+                frame.extend([value, value, value]);
+            }
+        }
         let inverse: Vec<u8> = frame.iter().map(|value| 255 - value).collect();
         let a = signatures(&frame, 2.0).remove(0);
         let b = signatures(&inverse, 2.0).remove(0);
