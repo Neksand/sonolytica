@@ -41,7 +41,9 @@ questions. Nothing is inferred beyond counts:
   the true total);
 - `chapters`: up to 5 structural chapters (same rule as `query chapters`), with
   `chapter_count` as the true total;
-- `video`: scene, keyframe and text-overlay counts;
+- `video`: scene, keyframe and text-overlay counts, `scene_cuts` (start of each
+  detected cut in microseconds, up to 50) and `ocr` (one line per keyframe
+  instant, up to 10; the full list is `timeline --type text_overlay`);
 - `music`: BPM, key, section count when the music block exists;
 - `acoustic`: peak, LRA, silence count when the acoustic block exists.
 
@@ -58,7 +60,7 @@ JSON:
   "speakers": [ { "id": "S1", "speech_duration_us": 52000000, "speech_display": "00:00:52.000", "turn_count": 12, "first_start_us": 1200000, "last_end_us": 149000000 } ],
   "chapter_count": 4,
   "chapters": [ { "start": 0, "end": 61200000, "start_display": "00:00:00.000", "end_display": "00:01:01.200", "title_hint": "…", "speakers": ["S1"], "segment_count": 9 } ],
-  "video": { "scenes": 0, "keyframes": 0, "text_overlays": 0 },
+  "video": { "scenes": 6, "keyframes": 6, "text_overlays": 12, "scene_cuts": [40000000, 80000000], "ocr": [ { "start_us": 41000000, "text": "PRICING PAGE — FRIDAY" } ] },
   "music": null,
   "acoustic": { "peak_dbfs": -1.2, "lra_lu": 6.3, "silence_count": 3 } }
 ```
@@ -66,6 +68,19 @@ JSON:
 `brief` is a map, not a quote source: use `search` / `words` / `transcript` for
 exact wording and ranges. A `null` block means that stage did not run or had no
 data — say so; do not fill it from the audio yourself.
+
+Minimum commands per question — start at the top and add only what is missing:
+
+| Question | Commands |
+|---|---|
+| what is this / who speaks / how is it structured | `brief` |
+| who spoke most, how long, when | `brief` |
+| exact quote or "find the moment" | `brief` + `search` + `words` (or `transcript`) |
+| what was said in a window | `brief` + `timeline --from … --to …` |
+| what is on screen | `brief` + `timeline --type text_overlay` |
+| look at a frame | `brief` + `frames` |
+| chords, beats, detailed loudness | `brief` + `music` / `acoustic` |
+| full chapter or speaker list | `brief` + `chapters` / `speakers` |
 
 ## timeline
 

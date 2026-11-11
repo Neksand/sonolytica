@@ -8,29 +8,20 @@ description: Use when asked to analyze, transcribe, quote, summarize, search or 
 SONOLYTICA turns a media file into one typed, timestamped document. You read
 that document and answer from it. You never listen to the audio yourself, never
 paraphrase inside quotation marks, and never invent a timestamp, a word, a
-speaker, an emotion or an event.
+speaker, an emotion or an event. **Iron rule:** every factual claim you make
+must be traceable to a `query` result from the document. If it is not in the
+document, say so.
 
-**Iron rule:** every factual claim you make must be traceable to a `query`
-result from the document. If it is not in the document, say so.
-
-**Context budget:** read this file once. Open a `references/` file only when a
-section below tells you to for the task at hand — do not preload the cheatsheet
-or every workflow. Aim for `brief` plus 1–3 targeted queries per question. For
-an absence claim, search the word once and its stem once; do not walk a
-thesaurus. Fewer, better queries also mean fewer tokens.
+**Context budget:** read this file once. Open a `references/` file only when
+told to — do not preload them. Aim for `brief` plus 1–3 targeted queries per
+question; for an absence claim, search the word once and its stem once.
 
 ## 1. The one-minute model
 
-```
-analyze FILE  →  document.json  (tracks, segments, analyses, runs, warnings)
-query COMMAND →  the answer to one question, as a table or typed JSON
-```
-
-- `runs` = what actually executed, with status.
-- `warnings` = what was skipped, and why.
-- `analyses` = aggregates (speech totals, music, acoustic).
-- `segments` = the timeline: speech, speaker turns, music labels, events.
-- `query` is the only reading interface. Do not load the whole JSON into context.
+`analyze FILE` writes one document; `query COMMAND` answers one question from
+it. `runs` = what actually executed; `warnings` = what was skipped and why;
+`analyses` = aggregates; `segments` = the timeline (speech, turns, music labels,
+events). `query` is the only reading interface — never load the whole JSON.
 
 ## 2. Choose the profile before you spend money
 
@@ -40,64 +31,44 @@ query COMMAND →  the answer to one question, as a table or typed JSON
 | `standard` | + speech recognition | any question about content, quotes, search |
 | `ultra` | standard, plus exit 2 if any requested capability failed or never ran | automation that must not silently degrade |
 
-`scene` is a no-op on audio-only files and is excluded from the `ultra`
-degradation check there.
-
-`ultra` adds **forced word alignment** (English, wav2vec2 CTC: exact word
-boundaries instead of Whisper token times) and treats a requested capability
-that never ran as a failure. Notes/bass are still separate milestones. Do not
-promise note-level detail yet; do promise word-precise citations and "nothing
-silently skipped".
-
-If the user did not say, pick `standard` for media under ~30 minutes and
-`structure` for a first pass on very long files. Ask only when the cost is
-material (multi-hour media, `ultra`). Details: `references/profiles.md`.
+`scene` is a no-op on audio-only files and is excluded from the `ultra` check.
+`ultra` adds forced word alignment (English, wav2vec2 CTC) and treats a
+capability that never ran as a failure. If the user did not say, pick `standard`
+under ~30 minutes and `structure` for a very long first pass. Details:
+`references/profiles.md`.
 
 ## 3. Run it
 
 ```bash
 sonolytica doctor                          # ffmpeg + models + providers
-sonolytica models list                     # what is installed and verified
 sonolytica analyze FILE --out doc.json --profile standard --summary
 sonolytica query brief doc.json            # one compact overview — start here
 sonolytica query runs doc.json             # stage status in detail
-sonolytica query summary doc.json
 ```
 
 `analyze` prints the document to stdout unless `--out` is given; `--summary`
 goes to stderr; `--strict` (or `--profile ultra`) exits 2 when a stage failed or
-a requested capability never ran. A missing model disables one capability,
-never the whole run.
+a requested capability never ran. A missing model disables one capability.
 
 **Language and model:** pass `--language` whenever you know it. English →
-`--model whisper-base.en` (the default). Anything else → `whisper-small` **with**
-`--language xx`. Auto-detection on short or clean audio can label English as
-another language and turn the transcript into garbage; if the document's
-`language` contradicts the text, re-run with an explicit language.
-
-Do **not** take the language from the user's message: a Russian question about
-an English recording is normal. Judge by the audio, the on-screen text or the
-file metadata. When unsure, start with the default `whisper-base.en` for
-English-looking content, or let `whisper-small` auto-detect and check
-`query summary` and the first transcript lines before trusting them.
-
-If a document already exists (the user points you at a `.json`), skip `doctor`
-and `analyze` and start at `query runs`.
+`--model whisper-base.en` (default); anything else → `whisper-small` **with**
+`--language xx`. Auto-detection can label English as another language and turn
+the transcript into garbage. Judge the media, not the user's prompt: a Russian
+question about an English recording is normal. If a document already exists,
+skip `analyze` and start at `query runs`.
 
 ## 4. Read in this order
 
-1. `query brief` — one compact call with media facts, run status, speech
-   totals, speakers, up to five chapters, video/OCR counts and music/acoustic
-   headlines. Most overview questions are answered here.
-2. Only the command the question actually needs (§5). Go deeper when the user
-   asks for an exact quote, a time window, a frame or the full speaker list.
+1. `query brief` — media facts, run status, speech totals, speakers, up to five
+   chapters, video counts, scene cuts, one OCR line per keyframe and
+   music/acoustic headlines. Most overview questions end here.
+2. Only the command the question needs (§5) — for an exact quote, a time
+   window, a frame or the full speaker list.
 
 `brief` is a map, not a citation source: quote exact wording and ranges from
-`search`, `words` or `transcript`. It prints at most 8 speakers and 5 chapters
-with the true totals; use `speakers`/`chapters` for the full lists.
-
-If a stage is `partial` or `failed`, say so **before** answering, in one line.
-Do not silently answer from half a document.
+`search`, `words` or `transcript`. Full speaker/chapter lists are
+`speakers`/`chapters`. If a stage is `partial` or `failed`, say so **before**
+answering — never answer from half a document.
 
 ## 5. Query vocabulary
 
@@ -118,78 +89,42 @@ Do not silently answer from half a document.
 | which stages ran or failed | `query runs doc` |
 | media facts and totals | `query summary doc` |
 
-**Minimum commands per question.** Start at the top row and add a command only
-when the answer needs evidence the brief does not contain:
-
-| Question | Commands |
-|---|---|
-| what is this / who speaks / how is it structured | `brief` |
-| who spoke most, how long, when | `brief` (speaker table is included) |
-| exact quote or "find the moment" | `brief` + `search` + `words` (or `transcript`) |
-| what was said in a window | `brief` + `timeline --from … --to …` |
-| what is on screen | `brief` + `timeline --type text_overlay` |
-| look at a frame | `brief` + `frames` |
-| chords, beats, detailed loudness | `brief` + `music` / `acoustic` |
-| full chapter or speaker list | `brief` + `chapters` / `speakers` |
+Start at `brief` and add one command only when the answer needs evidence the
+brief does not contain: `search` + `words` for an exact quote, `timeline
+--from … --to …` for a window, `timeline --type text_overlay` for on-screen
+text, `frames` to look, `chapters`/`speakers` for full lists. Routing table:
+`references/query-cheatsheet.md`.
 
 Rules of use:
 
 - Times: `HH:MM:SS.mmm`, `MM:SS`, `12.5s`, `950ms`, or microseconds. A bare
-  integer is **microseconds**; `12.5` is seconds.
-- Add `--json` when you need exact values; read the table when you need a
-  citation for a human.
-- `--type` filters `timeline` to one segment type.
-- Tables truncate long text at 80 characters with `…`; for anything you will
-  quote, use `query transcript` or `query words` — they never truncate.
+  integer is **microseconds**; `12.5` is seconds. Add `--json` for exact values.
+- Tables truncate long text at 80 characters with `…`; quote only from
+  `query transcript` or `query words` — they never truncate.
 - `query chapters` splits on **structure** (silence, speaker change, scene cut),
-  not on topics. Report it as "главы записи", never as "темы разговора".
-- On a `search` row the speaker is derived from the refining turn; the raw
-  `speech` segment itself has no speaker field.
-- All commands are read-only; run as many as you need.
-- Full reference with JSON shapes: `references/query-cheatsheet.md`.
+  not topics. Report it as "главы записи", never as "темы разговора".
+- All commands are read-only. JSON shapes: `references/query-cheatsheet.md`.
 
 ## 6. Timestamps and ranges — canonical rules
 
 - Quote ranges as `HH:MM:SS.mmm–HH:MM:SS.mmm` from `start_display`/`end_display`.
-- Never round. "On what second?" gets the exact range, optionally followed by
-  `(≈3.1 s)` if the user wants a rough figure.
-- With `--align` (implied by `ultra`), `words[].range` comes from forced
-  alignment (English, 20 ms frames, median drift ~110 ms); without it, the
-  times are Whisper token timestamps. Both are document facts; do not mix them
-  in one citation without saying which run produced them.
-- A `speech` segment's start can include ASR/VAD padding (up to ~300 ms of
-  digital lead-in plus the VAD pad), so it is not necessarily the first audible
-  syllable. For "when exactly did it start", use `words[].range` or `--align`;
-  for "which minute", the segment range is fine.
-- Which range supports which claim:
+  Never round; "on what second?" gets the exact range, optionally plus `(≈3.1 s)`.
+  A `speech` start can include ~300 ms of ASR/VAD padding: for "when exactly did
+  it start" use `words[].range` or `--align`.
+- With `--align` (implied by `ultra`) word times come from forced alignment
+  (English, 20 ms frames, median drift ~110 ms); without it they are Whisper
+  token times. Say which run produced them.
+- Cite `words[].range` for an exact word, the `speech` segment for what was
+  said, the `speaker_turn` for who spoke. The last two can differ by padding.
+- `speech_duration` is **measured speech** (VAD), not the sum of turns; for "how
+  much did S1 speak" use `query speakers` (one aggregate range per speaker, not
+  continuous speech).
+- `query at T` returning `(none)` is not measured silence; `acoustic.silence` is
+  level-based and can appear inside a speech segment, so neither proves "nobody
+  spoke". If a word list starts after the text does, quote `speech.text` and say
+  the timing starts at the first token present.
 
-| Claim | Cite |
-|---|---|
-| an exact word | `words[].range` from `query search` |
-| what was said | the `speech` segment range |
-| who spoke, and when | the `speaker_turn` range |
-| "who said X" | both, and name the two: they can differ by ASR padding (up to ~300 ms) |
-
-- `speech_duration` in `analyses[speech]` is **measured speech** (VAD), not the
-  sum of turns. For "how much did S1 speak" use `query speakers`. The two will
-  not add up; never average them or present one as the other.
-- `query speakers` reports one aggregate range per speaker (first turn start to
-  last turn end). It is **not** continuous speech: get the individual turns from
-  `query timeline --type speaker_turn`.
-- The canonical text for a verbatim quote is the `speech` segment (`query
-  transcript` / `query words`). `speaker_turn.text` is a re-tokenised copy made
-  at merge time; use it for speaker attribution, not for quoting.
-- `query at T` returning `(none)` means no segment covers that instant in the
-  markup. It is **not** measured silence — for silence, ask `query acoustic`.
-- `analyses[acoustic].silence` is level-based: a run below the threshold for at
-  least `min_silence_ms`. It does **not** align with gaps between turns (a short
-  gap between speakers is not reported) and can appear **inside** a speech
-  segment (a pause in speech). Never use it to prove "nobody spoke" or to fill a
-  gap between two turns.
-- If a word-level list starts after the beginning of the text (the first word of
-  a region is missing), quote the `speech.text` for the sentence and say the
-  word timing starts at the first token present; never invent a range for the
-  missing word.
+Detail and edge cases: `references/citation-rules.md`.
 
 ## 7. Three evidence classes — never mix them
 
@@ -203,95 +138,35 @@ Rules of use:
 1. One line on stage status when not everything is `complete`.
 2. The answer, with verbatim quotes and ranges.
 3. What the document does **not** cover, when it matters.
-4. Self-check before sending:
-   - every quote appears character-for-character in a `query` result;
-   - every timestamp is copied from the document, not computed from memory;
-   - every speaker label is described as document-local;
-   - every confidence is described as what it is.
+4. Self-check: every quote appears character-for-character in a `query` result;
+   every timestamp is copied, not computed; speaker labels are document-local;
+   confidence is a score.
 
 ## 9. When the word is not in the transcript
 
 An empty `query search` is a fact about the transcript, not about the world.
+Say "В транскрипте нет слова X", then offer the nearest token as a
+**hypothesis** ("возможно, ASR расслышал его как Y, 00:00:03.140"), never as a
+quote and never as "не говорили". Numbers are normalised: search the digits and
+the stem first. Full protocol: `references/citation-rules.md`.
 
-Say: "В транскрипте нет слова X." Then optionally: "Возможно, ASR расслышал
-его как Y (00:00:03.140)" — as a **hypothesis**, showing the actual token. Never
-quote a word the document does not contain, and never answer "не говорили".
+## 10. Speech, music and video rules
 
-Also consider: ASR can drop the first word of a speech region (known limit), so
-check the surrounding segment before concluding anything.
+- Speaker labels are local to one document; they are not people. Sortformer
+  tracks at most four speakers; above 10 minutes a `diarization_speaker_cap`
+  warning makes the count approximate — say "at least N".
+- `overlap: true` means two people spoke at once. Sortformer returns two
+  simultaneous turns, the pyannote fallback only flags; the transcript is one
+  ASR stream, so never invent separate words per speaker.
+- Text-only model: say you cannot see images; never claim to have looked at a
+  frame or "visually confirmed" OCR. OCR is a fact read at one instant.
+- BPM/key/chords are heuristic scores, sections are technical boundaries, not
+  verse/chorus, and notes/bass do not exist yet. Objects and faces are **not**
+  analysed.
 
-When the **user asserts** the word was said ("он точно говорил про pricing"),
-keep the same shape and start by acknowledging the gap:
+Per-modality rules: `references/modalities.md`.
 
-```
-В транскрипте слова «pricing» нет — ни в одном сегменте. Возможно, ASR
-расслышал его как «preaching» (00:00:03.140–00:00:03.550, confidence 0.996).
-Документ не позволяет подтвердить, что там было «pricing»: это гипотеза,
-а не цитата.
-```
-
-Numbers are normalised by the model: «двадцать процентов» can appear as
-`20%`, «ten dollars» as `$10`. Before saying a number is absent, search the
-digits and the stem (`процент`, `20`), and quote the form the document uses.
-
-Do not argue about what the user heard. Report what the document contains and
-offer the two honest routes: listen to the source, or re-run with a better ASR
-model (`--model whisper-small`).
-
-## 10. Speech rules
-
-- Speaker labels (`S1`, `S2`) are local to one document; they are not people.
-  Never attach a name unless the user supplied it and the document supports it.
-- Sortformer tracks at most four speakers. Above 10 minutes the document adds a
-  `diarization_speaker_cap` warning: the count is approximate, so say "at least
-  N", never an exact count.
-- `overlap: true` means two people spoke at once. With Sortformer the document
-  has two simultaneous `speaker_turn` segments; on the pyannote fallback it only
-  flags the overlap. The transcript is still one ASR stream, so do not invent
-  separate words for each speaker.
-- Confidence is a model probability for speech, an autocorrelation score for
-  tempo, a template margin for key. Say "score", not "accuracy".
-- `language` is reported by the model. If it contradicts the text, say the
-  metadata is unreliable instead of using it as evidence.
-
-## 11. Music rules
-
-- BPM and key are heuristic scores, not calibrated probabilities.
-- Chords are triads from a template, with no inversions or extensions.
-- `beats` are beat positions, not bars; do not infer time signatures.
-- `sections` are technical boundaries from chroma self-similarity: the material
-  repeats or changes here. They are not verse/chorus labels; never name them.
-- Notes and bass do not exist in this release. Say the document has no
-  note-level data; when note transcription lands it will be part of `ultra`.
-
-## 12. Video rules
-
-- `sonolytica inspect FILE` gives container and stream metadata only. It is a
-  top-level command, not a `query` subcommand.
-- The standard profile runs **shot detection** when the file has a video stream.
-  `query timeline DOC --type scene` returns scene segments: `index` is the shot
-  number, `cut` is true when the scene starts at a detected cut.
-- `analyze --out doc.json` also writes **keyframe images** next to the document
-  (`doc.json.artifacts/frames/`) and registers them in `artifacts`.
-  `query frames DOC --from T --to T --max 8` returns absolute paths. If
-  `--no-frames` was used or `--out` was missing, there are no images.
-- **Open the images yourself** and answer visual questions from what you see.
-  A visual statement is an observation, not a document fact: label it as such
-  and cite the frame's `start_display`. Never attach a transcript range to it.
-- **If you cannot see images** (a text-only model), say so. Never claim to have
-  looked at a frame or "visually confirmed" OCR text. Cite `text_overlay` as
-  OCR, not as sight.
-- **On-screen text**: `analyze --ocr --out doc.json` runs OCR (PP-OCRv5) on the
-  keyframes and adds `text_overlay` segments with exact text, bbox and
-  confidence. `query timeline DOC --type text_overlay` lists them. That text is
-  a document fact read at the frame's instant; it does **not** mean the text
-  was on screen for the whole shot. If there are no `text_overlay` segments,
-  OCR did not run — say so instead of guessing.
-- A scene is a technical cut, a frame is a still at one instant. Neither is a
-  topic, and a keyframe is not a summary of the shot.
-- Objects and faces are **not** analysed. Do not claim them from metadata.
-
-## 13. Failures and gaps
+## 11. Failures and gaps
 
 | Symptom | What to say | What to suggest |
 |---|---|---|
@@ -299,43 +174,27 @@ model (`--model whisper-small`).
 | run `partial` | what is missing, from `reason` | re-run with the model installed |
 | empty transcript | whether silence was measured | check `acoustic.silence`, then VAD/model |
 | `doctor` says ffmpeg missing | nothing can be analysed | install FFmpeg |
-| language metadata contradicts the text | the transcript is unreliable | re-run with `--model whisper-base.en` for English or `--language xx` with `whisper-small` |
-| video has no scene segments | the visual layer did not run | check `query runs` for a `scene` run; the file may have no video stream |
-| no `text_overlay` segments | OCR did not run | add `--ocr --out doc.json`; it needs the keyframes |
+| no `text_overlay` segments | OCR did not run | add `--ocr --out doc.json` |
 
 Troubleshooting detail: `references/troubleshooting.md`.
 
-## 14. Workflows
+## 12. Workflows
 
-Step-by-step command sequences per media type. Open **one** file for the media
-type at hand, not all of them:
+Open **one** file for the media type at hand, not all of them:
+`references/workflows/{interview,meeting,lecture,music,video}.md` — podcast,
+call, screencast, DJ set, video navigation and on-screen text.
 
-- `references/workflows/interview.md` — interview, podcast, 1:1
-- `references/workflows/meeting.md` — meeting, call, standup
-- `references/workflows/lecture.md` — lecture, talk, screencast
-- `references/workflows/music.md` — track, rehearsal, DJ set
-- `references/workflows/video.md` — video navigation and on-screen text
+## 13. Limits — do not claim these
 
-## 15. Limits — do not claim these
-
-- No emotion, intent, topic modelling or abstractive summarisation. You may
-  summarise what the document says, extractively, with citations.
-- No speaker identity, age, gender or language proficiency.
-- No word-level overlap separation: simultaneous turns are labeled, but a
-  merged ASR line is not split word by word.
+- No emotion, intent, topic modelling or abstractive summarisation; summarise
+  extractively, with citations. No speaker identity, age, gender or language
+  proficiency. No word-level overlap separation: turns are labeled, a merged
+  ASR line is not split word by word.
 - Word timings are Whisper token times unless `--align`/`ultra` ran; alignment
-  is English-only, 20 ms frames, and keeps Whisper's text (it cannot recover a
-  word the ASR never emitted).
-- No visual or musical-detail claims without the corresponding data.
+  is English-only and cannot recover a word the ASR never emitted.
 
-## 16. Accuracy claims
+## 14. Accuracy claims
 
-Only from an actual run, naming dataset, subset, model and date:
-
-```bash
-sonolytica-eval wer --reference ref.txt --hypothesis doc.json
-sonolytica-eval der --rttm reference.rttm --document doc.json --file-id NAME
-sonolytica-eval report --document doc.json
-```
-
-Never quote a number you did not produce in this session.
+Only from an actual run, naming dataset, subset, model and date, e.g.
+`sonolytica-eval report --document doc.json`. Never quote a number you did not
+produce in this session.
