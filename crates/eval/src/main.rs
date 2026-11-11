@@ -179,8 +179,9 @@ fn run(cli: Cli) -> Result<()> {
                 println!("{}", serde_json::to_string_pretty(&score)?);
             } else {
                 println!(
-                    "DER {:.2}%  missed {:.2}%  false alarm {:.2}%  confusion {:.2}%",
+                    "DER {:.2}%  JER {:.2}%  missed {:.2}%  false alarm {:.2}%  confusion {:.2}%",
                     score.der * 100.0,
+                    score.jer * 100.0,
                     score.missed_speech * 100.0,
                     score.false_alarm * 100.0,
                     score.confusion * 100.0

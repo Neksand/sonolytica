@@ -233,6 +233,35 @@ about 0.8 s on the 240 s hard fixture (13.4 → 14.2 s, 17.9× → 16.9× realti
 When it removes turns it warns `diarization_vad_gated`; a failed strict pass
 warns `diarization_vad_gate_unavailable` and leaves turns ungated.
 
+JER on the same frames, collar and mapping:
+
+| shard | DER before | DER after | JER before | JER after |
+|---|---|---|---|---|
+| test-00002, 2-4 spk, weighted | 11.43 % | **11.08 %** | 11.22 % | **10.93 %** |
+| test-00002, 2-4 spk, unweighted | 8.19 % | **7.76 %** | 8.03 % | **7.67 %** |
+| test-00003, weighted | 11.02 % | **9.95 %** | 10.74 % | **9.85 %** |
+| test-00003, unweighted | 10.63 % | **7.49 %** | 9.94 % | **7.34 %** |
+
+JER here is `1 - correct / union` over the same frames:
+`(missed + false_alarm + confusion) / (reference_frames + false_alarm)`.
+Perfect diarization gives 0, and JER ≤ DER by construction because the
+denominator includes false-alarm frames. It is the speaker-aware frame Jaccard,
+not NIST's per-speaker average; the numbers are not interchangeable.
+`sonolytica-eval der` prints it, and the VoxConverse script aggregates weighted
+and unweighted values.
+
+### Tried and rejected: overlap tie-break
+
+Hypothesis: when two turns cover a word by the same amount, the choice should
+not depend on array order; prefer higher confidence, then the turn start
+closest to the word, then the stable speaker id.
+
+Re-ran `test-00002` (2-4 spk) with the tie-break: DER 11.08 → 11.11 %, JER
+10.93 → 10.95 %; `wcxfk` confusion 0.35 → 0.67 %. No file improved measurably.
+Reverted. The merge still takes the first turn on an exact tie; that
+non-determinism is documented as a known behavior. The real fix is
+speaker-attributed ASR (multitalker), not a merge heuristic.
+
 ### Tried and rejected: silhouette-based splitting
 
 Hypothesis: let the dendrogram decide the cut — build down to one cluster, then
@@ -356,9 +385,9 @@ argue for swapping that:
 1. **Diarization: the count is solved for 2-4 speakers, not for long files.**
    Sortformer gets five of six counts right on a freshly seen shard and, with
    the 0.70 VAD gate, false alarm on noisy real recordings is down to 0.5–5.7 %
-   (test-00003 weighted DER 11.02 → 9.95 %). The remaining error is
-   under-segmentation on a 20-minute four-speaker file, so the next change is
-   the model's native streaming cache, not another similarity cut.
+   (test-00003 weighted DER 11.02 → 9.95 %, JER 10.74 → 9.85 %). The remaining
+   error is under-segmentation on a 20-minute four-speaker file, so the next
+   change is the model's native streaming cache, not another similarity cut.
 2. **Alignment second.** WER 6.05 % is near the model ceiling and deletions are
    1.1 %; alignment improves *when* a word was said (citations, cutting), not
    *what* was said. Still worth doing, but it does not move the headline.

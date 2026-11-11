@@ -19,14 +19,14 @@ OCR text, and provenance on every segment. Agents read it via
 
 | | |
 |---|---|
-| Rust | 15 858 lines, 7 crates: `providers` (4.3k), `cli` (3.6k), `engine` (2.6k), `core` (2.1k), `dsp` (1.4k), `media` (1.2k), `eval` (0.6k) |
+| Rust | 15 904 lines, 7 crates: `providers` (4.3k), `cli` (3.6k), `engine` (2.6k), `core` (2.1k), `dsp` (1.4k), `media` (1.2k), `eval` (0.7k) |
 | Binary | `sonolytica` (`sonolytica-cli`) |
 | SDK | `sonolytica-engine` (`Engine::analyze`) |
 | Schema | **1.4.0**, additive 1.0 → 1.4 |
 | Models | 10, SHA-256 pinned, in `~/.cache/sonolytica/models` |
 | Query commands | 14: brief, timeline, at, search, transcript, words, speakers, chapters, frames, music, acoustic, runs, summary, help |
 | Skill | `skills/sonolytica/` (SKILL.md + 9 references + install README) |
-| Tests | **134** model-free / **149** all-features |
+| Tests | **135** model-free / **150** all-features |
 
 Features: `sonolytica-cli --features full-metal` = whisper + silero + diarize +
 ocr + align + metal. `cargo test --workspace` runs without models/cmake/ORT.
@@ -36,7 +36,7 @@ ocr + align + metal. `cargo test --workspace` runs without models/cmake/ORT.
 | Area | Result | Where |
 |---|---|---|
 | ASR | WER **6.05 %**, CER 2.25 % — LibriSpeech test-clean, 100 utts, `whisper-base.en` | EVAL |
-| Diarization | AHC pilots: DER **11.81 % dev / 17.46 % test**; Sortformer 4spk with the 0.70 VAD gate: **11.08 % weighted / 7.76 % unweighted** on `test-00002`, **9.95 % / 7.49 %** on fresh `test-00003`; counts **6/6 exact** there | EVAL |
+| Diarization | AHC pilots: DER **11.81 % dev / 17.46 % test**; Sortformer 4spk with the 0.70 VAD gate: **11.08 % weighted / 7.76 % unweighted** on `test-00002`, **9.95 % / 7.49 %** on fresh `test-00003`; JER **9.85 % / 7.34 %** there; counts **6/6 exact** | EVAL |
 | Alignment | wav2vec2 CTC, 20 ms frames, English; **median 110 ms** vs Whisper, 88 % ≤600 ms; Whisper itself is 300–950 ms early on JFK | EVAL |
 | OCR | PP-OCRv5 det+rec; 12/12 lines exact on the 6-slide fixture; 7/7 CJK terminal | OCR |
 | Music | 120.3 BPM for a 120 BPM click; C major triad correct; A–B–A section boundaries within 80/160 ms | EVAL |
@@ -126,6 +126,10 @@ previous skill. Details and caveats: BENCHMARK.
   coverage) — and it dropped one real turn on `ltgmz`. At 0.70 in a dedicated
   pass it works: `test-00003` weighted DER 11.02 → 9.95 %. Do not gate with the
   ASR threshold, and do not add energy heuristics on top.
+- **Overlap tie-break**: preferring higher confidence, then a closer turn start,
+  then the speaker id changed nothing useful (`test-00002` DER 11.08 → 11.11 %,
+  JER 10.93 → 10.95 %) and was reverted. The real fix is speaker-attributed
+  ASR, not a merge heuristic.
 - **Speaker-turn ranges are clamped to diarization turns** (+300 ms boundary
   tolerance) while the text stays complete. A word outside the range is still
   in `query words` and in the dialogue; only the turn's time is clamped. This
@@ -209,10 +213,13 @@ Token accounting: OpenCode stores per-session totals in
    cuts that (fresh `test-00003`: weighted DER 9.95 %, 6/6 counts exact); next
    is the model's native streaming cache for long files and an AMI subset.
    pyannote remains the fallback.
-2. **Overlap text attribution.** Sortformer returns two simultaneous turns, but
-   Whisper still emits one merged line for overlapped speech. Measure JER and
-   split words by speaker with a speaker-attributed pass; a missing line is an
-   ASR limitation, not a diarization one.
+2. **Overlap text attribution — JER shipped, tie-break rejected.** `sonolytica-eval
+   der` now prints JER (test-00003 **9.85 % weighted / 7.34 % unweighted**) and
+   `scripts/eval/der_voxconverse.py` aggregates it. A merge tie-break changed
+   nothing useful (DER 11.08 → 11.11 %) and was reverted. Overlapped words are
+   still one merged ASR line; splitting them needs speaker-attributed ASR
+   (multitalker), a separate cycle. A missing overlapped line is an ASR
+   limitation, not a diarization one.
 3. **`query brief` — done (2026-11-12).** One compact read (media, runs,
    speech, speakers, chapters, video/OCR, music/acoustic) shipped with a
    "minimum commands per question" table and a context budget in the skill.
@@ -250,6 +257,10 @@ Token accounting: OpenCode stores per-session totals in
   fresh tokens. Reading `SKILL.md` once and opening one reference only when
   needed cut it to 22 410 in 15 commands, score unchanged. The skill now states
   that budget.
+- **A deterministic tie-break is not automatically an improvement.** Preferring
+  confidence and turn start made the merge order-independent but raised
+  `test-00002` DER 11.08 → 11.11 % and JER 10.93 → 10.95 %; reverted and
+  recorded. Keep the metric even when the experiment fails.
 - **Synthetic fixtures exposed real bugs** three times: colour-blind cuts
   (red/blue), dark-slide collapse (chromaticity), ASR padding vs onset. Keep
   making fixtures uncomfortable.

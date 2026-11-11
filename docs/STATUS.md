@@ -16,7 +16,7 @@ runtime, no GPL.
 
 | | |
 |---|---|
-| Rust | 15 858 lines across 7 crates (`providers` 4 347, `cli` 3 598, `engine` 2 602, `core` 2 080, `dsp` 1 360, `media` 1 226, `eval` 645) |
+| Rust | 15 904 lines across 7 crates (`providers` 4 347, `cli` 3 598, `engine` 2 602, `core` 2 080, `dsp` 1 360, `media` 1 226, `eval` 691) |
 | Query commands | 14 (`brief`, `timeline`, `at`, `search`, `transcript`, `words`, `speakers`, `chapters`, `frames`, `music`, `acoustic`, `runs`, `summary`, `help`) |
 | Models | 10, all SHA-256 pinned: Silero VAD, whisper tiny/base/small, wav2vec2 aligner, Sortformer 4spk, pyannote segmentation, WeSpeaker, PP-OCRv5 det/rec |
 | Schema | 1.4.0 (`Document::validate`, additive 1.0 → 1.4) |
@@ -27,8 +27,8 @@ runtime, no GPL.
 
 | Check | Result |
 |---|---|
-| `cargo test --workspace` | 134 passed, 0 failed |
-| with `full,metal` | 149 passed, 0 failed |
+| `cargo test --workspace` | 135 passed, 0 failed |
+| with `full,metal` | 150 passed, 0 failed |
 | `cargo clippy -D warnings` | clean (default and full) |
 | `cargo fmt --check` | clean |
 | Model-free build | tests pass with no models, no cmake, no ONNX runtime |
@@ -41,6 +41,7 @@ runtime, no GPL.
 | ASR | WER | **6.05 %** | LibriSpeech test-clean, 100 utterances, 2048 words, `whisper-base.en` |
 | ASR | CER | 2.25 % | same run; 23 deletions (1.1 %), 0 empty hypotheses |
 | Diarization | DER | **11.81 %** dev / **17.46 %** test (AHC pilots); Sortformer **11.08 %** weighted / **7.76 %** unweighted on `test-00002`, **9.95 %** / **7.49 %** on the fresh `test-00003` | VoxConverse, collar 0.25 s, 0.70 VAD gate |
+| Diarization | JER | **10.93 %** weighted / **7.67 %** unweighted on `test-00002`; **9.85 %** / **7.34 %** on `test-00003` | frame Jaccard, same collar and mapping as DER |
 | Diarization | speaker count | AHC MAE **5.0** → Sortformer **0.33** (5/6 exact) on the fresh 2-4 speaker subset; **0.00** (6/6) on `test-00003` | 6 files each, 2140 s / 2401 s |
 | Diarization | false alarm | **4.27 → 2.47 %** (`gwloo`) and **13.41 → 6.53 %** (`uicid`); **15.61 → 5.71 %** (`xtdcl`) on fresh data | 1-spk and 2-spk real recordings |
 | Diarization | failure mode | one 20-min 4-speaker file collapses to 2 voices; speaker-turn ranges are clamped to VAD-gated turns (raw `query words` stay complete) | Sortformer caps at 4 |

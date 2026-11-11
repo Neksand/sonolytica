@@ -158,6 +158,8 @@ pub fn parse_rttm(text: &str) -> Vec<RttmSegment> {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct DerScore {
     pub der: f32,
+    /// Frame-level Jaccard error rate; see [`diarization_error_rate`].
+    pub jer: f32,
     pub missed_speech: f32,
     pub false_alarm: f32,
     pub confusion: f32,
@@ -173,6 +175,21 @@ pub struct DerScore {
 
 /// Frame-based diarization error rate with a collar around reference
 /// boundaries.
+///
+/// `jer` is computed on the same frames, collar and greedy mapping:
+///
+/// ```text
+/// jer = 1 - correct_frames / union_frames
+///     = (missed + false_alarm + confusion) / (reference_frames + false_alarm)
+/// ```
+///
+/// where a frame is `correct` when a mapped hypothesis speaker matches an
+/// active reference speaker, and `union_frames` includes any frame where
+/// reference or hypothesis is active. Perfect diarization gives 0. By
+/// construction `jer <= der` (the denominator includes false-alarm frames).
+/// This is the speaker-aware frame Jaccard, not NIST's per-speaker average;
+/// both punish miss, false alarm and confusion, but the numbers are not
+/// interchangeable.
 ///
 /// Ceiling: speaker mapping is greedy (highest co-occurrence first), not an
 /// optimal assignment. That can over-count confusion when two speakers swap
@@ -324,6 +341,7 @@ pub fn diarization_error_rate(
 
     Some(DerScore {
         der: (missed + false_alarm + confusion) as f32 / reference_frames_f,
+        jer: (missed + false_alarm + confusion) as f32 / (reference_frames + false_alarm) as f32,
         missed_speech: missed as f32 / reference_frames_f,
         false_alarm: false_alarm as f32 / reference_frames_f,
         confusion: confusion as f32 / reference_frames_f,
@@ -402,6 +420,31 @@ mod tests {
         let hypothesis = vec![(0.0, 2.0, "S1".to_string()), (2.0, 4.0, "S2".to_string())];
         let score = diarization_error_rate(&reference, &hypothesis, 0.25, 0.01).unwrap();
         assert!(score.der < 1e-6, "DER was {}", score.der);
+        assert!(score.jer < 1e-6, "JER was {}", score.jer);
+    }
+
+    #[test]
+    fn confusion_raises_jer() {
+        // One hypothesis speaker covers both reference speakers: greedy mapping
+        // can only match one of them, the other half is confusion.
+        let reference = vec![
+            RttmSegment {
+                file: "x".into(),
+                start: 0.0,
+                end: 2.0,
+                speaker: "A".into(),
+            },
+            RttmSegment {
+                file: "x".into(),
+                start: 2.0,
+                end: 4.0,
+                speaker: "B".into(),
+            },
+        ];
+        let hypothesis = vec![(0.0, 4.0, "S1".to_string())];
+        let score = diarization_error_rate(&reference, &hypothesis, 0.0, 0.01).unwrap();
+        assert!(score.jer > 0.4, "JER was {}", score.jer);
+        assert!(score.jer <= score.der + 1e-6);
     }
 
     #[test]
@@ -416,5 +459,7 @@ mod tests {
         let score = diarization_error_rate(&reference, &hypothesis, 0.0, 0.01).unwrap();
         assert!((score.missed_speech - 0.5).abs() < 0.02, "{score:?}");
         assert!(score.der <= 0.5 + 1e-6);
+        assert!(score.jer > 0.0);
+        assert!(score.jer <= score.der + 1e-6);
     }
 }

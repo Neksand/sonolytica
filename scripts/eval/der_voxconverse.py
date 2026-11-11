@@ -195,19 +195,27 @@ def main() -> int:
         score["file_id"] = file_id
         results.append(score)
         print(
-            f"  DER {score['der'] * 100:.2f}%  missed {score['missed_speech'] * 100:.2f}%"
+            f"  DER {score['der'] * 100:.2f}%  JER {score['jer'] * 100:.2f}%"
+            f"  missed {score['missed_speech'] * 100:.2f}%"
             f"  false alarm {score['false_alarm'] * 100:.2f}%"
             f"  confusion {score['confusion'] * 100:.2f}%",
             file=sys.stderr,
         )
 
     unweighted = sum(entry["der"] for entry in results) / len(results)
+    unweighted_jer = sum(entry["jer"] for entry in results) / len(results)
     scored_seconds = sum(entry.get("scored_seconds", 0.0) for entry in results)
     weighted = (
         sum(entry["der"] * entry.get("scored_seconds", 0.0) for entry in results)
         / scored_seconds
         if scored_seconds > 0
         else unweighted
+    )
+    weighted_jer = (
+        sum(entry["jer"] * entry.get("scored_seconds", 0.0) for entry in results)
+        / scored_seconds
+        if scored_seconds > 0
+        else unweighted_jer
     )
     count_errors = [
         abs(entry["reference_speakers"] - entry["hypothesis_speakers"])
@@ -225,7 +233,9 @@ def main() -> int:
         "collar_seconds": 0.25,
         "scored_seconds": scored_seconds,
         "der": weighted,
+        "jer": weighted_jer,
         "unweighted_mean_der": unweighted,
+        "unweighted_mean_jer": unweighted_jer,
         "speaker_count_mae": sum(count_errors) / len(count_errors),
         "speaker_count_exact": exact_counts / len(count_errors),
         "per_file": results,
