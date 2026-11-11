@@ -161,6 +161,10 @@ pub struct DerScore {
     pub missed_speech: f32,
     pub false_alarm: f32,
     pub confusion: f32,
+    /// Reference speech time actually scored (collar excluded), in seconds.
+    /// Lets a caller aggregate several files as one duration-weighted DER
+    /// instead of averaging percentages.
+    pub scored_seconds: f32,
     pub reference_speakers: usize,
     pub hypothesis_speakers: usize,
     /// Greedy reference/hypothesis speaker mapping that was scored.
@@ -323,6 +327,7 @@ pub fn diarization_error_rate(
         missed_speech: missed as f32 / reference_frames_f,
         false_alarm: false_alarm as f32 / reference_frames_f,
         confusion: confusion as f32 / reference_frames_f,
+        scored_seconds: reference_frames_f * frame_s as f32,
         reference_speakers: reference
             .iter()
             .map(|s| s.speaker.as_str())
