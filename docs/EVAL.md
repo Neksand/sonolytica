@@ -126,6 +126,24 @@ overlap); overlap is flagged but not split; greedy speaker mapping in
 0.25 s collar, frame 10 ms — do not compare with a paper that uses a different
 collar.
 
+### Tried and rejected: silhouette-based splitting
+
+Hypothesis: let the dendrogram decide the cut — build down to one cluster, then
+choose the number of speakers above the threshold floor by the best mean
+silhouette on cosine distance.
+
+| | dev | test |
+|---|---|---|
+| before | 11.81 % | 17.46 % |
+| with silhouette | 13.35 % | 17.46 % |
+
+It changed nothing on the test pilot and broke the single-speaker recording
+(`tfvyr`: 1 → 3 speakers, DER 1.14 → 62.55 %): silhouette rewards compact
+outlier clusters, and a lone voice with music or noise fragments looks like
+several. Reverted. Speaker counting needs a model trained for it (Sortformer,
+or an eigengap/NME estimate with a noise model), not another unsupervised
+score on the same embeddings.
+
 ## What the numbers say to do next
 
 The planned order was forced alignment, then diarization. The measurements
