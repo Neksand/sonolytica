@@ -4,6 +4,30 @@ The first benchmark used a 14-second clip with two voices. This one is built to
 be uncomfortable: 4 minutes, 4 synthetic voices, 6 slides, one 1.4 s overlap,
 and a baseline environment **without** `whisper` or `tesseract`.
 
+## Reproducible session
+
+Do not hand-assemble the working directory: a neighbour's JSON is how a
+benchmark fakes itself.
+
+```bash
+# 1. clean directory: media + skill copy + full-metal binary + PROMPT.md
+scripts/bench/prepare_agent_fixture.sh --name hard \
+  --media /private/tmp/bench-hard/meeting.mp4
+# -> /private/tmp/bench-agent-hard
+
+# 2. one agent session, started by hand in that directory, nothing else
+
+# 3. tokens from OpenCode's own store
+scripts/bench/session_tokens.sh ses_…     # or --last
+```
+
+The prompt is `scripts/bench/prompts/<name>.md`, copied verbatim into the
+fixture and printed by the script: same questions, same rules, every run.
+`easy.md` is the 14.4 s clip. Record model, date, harness, score, commands and
+`fresh` (input + output) in `docs/BENCHMARK.md`. A run is only comparable when
+the prompt, the fixture and the model match; two runs of one configuration must
+agree within ±10 % on fresh tokens, otherwise run more and report the median.
+
 ## Build the fixture
 
 ```bash
