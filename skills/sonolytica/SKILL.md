@@ -19,9 +19,8 @@ question; for an absence claim, search the word once and its stem once.
 ## 1. The one-minute model
 
 `analyze FILE` writes one document; `query COMMAND` answers one question from
-it. `runs` = what actually executed; `warnings` = what was skipped and why;
-`analyses` = aggregates; `segments` = the timeline (speech, turns, music labels,
-events). `query` is the only reading interface — never load the whole JSON.
+it. `runs` = what executed, `warnings` = what was skipped, `analyses` =
+aggregates, `segments` = the timeline. Never load the whole JSON into context.
 
 ## 2. Choose the profile before you spend money
 
@@ -44,6 +43,7 @@ sonolytica doctor                          # ffmpeg + models + providers
 sonolytica analyze FILE --out doc.json --profile standard --summary
 sonolytica query brief doc.json            # one compact overview — start here
 sonolytica query runs doc.json             # stage status in detail
+sonolytica report doc.json --out report.html  # human page: chapters, quotes, frames
 ```
 
 `analyze` prints the document to stdout unless `--out` is given; `--summary`
@@ -103,7 +103,8 @@ Rules of use:
   `query transcript` or `query words` — they never truncate.
 - `query chapters` splits on **structure** (silence, speaker change, scene cut),
   not topics. Report it as "главы записи", never as "темы разговора".
-- All commands are read-only. JSON shapes: `references/query-cheatsheet.md`.
+- All commands are read-only; `report` writes one HTML page. JSON shapes:
+  `references/query-cheatsheet.md`.
 
 ## 6. Timestamps and ranges — canonical rules
 
@@ -181,9 +182,8 @@ Troubleshooting detail: `references/troubleshooting.md`.
 
 ## 12. Workflows
 
-Open **one** file for the media type at hand, not all of them:
-`references/workflows/{interview,meeting,lecture,music,video}.md` — podcast,
-call, screencast, DJ set, video navigation and on-screen text.
+Open **one** file for the media type at hand: `references/workflows/`
+(`interview`, `meeting`, `lecture`, `music`, `video`).
 
 ## 13. Limits — do not claim these
 
@@ -196,5 +196,5 @@ call, screencast, DJ set, video navigation and on-screen text.
 
 ## 14. Accuracy claims
 
-Only from an actual run, naming dataset, subset, model and date, e.g.
-`sonolytica-eval report --document doc.json`. Never quote an unproduced number.
+Only from an actual run, naming dataset, subset, model and date (see
+`sonolytica-eval report`). Never quote a number you did not produce here.

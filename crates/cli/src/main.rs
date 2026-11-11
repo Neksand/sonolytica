@@ -14,6 +14,7 @@ use sonolytica_providers::{ModelStore, default_model_dir, models::MODELS};
 use tracing_subscriber::EnvFilter;
 
 mod query;
+mod report;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -45,6 +46,8 @@ enum Command {
     Analyze(AnalyzeArgs),
     /// Query an analysed document without jq
     Query(query::QueryArgs),
+    /// Render a human-readable HTML report for an analysed document
+    Report(ReportArgs),
     /// List or fetch pinned models
     Models {
         #[command(subcommand)]
@@ -54,6 +57,15 @@ enum Command {
     Doctor,
     /// Print the document schema example
     Schema,
+}
+
+#[derive(Debug, Args)]
+struct ReportArgs {
+    /// Analysed document (.json)
+    document: PathBuf,
+    /// Output HTML path (default: the document path with `.html`)
+    #[arg(short, long)]
+    out: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
@@ -371,6 +383,11 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                 "minimal (DSP only)"
             };
             println!("build: {build}");
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Report(args) => {
+            let path = report::run(&args.document, &report::ReportOptions { out: args.out })?;
+            println!("{}", path.display());
             Ok(ExitCode::SUCCESS)
         }
         Command::Schema => {

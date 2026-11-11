@@ -231,7 +231,7 @@ pub fn run(command: QueryCommand) -> Result<()> {
     }
 }
 
-fn load(path: &Path) -> Result<Document> {
+pub(crate) fn load(path: &Path) -> Result<Document> {
     let text = std::fs::read_to_string(path)
         .with_context(|| format!("could not read {}", path.display()))?;
     Document::from_json(&text).with_context(|| format!("could not parse {}", path.display()))
@@ -554,7 +554,7 @@ struct SpeakerAcc {
 }
 
 /// Speaking time per speaker, longest first. Shared by `speakers` and `brief`.
-fn speaker_views(doc: &Document) -> Vec<SpeakerView<'_>> {
+pub(crate) fn speaker_views(doc: &Document) -> Vec<SpeakerView<'_>> {
     let mut acc: BTreeMap<&SpeakerId, SpeakerAcc> = BTreeMap::new();
     for segment in doc.segments_of_kind("speaker_turn") {
         let SegmentKind::SpeakerTurn { speaker, .. } = &segment.kind else {
@@ -667,7 +667,7 @@ fn chapters(doc: &Document, min_gap: &str, json: bool) -> Result<()> {
 
 /// Chapters from structure: long silence, speaker change, scene cut. Shared by
 /// `chapters` and `brief`.
-fn chapter_views(doc: &Document, min_gap: MediaTime) -> Vec<ChapterView<'_>> {
+pub(crate) fn chapter_views(doc: &Document, min_gap: MediaTime) -> Vec<ChapterView<'_>> {
     let end = doc.duration();
     let end = if end == MediaTime::ZERO {
         MediaTime::MAX
@@ -1617,13 +1617,13 @@ struct SpeakersOutput<'a> {
 }
 
 #[derive(Debug, Serialize)]
-struct SpeakerView<'a> {
-    id: &'a str,
-    speech_duration_us: i64,
-    speech_display: String,
-    turn_count: u32,
-    first_start_us: i64,
-    last_end_us: i64,
+pub(crate) struct SpeakerView<'a> {
+    pub(crate) id: &'a str,
+    pub(crate) speech_duration_us: i64,
+    pub(crate) speech_display: String,
+    pub(crate) turn_count: u32,
+    pub(crate) first_start_us: i64,
+    pub(crate) last_end_us: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -1704,15 +1704,15 @@ struct ChaptersOutput<'a> {
 }
 
 #[derive(Debug, Serialize)]
-struct ChapterView<'a> {
-    start: i64,
-    end: i64,
-    start_display: String,
-    end_display: String,
+pub(crate) struct ChapterView<'a> {
+    pub(crate) start: i64,
+    pub(crate) end: i64,
+    pub(crate) start_display: String,
+    pub(crate) end_display: String,
     /// First words of the first utterance. A hint, not a generated title.
-    title_hint: Option<String>,
-    speakers: Vec<&'a str>,
-    segment_count: usize,
+    pub(crate) title_hint: Option<String>,
+    pub(crate) speakers: Vec<&'a str>,
+    pub(crate) segment_count: usize,
 }
 
 #[derive(Debug, Serialize)]
