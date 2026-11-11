@@ -452,6 +452,9 @@ impl Document {
         }
 
         let media_end = self.media.audio_duration().or(self.media.duration);
+        // A keyframe belongs to the picture, not to the audio: a video track can
+        // outlast its audio, and those frames are still inside the container.
+        let artifact_end = self.media.duration.or_else(|| self.media.audio_duration());
 
         for (idx, segment) in self.segments.iter().enumerate() {
             if segment.id as usize != idx {
@@ -613,7 +616,7 @@ impl Document {
                     format!("artifact {} ends before it starts", artifact.path),
                 ));
             }
-            if let Some(end) = media_end {
+            if let Some(end) = artifact_end {
                 if artifact.range.end > end {
                     out.push(Violation::new(
                         "artifact_bounds",
@@ -911,6 +914,40 @@ mod tests {
         assert!(
             violations.iter().any(|v| v.code == "artifact_bounds"),
             "a frame past the media must be rejected: {violations:?}"
+        );
+    }
+
+    #[test]
+    fn artifacts_may_outlast_a_short_audio_stream() {
+        // Codex review finding: a video can outlast its audio; keyframes after
+        // the audio end are still inside the container and must be valid.
+        let mut document = fixture();
+        document.media.duration = Some(MediaTime::from_secs_f64(10.0));
+        document.media.streams.push(crate::media::StreamInfo {
+            index: 0,
+            kind: crate::media::StreamKind::Audio,
+            codec: None,
+            sample_rate: None,
+            channels: None,
+            width: None,
+            height: None,
+            frame_rate: None,
+            language: None,
+            duration: Some(MediaTime::from_secs_f64(5.0)),
+            bit_rate: None,
+        });
+        document.artifacts.push(Artifact {
+            kind: "keyframe".into(),
+            path: "doc.artifacts/frames/frame_0001.jpg".into(),
+            range: TimeRange::from_secs(9.0, 9.0),
+            sha256: None,
+            width: Some(1280),
+            height: None,
+        });
+        let violations = document.validate();
+        assert!(
+            violations.is_empty(),
+            "a frame after the audio end is inside the container: {violations:?}"
         );
     }
 
