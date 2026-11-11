@@ -996,6 +996,10 @@ const BRIEF_CHAPTERS: usize = 5;
 const BRIEF_SPEAKERS: usize = 8;
 /// Same 1.2 s that `query chapters` uses by default.
 const BRIEF_CHAPTER_GAP: MediaTime = MediaTime::from_millis(1_200);
+/// Scene cuts mapped by `brief`; a long video can hold hundreds.
+const BRIEF_SCENE_CUTS: usize = 50;
+/// One OCR line per keyframe, capped: the full list is `timeline --type text_overlay`.
+const BRIEF_OCR_LINES: usize = 10;
 
 fn analysis_speech(doc: &Document) -> Option<&SpeechSummary> {
     doc.analyses.iter().find_map(|block| match block {
@@ -1016,6 +1020,26 @@ fn analysis_acoustic(doc: &Document) -> Option<&AcousticSummary> {
         AnalysisBlock::Acoustic(summary) => Some(summary),
         _ => None,
     })
+}
+
+/// One OCR line per keyframe instant, in time order. Several overlays can share
+/// one instant (several lines on a slide); `brief` shows the first. It is a map,
+/// not a quotation source: the full text is `timeline --type text_overlay`.
+fn brief_ocr(doc: &Document) -> Vec<BriefOcr> {
+    let mut by_instant: BTreeMap<i64, String> = BTreeMap::new();
+    for segment in doc.segments_of_kind("text_overlay") {
+        let SegmentKind::TextOverlay { text, .. } = &segment.kind else {
+            continue;
+        };
+        by_instant
+            .entry(segment.range.start.micros())
+            .or_insert_with(|| truncate(text));
+    }
+    by_instant
+        .into_iter()
+        .take(BRIEF_OCR_LINES)
+        .map(|(start_us, text)| BriefOcr { start_us, text })
+        .collect()
 }
 
 fn brief(doc: &Document, json: bool) -> Result<()> {
@@ -1062,14 +1086,23 @@ fn brief(doc: &Document, json: bool) -> Result<()> {
     let chapter_count = all_chapters.len();
     let all_speakers = speaker_views(doc);
     let speaker_total = all_speakers.len();
+    let scene_segments: Vec<&Segment> = doc.segments_of_kind("scene").collect();
+    let scene_cuts: Vec<i64> = scene_segments
+        .iter()
+        .filter(|segment| matches!(segment.kind, SegmentKind::Scene { cut: true, .. }))
+        .map(|segment| segment.range.start.micros())
+        .take(BRIEF_SCENE_CUTS)
+        .collect();
     let video = BriefVideo {
-        scenes: doc.segments_of_kind("scene").count(),
+        scenes: scene_segments.len(),
         keyframes: doc
             .artifacts
             .iter()
             .filter(|artifact| artifact.kind == "keyframe")
             .count(),
         text_overlays: doc.segments_of_kind("text_overlay").count(),
+        scene_cuts,
+        ocr: brief_ocr(doc),
     };
     let music = analysis_music(doc).map(|music| BriefMusic {
         bpm: music.bpm.as_ref().map(|bpm| bpm.value),
@@ -1266,6 +1299,22 @@ fn brief(doc: &Document, json: bool) -> Result<()> {
             count_label(video.keyframes, "keyframe", "keyframes"),
             count_label(video.text_overlays, "text overlay", "text overlays")
         );
+        if !video.scene_cuts.is_empty() {
+            let cuts = video
+                .scene_cuts
+                .iter()
+                .map(|micros| MediaTime::from_micros(*micros).to_string())
+                .collect::<Vec<_>>()
+                .join(" ");
+            println!("cuts       {cuts}");
+        }
+        for line in &video.ocr {
+            println!(
+                "ocr        {}  {}",
+                MediaTime::from_micros(line.start_us),
+                line.text
+            );
+        }
     }
     if let Some(music) = &music {
         println!(
@@ -1714,6 +1763,16 @@ struct BriefVideo {
     scenes: usize,
     keyframes: usize,
     text_overlays: usize,
+    /// Start of each detected cut, microseconds; empty when nothing was cut.
+    scene_cuts: Vec<i64>,
+    /// First OCR line per keyframe instant, at most `BRIEF_OCR_LINES`.
+    ocr: Vec<BriefOcr>,
+}
+
+#[derive(Debug, Serialize)]
+struct BriefOcr {
+    start_us: i64,
+    text: String,
 }
 
 #[derive(Debug, Serialize)]

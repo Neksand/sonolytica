@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::process::{Command, Output};
 
 use sonolytica_core::{
-    AcousticSummary, AnalysisBlock, AnalysisConfig, Bpm, Capability, Chord, ChordQuality,
+    AcousticSummary, AnalysisBlock, AnalysisConfig, BBox, Bpm, Capability, Chord, ChordQuality,
     Confidence, Document, DocumentBuilder, KeyEstimate, Loudness, MediaInfo, MediaTime, Mode,
     ModelRef, MusicSummary, PitchClass, RunRecord, RunStatus, SegmentKind, SpeakerId, TimeRange,
     TrackKind, Warning,
@@ -579,4 +579,100 @@ fn brief_survives_a_document_without_speech_or_video() {
     assert!(output.status.success());
     let text = String::from_utf8_lossy(&output.stdout);
     assert!(text.contains("speech     (none)"), "{text}");
+}
+
+/// A document with more scenes and OCR lines than `brief` shows, and two OCR
+/// lines at every keyframe instant.
+fn video_fixture_path() -> PathBuf {
+    let media = MediaInfo {
+        path: "/tmp/query-video.mp4".into(),
+        duration: Some(MediaTime::from_millis(120_000)),
+        ..MediaInfo::default()
+    };
+    let mut builder = DocumentBuilder::new(media, AnalysisConfig::default());
+
+    let scene_run = builder.add_run(run_record(
+        Capability::Scene,
+        "ffmpeg-histogram",
+        RunStatus::Complete,
+    ));
+    let scene_track = builder.add_track(TrackKind::Scene, "scenes", scene_run);
+    for index in 0..55_u32 {
+        builder.add_segment(
+            scene_track,
+            TimeRange::from_secs(f64::from(index) * 2.0, f64::from(index) * 2.0 + 2.0),
+            SegmentKind::Scene {
+                index,
+                cut: index > 0,
+            },
+            Confidence::new(0.9),
+            scene_run,
+        );
+    }
+
+    let text_run = builder.add_run(run_record(
+        Capability::Vision,
+        "pp-ocrv5",
+        RunStatus::Complete,
+    ));
+    let text_track = builder.add_track(TrackKind::Text, "ocr", text_run);
+    for index in 0..12_u32 {
+        let instant = MediaTime::from_secs_f64(2.0 + f64::from(index) * 5.0);
+        for text in ["FIRST LINE", "SECOND LINE"] {
+            builder.add_segment(
+                text_track,
+                TimeRange::empty(instant),
+                SegmentKind::TextOverlay {
+                    text: text.into(),
+                    bbox: BBox {
+                        x: 0.0,
+                        y: 0.0,
+                        width: 100.0,
+                        height: 20.0,
+                    },
+                },
+                Confidence::new(0.9),
+                text_run,
+            );
+        }
+    }
+
+    let path = std::env::temp_dir().join(format!(
+        "sonolytica-query-video-{}.json",
+        std::process::id()
+    ));
+    let document = builder.finish().expect("video fixture must be valid");
+    std::fs::write(&path, document.to_json_pretty().unwrap()).expect("write fixture");
+    path
+}
+
+#[test]
+fn brief_maps_scene_cuts_and_one_ocr_line_per_keyframe() {
+    let path = video_fixture_path();
+    let json = query_json(&["query", "brief", path.to_str().unwrap(), "--json"]);
+
+    assert_eq!(json["video"]["scenes"], 55);
+    let cuts = json["video"]["scene_cuts"].as_array().unwrap();
+    assert_eq!(cuts.len(), 50, "cuts are capped at 50");
+    assert_eq!(cuts[0], 2_000_000, "first cut is scene 1 at 2 s");
+
+    let ocr = json["video"]["ocr"].as_array().unwrap();
+    assert_eq!(ocr.len(), 10, "OCR is capped at ten keyframes");
+    assert_eq!(ocr[0]["start_us"], 2_000_000);
+    assert_eq!(ocr[0]["text"], "FIRST LINE", "one line per instant");
+
+    let bytes = serde_json::to_string(&json).unwrap();
+    assert!(
+        bytes.len() <= 4096,
+        "brief JSON grew to {} bytes",
+        bytes.len()
+    );
+
+    let text = String::from_utf8_lossy(&query(&["query", "brief", path.to_str().unwrap()]).stdout)
+        .into_owned();
+    assert!(text.contains("cuts       00:00:02.000"), "{text}");
+    assert!(
+        text.contains("ocr        00:00:02.000  FIRST LINE"),
+        "{text}"
+    );
 }
