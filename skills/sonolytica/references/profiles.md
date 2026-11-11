@@ -10,7 +10,7 @@ capabilities and, for `ultra`, an exit-code contract.
 | Music / acoustic aggregates | yes | yes | yes |
 | Shot boundaries (video) | yes | yes | yes |
 | Speech recognition (words) | **no** | yes | yes |
-| Forced alignment (word-precise) | – | – | later |
+| Forced alignment (word-precise) | – | – | English |
 | Music notes / bass | – | – | later |
 | OCR / keyframes (video) | – | – | later |
 | Exit 2 when a requested capability failed or did not run | no | no | **yes** |
@@ -36,10 +36,10 @@ summaries with citations.
   document;
 - automation where exit code 2 must trigger a retry with models installed.
 
-Today `ultra` does not add new data: forced alignment, note transcription, OCR
-and keyframes are separate milestones. When they land they will be enabled by
-`ultra`, and this file will say what changed. Until then, do not promise the
-user "more detail" from `ultra` — promise "nothing silently skipped".
+Today `ultra` adds forced word alignment (English) and the no-silent-
+degradation guarantee; OCR and keyframes are already in `standard`. Note
+transcription is still a separate milestone. Do not promise note-level detail
+yet.
 
 ## What the profile does to the document
 

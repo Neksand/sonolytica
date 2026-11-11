@@ -196,8 +196,11 @@ milliseconds and the realtime factor for a given machine.
   two speakers, and the speaker count is not estimated: `max_speakers` is a cap,
   not a prediction.
 - Region-driven ASR can lose words at a region boundary; the first phoneme of
-  an utterance is the most common casualty. This is measurable with the WER
-  harness and will drive forced alignment later.
+  an utterance is the most common casualty. Forced alignment (`--align`,
+  wav2vec2 CTC) now gives word-precise times for English; the text itself is
+  still Whisper's, so a word it never emitted cannot be recovered.
+- Alignment is English-only (32-class uppercase vocab), 20 ms frames, and
+  truncates a slice after 30 s. Whisper timestamps remain the fallback.
 - Chord/key estimation is template-based, not a trained MIR model; confidence
   is a score, not a probability.
 - Speech emotion, intent, topic segmentation and summarisation are not

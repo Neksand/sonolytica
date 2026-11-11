@@ -1,4 +1,4 @@
-# Document schema (v1.2.0)
+# Document schema (v1.3.0)
 
 One analysis produces one `Document`. It is designed for machine consumption:
 typed fields, stable names, explicit units, and no placeholders standing in for
@@ -57,7 +57,8 @@ validator enforces this (`segment_bounds`, `word_bounds`).
     "dsp": { "fft_size": 2048, "hop_size": 512, "silence_dbfs": -45.0,
              "min_silence_ms": 500, "detect_tempo": true },
     "limits": { "max_duration_secs": 7200, "max_file_bytes": 8589934592, "timeout_secs": 600 },
-    "hash_media": true
+    "hash_media": true,
+    "align_words": false
   },
 
   "runs": [
@@ -217,7 +218,8 @@ A capability with no provider does **not** create a failed run: it appears in
 - `serde` defaults are used where a missing field has an unambiguous meaning;
   there are no silent reinterpretations.
 - `1.1.0` adds `artifacts[]`; `1.2.0` adds `text_overlay` segments and the
-  `text` track kind. Every older document stays readable.
+  `text` track kind; `1.3.0` adds the `align` capability and `config.align_words`.
+  Every older document stays readable.
 
 ## Query commands
 

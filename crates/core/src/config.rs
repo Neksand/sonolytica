@@ -28,6 +28,9 @@ pub enum Capability {
     Scene,
     /// Visual understanding.
     Vision,
+    /// Forced word alignment. A sub-step of transcription, not a user module:
+    /// it is requested with `align_words` and never through `modules`.
+    Align,
 }
 
 impl Capability {
@@ -41,6 +44,7 @@ impl Capability {
             Self::Acoustic => "acoustic",
             Self::Scene => "scene",
             Self::Vision => "vision",
+            Self::Align => "align",
         }
     }
 
@@ -171,6 +175,10 @@ pub struct AnalysisConfig {
     pub translate_to_english: bool,
     /// Explicit ASR model id, overriding the default choice.
     pub asr_model: Option<String>,
+    /// Replace Whisper token timestamps with wav2vec2 CTC forced alignment
+    /// when the aligner is available. Missing model/feature is a warning, not
+    /// a failure; the transcript keeps Whisper words.
+    pub align_words: bool,
     pub vad: VadConfig,
     pub diarization: DiarizationConfig,
     pub dsp: DspConfig,
@@ -186,6 +194,7 @@ impl Default for AnalysisConfig {
             language: None,
             translate_to_english: false,
             asr_model: None,
+            align_words: false,
             vad: VadConfig::default(),
             diarization: DiarizationConfig::default(),
             dsp: DspConfig::default(),
@@ -248,6 +257,12 @@ mod tests {
         let mut c = AnalysisConfig::default();
         c.vad.threshold = 0.7;
         assert_ne!(a.params_sha256(), c.params_sha256());
+    }
+
+    #[test]
+    fn align_words_defaults_to_off_for_old_documents() {
+        let config: AnalysisConfig = serde_json::from_str(r#"{"modules":["transcribe"]}"#).unwrap();
+        assert!(!config.align_words);
     }
 
     #[test]

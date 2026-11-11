@@ -16,10 +16,10 @@ runtime, no GPL.
 
 | | |
 |---|---|
-| Rust | 12 764 lines across 7 crates (`cli` 3 021, `providers` 2 927, `core` 2 053, `engine` 1 720, `media` 1 210, `dsp` 1 188, `eval` 645) |
+| Rust | 14 156 lines across 7 crates (`providers` 3 704, `cli` 3 060, `engine` 2 281, `core` 2 068, `media` 1 210, `dsp` 1 188, `eval` 645) |
 | Query commands | 13 (`timeline`, `at`, `search`, `transcript`, `words`, `speakers`, `chapters`, `frames`, `music`, `acoustic`, `runs`, `summary`, `help`) |
-| Models | 8, all SHA-256 pinned: Silero VAD, whisper tiny/base/small, pyannote segmentation, WeSpeaker, PP-OCRv5 det/rec |
-| Schema | 1.2.0 (`Document::validate`, additive 1.0 → 1.2) |
+| Models | 9, all SHA-256 pinned: Silero VAD, whisper tiny/base/small, wav2vec2 aligner, pyannote segmentation, WeSpeaker, PP-OCRv5 det/rec |
+| Schema | 1.3.0 (`Document::validate`, additive 1.0 → 1.3) |
 | Agent skill | `SKILL.md` (290 lines) + 10 reference files + install guide |
 | Docs | 15 files incl. 5 ADRs; `EVAL.md`, `BENCHMARK.md`, `DOGFOOD.md`, `OCR.md` |
 
@@ -44,6 +44,7 @@ runtime, no GPL.
 | Diarization | failure mode | speaker count | 2→11 on one file, 12→10 on another; confusion dominates |
 | OCR | lines | 2/2, 6/6, 7/7 CJK | synthetic slides and a terminal screenshot, PP-OCRv5, 0.987 confidence on the benchmark slide |
 | Video | cut accuracy | ±0.5 s | 3-shot synthetic video, 2 fps signatures; colour-cut bug found and fixed |
+| Alignment | word drift vs Whisper | **median 110 ms** | wav2vec2 CTC, English, two-voice fixture; 88 % within 600 ms |
 | Music | tempo / key | 120.3 vs 120 BPM; C major triad correct | synthetic clicks and sines; sustained-chord tempo correctly reports score 0.0 |
 | Throughput | realtime factor | **21.64×** | 121.7 s full pipeline, 8.28 s wall, all stages complete |
 | Russian | transcript | exact | 12 s, `whisper-small --language ru`, 0 word errors on a clean fixture |
@@ -110,5 +111,5 @@ frames or OCR, and is overhead for a short clean recording. It makes the agent
   benchmark are the differentiator; perception is deliberately local and
   replaceable.
 
-Next, in order of payoff: speaker-count model, forced alignment, music
-sections/notes, object/face models, MCP.
+Next, in order of payoff: speaker-count model, music sections/notes,
+non-English alignment, object/face models, MCP.

@@ -37,9 +37,11 @@ query COMMAND →  the answer to one question, as a table or typed JSON
 `scene` is a no-op on audio-only files and is excluded from the `ultra`
 degradation check there.
 
-`ultra` does **not** add detail in this release: forced alignment, notes/bass,
-OCR and keyframes are separate milestones. Do not promise the user "more
-detail" from `ultra`; promise "nothing silently skipped".
+`ultra` adds **forced word alignment** (English, wav2vec2 CTC: exact word
+boundaries instead of Whisper token times) and treats a requested capability
+that never ran as a failure. Notes/bass are still separate milestones. Do not
+promise note-level detail yet; do promise word-precise citations and "nothing
+silently skipped".
 
 If the user did not say, pick `standard` for media under ~30 minutes and
 `structure` for a first pass on very long files. Ask only when the cost is
@@ -123,6 +125,10 @@ Rules of use:
 - Quote ranges as `HH:MM:SS.mmm–HH:MM:SS.mmm` from `start_display`/`end_display`.
 - Never round. "On what second?" gets the exact range, optionally followed by
   `(≈3.1 s)` if the user wants a rough figure.
+- With `--align` (implied by `ultra`), `words[].range` comes from forced
+  alignment (English, 20 ms frames, median drift ~110 ms); without it, the
+  times are Whisper token timestamps. Both are document facts; do not mix them
+  in one citation without saying which run produced them.
 - Which range supports which claim:
 
 | Claim | Cite |
@@ -273,8 +279,9 @@ Step-by-step command sequences per media type:
   summarise what the document says, extractively, with citations.
 - No speaker identity, age, gender or language proficiency.
 - No overlap separation (flagged, not split).
-- Word timings are Whisper token timestamps (~10 ms resolution, occasionally
-  spanning punctuation) until forced alignment is available in `ultra`.
+- Word timings are Whisper token times unless `--align`/`ultra` ran; alignment
+  is English-only, 20 ms frames, and keeps Whisper's text (it cannot recover a
+  word the ASR never emitted).
 - No visual or musical-detail claims without the corresponding data.
 
 ## 16. Accuracy claims

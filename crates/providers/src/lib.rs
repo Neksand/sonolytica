@@ -9,12 +9,18 @@
 #![allow(clippy::missing_panics_doc)]
 #![allow(clippy::missing_errors_doc)]
 
+pub mod align;
 pub mod models;
 pub mod ocr;
 pub mod registry;
 pub mod traits;
 
-#[cfg(any(feature = "silero", feature = "diarize", feature = "ocr"))]
+#[cfg(any(
+    feature = "silero",
+    feature = "diarize",
+    feature = "ocr",
+    feature = "align"
+))]
 #[cfg_attr(not(any(feature = "silero", feature = "diarize")), allow(dead_code))]
 mod onnx;
 
@@ -27,6 +33,7 @@ mod whisper;
 #[cfg(feature = "diarize")]
 mod diarize;
 
+pub use align::{LazyWav2Vec2Aligner, Wav2Vec2Aligner};
 pub use models::{MODELS, ModelSpec, ModelStore, default_model_dir, find_model};
 pub use registry::{Registry, Unavailable};
 pub use traits::{

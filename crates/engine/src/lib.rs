@@ -23,7 +23,7 @@ use sonolytica_core::{
     AcousticSummary, AnalysisBlock, AnalysisConfig, Audio, Bpm, Capability, Chord, ChordQuality,
     Confidence, Document, DocumentBuilder, KeyEstimate, Loudness, MediaTime, Mode, ModelRef,
     MusicSummary, PitchClass, RunRecord, RunStatus, SegmentKind, SpeakerId, SpeechSummary,
-    TimeRange, TrackKind, VadConfig, Warning, now_unix_ms,
+    TimeRange, TrackKind, VadConfig, Warning, Word, now_unix_ms,
 };
 use sonolytica_dsp::FrameConfig;
 use sonolytica_media::{
@@ -31,8 +31,8 @@ use sonolytica_media::{
     sha256_file, validate_input,
 };
 use sonolytica_providers::{
-    AsrConfig, AsrSegment, DiarTurn, DiarizationOutput, ModelStore, ProviderError, Registry,
-    SpeechRegion,
+    AsrConfig, AsrOutput, AsrSegment, DiarTurn, DiarizationOutput, ModelStore, ProviderError,
+    Registry, SpeechRegion,
 };
 
 pub use error::EngineError;
@@ -46,6 +46,10 @@ const MUSIC_RATE: u32 = 32_000;
 pub struct Engine {
     registry: Arc<Registry>,
     tools: MediaTools,
+    /// Wav2Vec2 forced aligner, loaded on first use. `None` when the build or
+    /// the model store cannot provide one; alignment then degrades to Whisper
+    /// word timings with a warning.
+    aligner: Option<Arc<sonolytica_providers::align::LazyWav2Vec2Aligner>>,
 }
 
 impl std::fmt::Debug for Engine {
@@ -53,6 +57,7 @@ impl std::fmt::Debug for Engine {
         f.debug_struct("Engine")
             .field("registry", &self.registry)
             .field("tools", &self.tools)
+            .field("aligner", &self.aligner)
             .finish()
     }
 }
@@ -62,6 +67,7 @@ impl Engine {
         Self {
             registry: Arc::new(registry),
             tools,
+            aligner: None,
         }
     }
 
@@ -70,7 +76,20 @@ impl Engine {
         let threads = std::thread::available_parallelism()
             .map_or(4, std::num::NonZeroUsize::get)
             .min(8);
-        Self::new(Registry::discover(store, threads), MediaTools::detect())
+        // Presence only: digest verification and the 360 MB session load are
+        // deferred until alignment is actually requested.
+        let aligner = if sonolytica_providers::align::available(&store) {
+            Some(Arc::new(
+                sonolytica_providers::align::LazyWav2Vec2Aligner::new(store.clone(), threads),
+            ))
+        } else {
+            None
+        };
+        Self {
+            registry: Arc::new(Registry::discover(store, threads)),
+            tools: MediaTools::detect(),
+            aligner,
+        }
     }
 
     pub fn registry(&self) -> &Registry {
@@ -391,6 +410,26 @@ impl Engine {
             }
         }
 
+        // --- Forced word alignment -----------------------------------------
+        // Runs after ASR and before the speech track is assembled: the track
+        // records whatever words survive here. A missing aligner is a warning,
+        // never a failed analysis.
+        if config.align_words {
+            if let Some(output) = asr_output.as_mut() {
+                if let Some(aligner) = self.aligner.clone() {
+                    if let Some(audio) = speech_audio.as_ref() {
+                        align_output(&mut builder, aligner, audio, output, &config).await?;
+                    }
+                } else {
+                    builder.warn(Warning::new(
+                        "align_unavailable",
+                        "forced alignment was requested but the `align` feature or the \
+                         wav2vec2-base-960h model is missing; keeping Whisper token timestamps",
+                    ));
+                }
+            }
+        }
+
         // --- Diarization ---------------------------------------------------
         let mut diarization: Option<DiarizationOutput> = None;
         if config.wants(Capability::Diarize) && self.registry.diarizer().is_some() {
@@ -690,6 +729,211 @@ fn run_record(
     }
 }
 
+/// Replace Whisper word timings with CTC-forced alignment, one run per ASR
+/// segment.
+///
+/// A segment is the unit of provenance here: a transcript region that could
+/// not be aligned is visible as its own failed/partial record instead of a
+/// silent downgrade of the whole file. Segments longer than the model's 30 s
+/// pass are split: the prefix is aligned and the Whisper words beyond the cap
+/// are kept, with a `partial` run and an explicit warning.
+async fn align_output(
+    builder: &mut DocumentBuilder,
+    aligner: Arc<sonolytica_providers::align::LazyWav2Vec2Aligner>,
+    audio: &Audio,
+    output: &mut AsrOutput,
+    config: &AnalysisConfig,
+) -> Result<(), EngineError> {
+    let english = output
+        .language
+        .as_deref()
+        .is_none_or(|language| language.to_ascii_lowercase().starts_with("en"));
+    if !english {
+        builder.warn(Warning::new(
+            "align_unavailable",
+            format!(
+                "forced alignment is English-only (wav2vec2-base-960h); transcript language is {}",
+                output.language.as_deref().unwrap_or("unknown")
+            ),
+        ));
+        return Ok(());
+    }
+
+    // One load attempt: a missing digest or an unloadable graph is a single
+    // document warning, not one failed run per region.
+    let loader = Arc::clone(&aligner);
+    if let Err(error) = blocking(move || loader.ensure_loaded()).await? {
+        builder.warn(Warning::new(
+            "align_unavailable",
+            format!("forced alignment is unavailable: {error}"),
+        ));
+        return Ok(());
+    }
+
+    let model = sonolytica_providers::find_model(sonolytica_providers::align::MODEL_ID)
+        .map(|spec| spec.reference());
+    let limit = MediaTime::from_millis(sonolytica_providers::align::MAX_ALIGN_MILLIS);
+    let media_end = audio.duration();
+
+    for segment in &mut output.segments {
+        if segment.text.trim().is_empty() {
+            continue;
+        }
+        let truncated = segment.range.duration() > limit;
+        let cutoff = segment.range.start.saturating_add(limit);
+        let (text, slice_end) = if truncated {
+            // Split on Whisper's own word times rather than guessing how many
+            // words fit: the split point is not a boundary we invent.
+            let prefix = segment
+                .words
+                .iter()
+                .filter(|word| word.range.start < cutoff)
+                .map(|word| word.text.as_str())
+                .collect::<Vec<_>>()
+                .join(" ");
+            if prefix.trim().is_empty() {
+                builder.warn(Warning::new(
+                    "align_truncated",
+                    format!(
+                        "region {} exceeds the {} s alignment pass and has no Whisper words to \
+                         split it; keeping Whisper timings",
+                        segment.range,
+                        sonolytica_providers::align::MAX_ALIGN_MILLIS / 1_000
+                    ),
+                ));
+                continue;
+            }
+            (prefix, cutoff)
+        } else {
+            (segment.text.clone(), segment.range.end)
+        };
+
+        let range = TimeRange::new(segment.range.start, slice_end.min(media_end));
+        let samples = audio.samples_in(range).to_vec();
+        if samples.len() < sonolytica_providers::align::MIN_ALIGN_SAMPLES {
+            continue;
+        }
+
+        let started = (now_unix_ms(), Instant::now());
+        let worker = Arc::clone(&aligner);
+        let outcome = blocking(move || worker.align(&samples, &text)).await?;
+
+        let mut replacement: Option<Vec<Word>> = None;
+        let mut warning: Option<(&'static str, String)> = None;
+        let status = match outcome {
+            Err(error) => {
+                warning = Some((
+                    "align_failed",
+                    format!(
+                        "forced alignment failed for {}: {error}; keeping Whisper timings",
+                        segment.range
+                    ),
+                ));
+                RunStatus::Failed {
+                    reason: error.to_string(),
+                }
+            }
+            Ok(words) if words.is_empty() => {
+                warning = Some((
+                    "align_failed",
+                    format!(
+                        "forced alignment produced no confident words for {}; keeping Whisper timings",
+                        segment.range
+                    ),
+                ));
+                RunStatus::Partial {
+                    reason: "no confident aligned words".into(),
+                }
+            }
+            Ok(words) => {
+                let mut candidate: Vec<Word> = words
+                    .into_iter()
+                    .map(|mut word| {
+                        word.range = TimeRange::new(
+                            segment.range.start.saturating_add(word.range.start),
+                            segment.range.start.saturating_add(word.range.end),
+                        );
+                        word
+                    })
+                    .collect();
+                if truncated {
+                    candidate.extend(
+                        segment
+                            .words
+                            .iter()
+                            .filter(|word| word.range.start >= cutoff)
+                            .cloned(),
+                    );
+                }
+                if valid_word_sequence(&candidate, segment.range) {
+                    replacement = Some(candidate);
+                    if truncated {
+                        warning = Some((
+                            "align_truncated",
+                            format!(
+                                "region {} exceeds the {} s alignment pass; aligned the first \
+                                 part and kept Whisper timings for the rest",
+                                segment.range,
+                                sonolytica_providers::align::MAX_ALIGN_MILLIS / 1_000
+                            ),
+                        ));
+                        RunStatus::Partial {
+                            reason: "aligned the first 30 s; the rest keeps Whisper timings".into(),
+                        }
+                    } else {
+                        RunStatus::Complete
+                    }
+                } else {
+                    warning = Some((
+                        "align_invalid",
+                        format!(
+                            "forced alignment for {} was not monotonic inside the region; \
+                             keeping Whisper timings",
+                            segment.range
+                        ),
+                    ));
+                    RunStatus::Partial {
+                        reason: "aligned word ranges were rejected".into(),
+                    }
+                }
+            }
+        };
+
+        let run = builder.add_run(run_record(
+            Capability::Align,
+            "wav2vec2-align",
+            model.clone(),
+            "cpu",
+            config,
+            started,
+            status,
+        ));
+        if let Some((code, message)) = warning {
+            builder.warn(Warning::new(code, message).with_run(run));
+        }
+        if let Some(words) = replacement {
+            segment.words = words;
+        }
+    }
+    Ok(())
+}
+
+/// Aligned words must be non-empty, non-overlapping, ordered, and inside the
+/// segment they describe. Anything else keeps the Whisper words.
+fn valid_word_sequence(words: &[Word], bounds: TimeRange) -> bool {
+    if words.is_empty() {
+        return false;
+    }
+    let mut previous_end = bounds.start;
+    for word in words {
+        if word.range.is_empty() || word.range.start < previous_end || word.range.end > bounds.end {
+            return false;
+        }
+        previous_end = word.range.end;
+    }
+    true
+}
+
 fn last_successful_run(builder: &DocumentBuilder, capability: Capability) -> Option<u32> {
     builder
         .document()
@@ -923,6 +1167,34 @@ mod tests {
         assert!(
             flags[1].1,
             "a turn that outlasts the previous one interrupts"
+        );
+    }
+
+    #[test]
+    fn aligned_words_must_be_ordered_and_inside_the_segment() {
+        let bounds = TimeRange::from_secs(1.0, 2.0);
+        let word = |start: f64, end: f64| Word {
+            text: "w".into(),
+            range: TimeRange::from_secs(start, end),
+            confidence: None,
+        };
+
+        assert!(valid_word_sequence(
+            &[word(1.0, 1.5), word(1.5, 1.9)],
+            bounds
+        ));
+        assert!(!valid_word_sequence(&[], bounds), "empty result");
+        assert!(
+            !valid_word_sequence(&[word(0.9, 1.2)], bounds),
+            "starts before the segment"
+        );
+        assert!(
+            !valid_word_sequence(&[word(1.0, 1.5), word(1.4, 1.6)], bounds),
+            "overlaps the previous word"
+        );
+        assert!(
+            !valid_word_sequence(&[word(1.8, 2.1)], bounds),
+            "ends after the segment"
         );
     }
 

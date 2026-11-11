@@ -27,9 +27,10 @@ This is the first development cycle. What is real today:
 - **DSP analysis, no models required**: STFT features, EBU R128 loudness, true
   peak, LRA, silence detection, onset/tempo/beat tracking, chroma, key and
   triad chord estimation, plus loudness range.
-- **Speech**: Silero VAD, Whisper (whisper.cpp) with word timestamps, local
-  diarization (pyannote segmentation + WeSpeaker embeddings, clustered in
-  Rust), speaker-attributed dialogue, overlap/interruption relations.
+- **Speech**: Silero VAD, Whisper (whisper.cpp) with word timestamps, forced
+  word alignment (wav2vec2 CTC, English), local diarization (pyannote
+  segmentation + WeSpeaker embeddings, clustered in Rust), speaker-attributed
+  dialogue, overlap/interruption relations.
 - **Failure isolation**: a missing model produces a warning and a `Partial`
   document, never a fabricated result.
 - **CLI** with `inspect`, `analyze`, `query`, `models`, `doctor`, `schema`.
@@ -44,9 +45,9 @@ This is the first development cycle. What is real today:
   confidence.
 - **Evaluation harness**: WER/CER, diarization error rate, per-run timings.
 
-Not implemented yet (roadmap): object and face detection, MCP server, HTTP
-server, Python bridge, forced alignment, sound-event classification, music
-notes and sections.
+Not implemented yet (roadmap): object and face detection, non-English
+alignment, MCP server, HTTP server, Python bridge, sound-event classification,
+music notes and sections.
 
 No accuracy numbers are claimed in this repository. The eval harness exists so
 numbers can be produced honestly against licensed datasets. A measured snapshot
@@ -114,9 +115,9 @@ no language model, no invented titles.
 | `standard` | everything, with a transcript | default; any content question |
 | `ultra` | standard + exit 2 if a requested capability failed or never ran | automation that must not silently degrade |
 
-`--profile` and `--modules` are mutually exclusive. `ultra` does not add detail
-yet — forced alignment, note transcription and OCR are separate milestones;
-until then it means "nothing silently skipped".
+`--profile` and `--modules` are mutually exclusive. `ultra` adds forced word
+alignment (English) and turns a skipped requested capability into exit 2; note
+transcription is still a separate milestone.
 
 `analyze` emits one versioned JSON document (`schema_version: 1.0.0`). A
 compact excerpt:

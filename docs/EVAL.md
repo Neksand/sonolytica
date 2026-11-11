@@ -157,6 +157,32 @@ No further threshold heuristic is planned. Speaker counting needs a model
 trained for it (Sortformer) or an eigengap/NME estimate over a smoothed
 affinity, not another cut on the same dendrogram.
 
+## Word alignment
+
+wav2vec2-base-960h CTC forced alignment: 377 MB, Apache-2.0, 20 ms frames,
+English (32-class uppercase vocabulary). `--align` (implied by `--profile ultra`)
+replaces Whisper token times with aligned word boundaries.
+
+Two-voice fixture, 32 paired words against `whisper-small` timestamps:
+
+| | |
+|---|---|
+| Median drift | **110 ms** |
+| Within 200 ms | 59 % |
+| Within 600 ms | 88 % |
+| With `whisper-base.en` | 34 % within 200 ms |
+
+Agreement with Whisper is not the target. On JFK speech the aligned boundaries
+match an independent greedy CTC decode frame-for-frame, while Whisper's own
+token timestamps are **300–950 ms early** (5 % within 200 ms): Whisper places
+words inside silence. The aligned times are the better estimate.
+
+Limits: the text is still Whisper's, so a word it never emitted cannot be
+recovered; English only; a slice over 30 s aligns the first 30 s and keeps
+Whisper times for the tail (`align_truncated` warning). The e2e gate asserts
+median ≤ 300 ms and 88 % within 600 ms, which catches frame-rate and offset
+bugs rather than tuning to Whisper.
+
 ## Music sanity checks
 
 Synthetic signals with a known answer, 10 s each, `--modules music,acoustic`:
@@ -184,6 +210,21 @@ all stages complete
 Model load and process startup are included in the wall time; the stage total
 is what the document records. A 2-hour recording is therefore roughly 5–6
 minutes of analysis here, dominated by ASR.
+
+### Tried and rejected: NME spectral count
+
+Hypothesis: estimate the speaker count from the largest eigengap of the
+normalized affinity matrix, then cut the dendrogram at that k. The synthetic
+block tests passed (two and three well-separated blocks recovered exactly).
+
+On the real dev files the normalized affinity is dominated by one eigenvalue:
+the largest gap consistently landed at k = 1. Results: `rcxzg` 4 → 1, `fsaal`
+7 → 1, `vmaiq` 17 → 1; DER rose from 11.81 % to **63.46 %**. Reverted.
+
+Lesson recorded: synthetic block matrices are not evidence about real speaker
+embeddings. The count needs either a model trained for it (Sortformer) or a
+clustering criterion that accounts for cluster mass and overlap — not a
+spectrum over 1.5 s chunks.
 
 ## What the numbers say to do next
 

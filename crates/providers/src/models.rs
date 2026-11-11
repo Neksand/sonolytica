@@ -81,6 +81,17 @@ pub const MODELS: &[ModelSpec] = &[
         notes: "Multilingual; the default for non-English audio.",
     },
     ModelSpec {
+        id: "wav2vec2-base-960h",
+        capability: Capability::Align,
+        filename: "wav2vec2-base-960h.onnx",
+        url: "https://huggingface.co/Xenova/wav2vec2-base-960h/resolve/a19f851b3d42865797e410752b4c570c871e4825/onnx/model.onnx",
+        sha256: "e46614273f03ff4b87923a965e417fa72004825522cb007c9c25633b8475490d",
+        license: "Apache-2.0",
+        approx_bytes: 377_887_594,
+        notes: "CTC emissions for forced word alignment; 16 kHz mono, 20 ms frames, \
+                32-class uppercase English vocabulary. English-only, 30 s per pass.",
+    },
+    ModelSpec {
         id: "pyannote-segmentation-3.0",
         capability: Capability::Diarize,
         filename: "segmentation-3.0.onnx",

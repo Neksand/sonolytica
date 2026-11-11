@@ -69,8 +69,8 @@ struct InspectArgs {
 struct AnalyzeArgs {
     /// Input media file
     file: PathBuf,
-    /// Preset: structure (no transcript), standard, ultra (all + no silent degradation).
-    /// Default: standard.
+    /// Preset: structure (no transcript), standard, ultra (all + forced word
+    /// alignment + no silent degradation). Default: standard.
     #[arg(long, value_enum, conflicts_with = "modules")]
     profile: Option<Profile>,
     /// Write the document here instead of stdout ("-" means stdout)
@@ -88,6 +88,10 @@ struct AnalyzeArgs {
     /// Translate speech to English
     #[arg(long)]
     translate: bool,
+    /// Replace Whisper token timestamps with wav2vec2 CTC forced word alignment
+    /// (needs the `align` feature and the wav2vec2-base-960h model)
+    #[arg(long)]
+    align: bool,
     /// Skip hashing the input (faster, weaker provenance)
     #[arg(long)]
     no_hash: bool,
@@ -114,8 +118,8 @@ enum Profile {
     Structure,
     /// Everything the audio pipeline can do, with a transcript
     Standard,
-    /// Standard plus a hard guarantee: exit 2 if any requested capability failed
-    /// or did not run at all
+    /// Standard plus forced word alignment and a hard guarantee: exit 2 if any
+    /// requested capability failed or did not run at all
     Ultra,
 }
 
@@ -381,6 +385,7 @@ fn build_config(args: &AnalyzeArgs) -> Result<AnalysisConfig> {
         language: args.language.clone(),
         translate_to_english: args.translate,
         asr_model: args.model.clone(),
+        align_words: args.align || args.profile == Some(Profile::Ultra),
         hash_media: !args.no_hash,
         ..AnalysisConfig::default()
     };
@@ -408,6 +413,14 @@ fn build_config(args: &AnalyzeArgs) -> Result<AnalysisConfig> {
 /// on an audio file is expected to produce nothing.
 fn is_degraded(document: &Document, config: &AnalysisConfig) -> bool {
     if !document.is_complete() {
+        return true;
+    }
+    if config.align_words
+        && !document
+            .runs
+            .iter()
+            .any(|run| run.capability == Capability::Align)
+    {
         return true;
     }
     let has_video = document.media.has_video();
@@ -895,6 +908,32 @@ mod tests {
         ])
         .unwrap_err();
         assert_eq!(error.kind(), clap::error::ErrorKind::ArgumentConflict);
+    }
+
+    #[test]
+    fn align_is_opt_in_and_ultra_enables_it() {
+        let parse = |extra: &[&str]| {
+            let mut argv = vec!["sonolytica", "analyze", "a.wav"];
+            argv.extend_from_slice(extra);
+            let cli = Cli::try_parse_from(argv).unwrap();
+            let Command::Analyze(args) = cli.command else {
+                panic!("expected analyze");
+            };
+            build_config(&args).unwrap().align_words
+        };
+        assert!(!parse(&["--profile", "standard"]));
+        assert!(parse(&["--profile", "ultra"]));
+        assert!(parse(&["--align"]));
+    }
+
+    #[test]
+    fn missing_alignment_is_a_degradation_when_requested() {
+        let document = Document::new(MediaInfo::default(), AnalysisConfig::default());
+        let requested = AnalysisConfig {
+            align_words: true,
+            ..AnalysisConfig::default()
+        };
+        assert!(is_degraded(&document, &requested));
     }
 
     #[test]

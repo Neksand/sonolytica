@@ -13,8 +13,8 @@ Ordered next, each gated on a measured number:
 
 1. **Baselines** — WER on LibriSpeech test-clean, DER on AMI/VoxConverse;
    recorded in `docs/EVAL.md` with dataset, model, parameters and date.
-2. **Speech quality** — forced alignment (wav2vec2 CTC), VAD-boundary word loss,
-   overlap-aware diarization.
+2. **Speech quality** — forced alignment ✅ (wav2vec2 CTC, English, `--align`);
+   next: VAD-boundary word loss, overlap-aware diarization, non-English alignment.
 3. **Video** — shot boundaries ✅, one keyframe per scene with `artifacts[]` ✅
    (`query frames`), on-screen text with PP-OCRv5 ✅ (`--ocr`,
    `text_overlay`). Next: object/face models.
@@ -53,8 +53,9 @@ transcript through the full pipeline, with no failed stages. ✅
 (`SONOLYTICA_E2E=1 cargo test -p sonolytica-engine --features "full,metal"
 --test e2e_speech`)
 
-**Known gap:** region-boundary words can be lost; forced alignment is the
-planned fix, and the WER harness exists to quantify it.
+**Alignment:** `--align` replaces Whisper token times with wav2vec2 CTC forced
+boundaries (English, 20 ms frames); measured median drift 110 ms. Region-boundary
+word loss is a text problem and remains open.
 
 ## Phase 3 — Music and acoustic depth (partially ✅)
 
