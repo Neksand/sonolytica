@@ -1,4 +1,4 @@
-# Document schema (v1.3.0)
+# Document schema (v1.4.0)
 
 One analysis produces one `Document`. It is designed for machine consumption:
 typed fields, stable names, explicit units, and no placeholders standing in for
@@ -122,6 +122,10 @@ validator enforces this (`segment_bounds`, `word_bounds`).
         { "range": { "start": 0, "end": 2000000 },
           "root": "FSharp", "quality": "Minor", "confidence": 0.71 }
       ],
+      "sections": [
+        { "range": { "start": 0, "end": 9920000 }, "novelty": 0.30 },
+        { "range": { "start": 9920000, "end": 19840000 }, "novelty": 0.28 }
+      ],
       "loudness": { "integrated_lufs": -17.6, "loudness_range_lu": 13.9, "true_peak_dbtp": 0.0 }
     },
     { "type": "acoustic",
@@ -218,8 +222,8 @@ A capability with no provider does **not** create a failed run: it appears in
 - `serde` defaults are used where a missing field has an unambiguous meaning;
   there are no silent reinterpretations.
 - `1.1.0` adds `artifacts[]`; `1.2.0` adds `text_overlay` segments and the
-  `text` track kind; `1.3.0` adds the `align` capability and `config.align_words`.
-  Every older document stays readable.
+  `text` track kind; `1.3.0` adds the `align` capability and `config.align_words`;
+  `1.4.0` adds `music.sections`. Every older document stays readable.
 
 ## Query commands
 

@@ -13,8 +13,8 @@ use clap::{Args, Subcommand};
 use serde::Serialize;
 use sonolytica_core::{
     AcousticSummary, AnalysisBlock, AnalysisConfig, Bpm, Capability, Chord, Document, KeyEstimate,
-    Loudness, MediaInfo, MediaTime, MusicSummary, RunRecord, RunStatus, Segment, SegmentKind,
-    SpeakerId, TimeRange, Warning, Word,
+    Loudness, MediaInfo, MediaTime, MusicSummary, RunRecord, RunStatus, Section, Segment,
+    SegmentKind, SpeakerId, TimeRange, Warning, Word,
 };
 
 /// Segment kinds a document can contain. Kept explicit so `--type` rejects a
@@ -878,6 +878,20 @@ fn print_music(summary: &MusicSummary) {
         summary.chords.len(),
         summary.beats.len()
     );
+    if summary.sections.is_empty() {
+        println!("sections  not estimated");
+    } else {
+        println!("sections  {}", summary.sections.len());
+        let changes: Vec<String> = summary
+            .sections
+            .iter()
+            .skip(1)
+            .map(|section| section.range.start.to_string())
+            .collect();
+        if !changes.is_empty() {
+            println!("changes   {}", changes.join(", "));
+        }
+    }
 }
 
 // ------------------------------------------------------------------ acoustic
@@ -1170,6 +1184,7 @@ struct MusicView<'a> {
     bpm: Option<&'a Bpm>,
     key: Option<&'a KeyEstimate>,
     chords: &'a [Chord],
+    sections: &'a [Section],
     loudness: Option<&'a Loudness>,
     beat_count: usize,
 }
@@ -1181,6 +1196,7 @@ impl<'a> MusicView<'a> {
             bpm: summary.bpm.as_ref(),
             key: summary.key.as_ref(),
             chords: &summary.chords,
+            sections: &summary.sections,
             loudness: summary.loudness.as_ref(),
             beat_count: summary.beats.len(),
         }
@@ -1192,6 +1208,7 @@ impl<'a> MusicView<'a> {
             bpm: None,
             key: None,
             chords: &[],
+            sections: &[],
             loudness: None,
             beat_count: 0,
         }

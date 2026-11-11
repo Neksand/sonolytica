@@ -222,6 +222,8 @@ model (`--model whisper-small`).
 - BPM and key are heuristic scores, not calibrated probabilities.
 - Chords are triads from a template, with no inversions or extensions.
 - `beats` are beat positions, not bars; do not infer time signatures.
+- `sections` are technical boundaries from chroma self-similarity: the material
+  repeats or changes here. They are not verse/chorus labels; never name them.
 - Notes and bass do not exist in this release. Say the document has no
   note-level data; when note transcription lands it will be part of `ultra`.
 

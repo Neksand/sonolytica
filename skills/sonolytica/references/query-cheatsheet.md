@@ -234,13 +234,16 @@ sonolytica query music "$DOC" --json
   "key": { "tonic": "f_sharp", "mode": "minor", "confidence": 0.12 },
   "chords": [ { "range": {"start":0,"end":2000000}, "root": "f_sharp",
                 "quality": "minor", "confidence": 0.71 } ],
+  "sections": [ { "range": {"start":0,"end":9920000}, "novelty": 0.30 } ],
   "loudness": { "integrated_lufs": -17.6, "loudness_range_lu": 13.9,
                 "true_peak_dbtp": -1.0 },
   "beat_count": 33 }
 ```
 
 `available: false` means the music stage did not run. `confidence` is a score,
-not a calibrated probability. Chords are triads only.
+not a calibrated probability. Chords are triads only. `sections` are technical
+boundaries from chroma self-similarity — the material changes here, nothing
+about verse/chorus.
 
 ## acoustic
 

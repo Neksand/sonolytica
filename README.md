@@ -26,7 +26,7 @@ This is the first development cycle. What is real today:
   versioning, with an invariant validator.
 - **DSP analysis, no models required**: STFT features, EBU R128 loudness, true
   peak, LRA, silence detection, onset/tempo/beat tracking, chroma, key and
-  triad chord estimation, plus loudness range.
+  triad chord estimation, chroma self-similarity sections, plus loudness range.
 - **Speech**: Silero VAD, Whisper (whisper.cpp) with word timestamps, forced
   word alignment (wav2vec2 CTC, English), local diarization (pyannote
   segmentation + WeSpeaker embeddings, clustered in Rust), speaker-attributed
@@ -47,7 +47,7 @@ This is the first development cycle. What is real today:
 
 Not implemented yet (roadmap): object and face detection, non-English
 alignment, MCP server, HTTP server, Python bridge, sound-event classification,
-music notes and sections.
+music notes and stems.
 
 No accuracy numbers are claimed in this repository. The eval harness exists so
 numbers can be produced honestly against licensed datasets. A measured snapshot

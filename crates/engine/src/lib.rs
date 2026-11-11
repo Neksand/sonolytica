@@ -1098,11 +1098,24 @@ fn map_music(features: &sonolytica_dsp::MusicFeatures) -> MusicSummary {
             })
     });
 
+    let sections = features
+        .sections
+        .iter()
+        .filter(|section| section.end_s > section.start_s)
+        .map(|section| sonolytica_core::Section {
+            range: TimeRange::new(
+                MediaTime::from_secs_f64(f64::from(section.start_s)),
+                MediaTime::from_secs_f64(f64::from(section.end_s)),
+            ),
+            novelty: section.novelty,
+        })
+        .collect();
     MusicSummary {
         bpm,
         beats,
         key,
         chords,
+        sections,
         loudness,
     }
 }

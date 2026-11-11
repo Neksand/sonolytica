@@ -24,8 +24,8 @@ pub use error::DspError;
 pub use frames::{Frame, FrameConfig, FrameStream, analyze_frames};
 pub use loudness::{LoudnessMeasurement, measure_loudness};
 pub use music::{
-    ChordEvent, KeyEstimate, MusicFeatures, TempoEstimate, analyze_music, estimate_chords,
-    estimate_key, estimate_tempo,
+    ChordEvent, KeyEstimate, MusicFeatures, Section, TempoEstimate, analyze_music, estimate_chords,
+    estimate_key, estimate_sections, estimate_tempo,
 };
 pub use silence::{AcousticFeatures, SilenceRegion, describe_acoustics, detect_silence};
 

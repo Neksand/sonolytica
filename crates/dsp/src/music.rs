@@ -38,6 +38,16 @@ pub enum ChordQuality {
     Minor,
 }
 
+/// A technical section boundary: a change in the repeating musical material.
+/// No semantic label ("verse", "chorus") is invented.
+#[derive(Debug, Clone, Copy)]
+pub struct Section {
+    pub start_s: f32,
+    pub end_s: f32,
+    /// Novelty at the boundary that starts this section; 0 for the first.
+    pub novelty: f32,
+}
+
 #[derive(Debug, Clone)]
 pub struct ChordEvent {
     pub start_s: f32,
@@ -53,6 +63,7 @@ pub struct MusicFeatures {
     pub tempo: Option<TempoEstimate>,
     pub key: Option<KeyEstimate>,
     pub chords: Vec<ChordEvent>,
+    pub sections: Vec<Section>,
     pub loudness: Option<LoudnessMeasurement>,
     pub mean_centroid_hz: Option<f32>,
     pub frames: usize,
@@ -376,6 +387,133 @@ fn median_filter(labels: &[i8], window: usize) -> Vec<i8> {
 }
 
 /// One pass over the audio: frames, tempo, key, chords and loudness.
+/// Segment a track into sections from chroma self-similarity.
+///
+/// Features are averaged into half-second vectors, compared with cosine
+/// similarity, and a checkerboard kernel produces a novelty curve; peaks at
+/// least four seconds apart and at least four seconds from the edges are
+/// boundaries. No model and no semantic labels: a section is "the material
+/// repeats/changes here", nothing more.
+pub fn estimate_sections(frames: &[Frame], frame_rate: f32) -> Vec<Section> {
+    let duration = if frame_rate > 0.0 {
+        frames.len() as f32 / frame_rate
+    } else {
+        0.0
+    };
+    if frames.len() < 8 || frame_rate <= 0.0 || duration < 4.0 {
+        return Vec::new();
+    }
+    let window = ((frame_rate * 0.5).round() as usize).max(1);
+    let mut features: Vec<[f32; 12]> = Vec::new();
+    for chunk in frames.chunks(window) {
+        let mut sum = [0.0_f32; 12];
+        for frame in chunk {
+            for (i, value) in frame.chroma.iter().enumerate() {
+                sum[i] += value;
+            }
+        }
+        let norm = sum.iter().map(|v| v * v).sum::<f32>().sqrt();
+        if norm > 1e-6 {
+            for value in &mut sum {
+                *value /= norm;
+            }
+        }
+        features.push(sum);
+    }
+    let n = features.len();
+    let step_s = window as f32 / frame_rate;
+    if n < 8 || step_s <= 0.0 {
+        return Vec::new();
+    }
+
+    let mut similarity = vec![vec![0.0_f32; n]; n];
+    for i in 0..n {
+        for j in 0..n {
+            similarity[i][j] = features[i]
+                .iter()
+                .zip(features[j].iter())
+                .map(|(left, right)| left * right)
+                .sum();
+        }
+    }
+
+    let half = 8.min(n / 4).max(2);
+    let mut novelty = vec![0.0_f32; n];
+    for i in half..n.saturating_sub(half) {
+        let mut sum = 0.0_f32;
+        let mut weight_sum = 0.0_f32;
+        for u in 0..2 * half {
+            for v in 0..2 * half {
+                let same_side = (u < half) == (v < half);
+                let sign = if same_side { 1.0 } else { -1.0 };
+                let du = u as f32 - half as f32;
+                let dv = v as f32 - half as f32;
+                let sigma = (half as f32) * 0.5;
+                let weight = (-(du * du + dv * dv) / (2.0 * sigma * sigma)).exp();
+                weight_sum += weight;
+                sum += sign * weight * similarity[i + u - half][i + v - half];
+            }
+        }
+        novelty[i] = if weight_sum > 0.0 {
+            (sum / weight_sum).max(0.0)
+        } else {
+            0.0
+        };
+    }
+
+    let peak = novelty.iter().copied().fold(0.0_f32, f32::max);
+    if peak <= 1e-6 {
+        return vec![Section {
+            start_s: 0.0,
+            end_s: duration,
+            novelty: 0.0,
+        }];
+    }
+    let mean = novelty.iter().sum::<f32>() / novelty.len() as f32;
+    let variance = novelty
+        .iter()
+        .map(|value| (value - mean) * (value - mean))
+        .sum::<f32>()
+        / novelty.len() as f32;
+    let threshold = (mean + 0.5 * variance.sqrt()).max(0.25 * peak);
+    let min_gap = (4.0 / step_s).ceil() as usize;
+
+    let mut boundaries: Vec<(usize, f32)> = Vec::new();
+    for i in half..n.saturating_sub(half) {
+        if novelty[i] < threshold || novelty[i] < novelty[i - 1] || novelty[i] < novelty[i + 1] {
+            continue;
+        }
+        if boundaries
+            .last()
+            .is_some_and(|(previous, _)| i - *previous < min_gap)
+        {
+            continue;
+        }
+        boundaries.push((i, novelty[i]));
+    }
+
+    let mut sections = Vec::with_capacity(boundaries.len() + 1);
+    let mut start = 0.0_f32;
+    for (index, score) in boundaries {
+        let time = index as f32 * step_s;
+        if time - start < 4.0 || duration - time < 4.0 {
+            continue;
+        }
+        sections.push(Section {
+            start_s: start,
+            end_s: time,
+            novelty: score,
+        });
+        start = time;
+    }
+    sections.push(Section {
+        start_s: start,
+        end_s: duration,
+        novelty: 0.0,
+    });
+    sections
+}
+
 pub fn analyze_music(
     samples: &[f32],
     sample_rate: u32,
@@ -406,6 +544,7 @@ pub fn analyze_music(
     let key = estimate_key(&chroma_sum);
     let chord_frames: Vec<&Frame> = frames.iter().collect();
     let chords = estimate_chords(&chord_frames, 0.3, -55.0);
+    let sections = estimate_sections(&frames, frame_rate);
     let loudness = measure_loudness(samples, sample_rate).ok();
     let mean_centroid_hz = if frames.is_empty() {
         None
@@ -417,6 +556,7 @@ pub fn analyze_music(
         tempo,
         key,
         chords,
+        sections,
         loudness,
         mean_centroid_hz,
         frames: frames.len(),
@@ -489,6 +629,38 @@ mod tests {
         let key = features.key.expect("a clear triad must yield a key");
         assert_eq!(key.tonic, 0, "C should be the tonic");
         assert!(key.major, "C major, not C minor");
+    }
+
+    #[test]
+    fn sections_follow_an_aba_structure() {
+        let rate = 32_000;
+        let mut samples = chord(261.63, 10.0, rate);
+        samples.extend(chord(392.0, 10.0, rate));
+        samples.extend(chord(261.63, 10.0, rate));
+        let features = analyze_music(&samples, rate, FrameConfig::default()).unwrap();
+        let starts: Vec<f32> = features.sections.iter().map(|s| s.start_s).collect();
+        assert!(
+            starts.iter().any(|start| (start - 10.0).abs() < 2.0),
+            "boundary near 10 s missing: {starts:?}"
+        );
+        assert!(
+            starts.iter().any(|start| (start - 20.0).abs() < 2.0),
+            "boundary near 20 s missing: {starts:?}"
+        );
+        let last = features.sections.last().unwrap();
+        assert!(
+            (last.end_s - 30.0).abs() < 0.5,
+            "last section must end at the media end"
+        );
+    }
+
+    #[test]
+    fn a_single_section_covers_the_track() {
+        let samples = chord(261.63, 10.0, 32_000);
+        let features = analyze_music(&samples, 32_000, FrameConfig::default()).unwrap();
+        assert_eq!(features.sections.len(), 1, "{:?}", features.sections);
+        assert_eq!(features.sections[0].start_s, 0.0);
+        assert!((features.sections[0].end_s - 10.0).abs() < 0.5);
     }
 
     #[test]

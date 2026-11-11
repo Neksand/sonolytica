@@ -24,6 +24,7 @@ ASR and still runs the music and acoustic stages.
 | `key.confidence` | profile margin | a low score means "ambiguous", say that |
 | `chords[]` | triad per range, template-based | no sevenths, no inversions, no bass |
 | `beats[]` | beat positions, µs | not bars, not downbeats |
+| `sections[]` | technical boundaries from chroma self-similarity | not verse/chorus labels |
 | `loudness.integrated_lufs` | EBU R128 integrated | not loudness of a section |
 | `loudness.loudness_range_lu` | LRA | needs enough programme material |
 | `silence[]` | measured digital silence | not "no music" |
@@ -35,7 +36,8 @@ ASR and still runs the music and acoustic stages.
 Тональность: F# minor (score 0.12 — низкая уверенность)
 Громкость: −17.6 LUFS integrated, LRA 14.1 LU, true peak −1.0 dBTP
 Аккорды (трезвучия): 1 фрагмент; бит: 33 позиции
-Что не измерялось: ноты, бас, инструменты, секции
+Секции: 2 смены (00:00:09.920, 00:00:19.840) — технические границы, не «припев»
+Что не измерялось: ноты, бас, инструменты
 ```
 
 ## Rules

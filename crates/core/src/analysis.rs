@@ -108,6 +108,15 @@ pub struct Loudness {
     pub true_peak_dbtp: Option<f32>,
 }
 
+/// A technical section boundary from chroma self-similarity. No semantic label
+/// ("verse", "chorus") is invented.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Section {
+    pub range: TimeRange,
+    /// Novelty at the boundary that starts this section; 0 for the first.
+    pub novelty: f32,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MusicSummary {
     pub bpm: Option<Bpm>,
@@ -115,6 +124,9 @@ pub struct MusicSummary {
     pub beats: Vec<MediaTime>,
     pub key: Option<KeyEstimate>,
     pub chords: Vec<Chord>,
+    /// Repeating-material sections, technical (not verse/chorus).
+    #[serde(default)]
+    pub sections: Vec<Section>,
     pub loudness: Option<Loudness>,
 }
 

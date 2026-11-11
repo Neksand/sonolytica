@@ -192,10 +192,14 @@ Synthetic signals with a known answer, 10 s each, `--modules music,acoustic`:
 | clicks every 0.5 s | 120 BPM | **120.3 BPM** (0.25 % error), score 0.001 |
 | C4+E4+G4 sines | C major triad | key **C major** (score 0.317), chord **C major** (0.999) |
 | same sustained chord | tempo is undefined | 250 BPM with score **0.0** |
+| C–G–C, 10 s each | boundaries at 10 and 20 s | **9.92 s and 19.84 s** (80/160 ms early) |
 
 Reading it: tempo is useful when there are onsets and meaningless on a sustained
 chord — which is exactly why confidence is reported. Key and triads are
-template-based and correct on a clean triad; real mixes are harder.
+template-based and correct on a clean triad; real mixes are harder. Sections
+come from chroma self-similarity with a checkerboard novelty curve; on a clean
+A–B–A they land within 160 ms, but a through-composed piece has no sections and
+the novelty is not a semantic label.
 
 ## Throughput
 

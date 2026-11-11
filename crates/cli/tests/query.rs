@@ -176,6 +176,16 @@ fn fixture() -> Document {
             quality: ChordQuality::Minor,
             confidence: Confidence::new(0.7).unwrap(),
         }],
+        sections: vec![
+            sonolytica_core::Section {
+                range: TimeRange::from_secs(0.0, 6.0),
+                novelty: 0.0,
+            },
+            sonolytica_core::Section {
+                range: TimeRange::from_secs(6.0, 15.0),
+                novelty: 0.42,
+            },
+        ],
         loudness: Some(Loudness {
             integrated_lufs: -17.6,
             loudness_range_lu: Some(13.9),
@@ -330,6 +340,8 @@ fn music_reports_measured_values() {
     assert_eq!(json["key"]["tonic"], "f_sharp");
     assert_eq!(json["key"]["mode"], "minor");
     assert_eq!(json["chords"].as_array().unwrap().len(), 1);
+    assert_eq!(json["sections"].as_array().unwrap().len(), 2);
+    assert_eq!(json["sections"][1]["novelty"], 0.42);
     assert_eq!(json["beat_count"], 2);
     assert_eq!(json["loudness"]["integrated_lufs"], -17.6);
 }
