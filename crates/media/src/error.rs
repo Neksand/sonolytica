@@ -20,6 +20,8 @@ pub enum MediaError {
     Timeout(std::time::Duration),
     #[error("no audio stream in input")]
     NoAudioStream,
+    #[error("no video stream in input")]
+    NoVideoStream,
     #[error("decoded audio is empty or non-finite")]
     BadAudio,
     #[error("i/o error: {0}")]

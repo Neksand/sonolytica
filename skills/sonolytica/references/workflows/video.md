@@ -1,60 +1,50 @@
 # Workflow: video
 
-Video has two layers: the audio pipeline (already works) and the visual layer
-(scenes, keyframes, on-screen text). Until the visual layer ships, the document
-describes sound only — say that plainly.
+A video document has two layers on one timeline: audio (speech, speakers,
+music) and **shots** (technical cuts). There is no visual understanding in this
+release: no objects, no faces, no keyframes, no on-screen text.
 
-## Check what exists
+## What the document tells you
 
 ```bash
-sonolytica inspect video.mp4 --json
+sonolytica inspect video.mp4 --json                    # streams, resolution, fps
 sonolytica analyze video.mp4 --out video.json --profile standard --summary
-sonolytica query summary video.json --json
+sonolytica query runs video.json                       # is there a `scene` run?
+sonolytica query timeline video.json --type scene      # shots
 ```
 
-Look for `counts` and for `scene` segments:
+Each scene segment carries:
 
-```bash
-sonolytica query timeline video.json --type scene
-```
+- `range` — the shot on the media timeline;
+- `index` — shot number from 0;
+- `cut: true` — the scene starts at a detected cut (`false` for the first).
 
-Empty result → no visual analysis. Then:
+Cuts come from 2 fps grayscale frame signatures: a spike in perceptual hash and
+histogram distance above an adaptive threshold. Precision is one sample,
+±0.5 s. They are **edits**, not topics and not chapters.
 
-> «Видео не анализировалось: в документе нет сцен и кадров. Доступен только
-> аудиоряд — что говорят, кто и когда.»
+## Answer shape
 
-## When scenes and keyframes exist
+- "Сколько склеек?" → count scenes with `cut: true`.
+- "Где меняется кадр?" → the `start_display` of each such scene.
+- "Что на экране / какие слайды / что написано?" → **not analysed**. Say so and
+  offer the audio answer if the question also has a speech part.
+- "Что говорят в третьей сцене?" → intersect the scene range with
+  `query transcript DOC --from ... --to ...`; quote with the speech ranges, not
+  the scene range.
 
-The visual layer is not in this release: no document contains scenes or frames
-yet, and `query scenes`/`query frames` do not exist yet. When it ships, the
-commands will be:
+## Rules
 
-```bash
-sonolytica query scenes video.json
-sonolytica query frames video.json --from 00:12:00 --to 00:13:00 --max 8
-```
-
-Today the correct answer to any visual question is: «видео не анализировалось».
-
-Open the returned image paths yourself, then answer. Rules:
-
-- Every visual statement is an **observation**, never a document fact.
-- Cite the frame's `start_display` as the moment, and say it is a frame time.
-- Do not describe motion from a still frame; do not claim what is off-screen.
-- If two keyframes look identical, the document already deduplicated them;
-  do not re-describe the same frame twice.
-- OCR text (`text_overlay` segments) is exact and may be cited as a document
-  fact, with its range and bbox.
-
-## Budget
-
-Ask for the window you need (`--from/--to`) and a small `--max`. Never request
-all frames of a long video: you pay context for every image and most of them
-repeat.
+- Never describe pixels, objects, actions or people. The document has none.
+- A scene index is not a chapter number. Do not map it to a topic.
+- Do not claim the video is silent or has no picture from the audio pipeline
+  alone; `inspect` answers that.
+- If `query runs` has no `scene` run for a file with a video stream, the stage
+  did not run (the profile did not include it, or it failed — check warnings).
 
 ## Audio + video together
 
-The unique value is the alignment: a scene change inside a sentence, a slide
-shown while someone says the number. Answer "что было на экране, когда он
-сказал X" only when both a frame and the quote exist; otherwise say which half
-you are missing.
+The unique value is alignment: a cut inside a sentence, a shot change while
+someone says a number. You may state both facts with their own ranges — the cut
+from the scene segment, the words from the speech segment — and must not imply
+the cut caused the words.

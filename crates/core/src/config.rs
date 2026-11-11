@@ -213,6 +213,7 @@ impl AnalysisConfig {
                     | Capability::Diarize
                     | Capability::Music
                     | Capability::Acoustic
+                    | Capability::Scene
             )
         });
     }

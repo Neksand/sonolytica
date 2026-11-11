@@ -63,7 +63,7 @@ percentage certainty about the real world.
 | the word exists but looks like an ASR miss | name the actual token and mark the hypothesis |
 | a capability is missing | «диаризация не выполнялась: модель не установлена» |
 | the stage ran but found nothing | «речь не распознана» (`partial`) |
-| video has no scenes | «видео не анализировалось» |
+| video has no scene segments | «видео не анализировалось»: визуальный слой не запускался |
 | `acoustic.silence` is empty in a gap | the gap is not measured silence; do not call it silence |
 
 Bad answers: «не говорили» (the transcript is not the world), «вероятно, он

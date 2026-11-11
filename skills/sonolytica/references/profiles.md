@@ -8,6 +8,7 @@ capabilities and, for `ultra`, an exit-code contract.
 | VAD (speech regions) | yes | yes | yes |
 | Speaker diarization | yes | yes | yes |
 | Music / acoustic aggregates | yes | yes | yes |
+| Shot boundaries (video) | yes | yes | yes |
 | Speech recognition (words) | **no** | yes | yes |
 | Forced alignment (word-precise) | – | – | later |
 | Music notes / bass | – | – | later |

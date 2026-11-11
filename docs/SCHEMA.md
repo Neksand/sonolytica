@@ -150,6 +150,11 @@ validator enforces this (`segment_bounds`, `word_bounds`).
 | `scene` | `index`, `cut` |
 | `object` | `class`, `bbox?` |
 
+`scene` segments come from shot detection (2 fps frame signatures, adaptive
+threshold); `cut: true` marks a detected edit, the first scene has `cut: false`.
+They are technical boundaries, not topics. Object, face and on-screen-text
+analysis is not implemented yet.
+
 `speaker` labels are stable within a document, not across recordings. There is
 no claim that `S1` in two files is the same person.
 

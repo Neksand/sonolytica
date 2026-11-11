@@ -15,8 +15,9 @@ Ordered next, each gated on a measured number:
    recorded in `docs/EVAL.md` with dataset, model, parameters and date.
 2. **Speech quality** — forced alignment (wav2vec2 CTC), VAD-boundary word loss,
    overlap-aware diarization.
-3. **Video** — frame sampler, shot boundaries, keyframe deduplication,
-   `artifacts`, `query scenes/frames`, OCR.
+3. **Video** — shot boundaries ✅ (2 fps signatures, adaptive cut threshold,
+   `scene` segments). Next: keyframe deduplication and `artifacts`, then OCR,
+   then object/face models.
 4. **Music depth** — section segmentation, note transcription, stems/bass.
 5. **MCP** — only for a shell-less client.
 
@@ -71,12 +72,16 @@ Next:
 **Gate for each:** a licensed evaluation set, a documented metric, and a
 reported number with conditions — or no claim at all.
 
-## Phase 4 — Video
+## Phase 4 — Video (partially ✅)
 
-- Frame sampler over the existing FFmpeg pipe (`rawvideo`, scaled).
-- Shot-boundary detection (HSV histogram distance + adaptive threshold) with
-  synthetic and real fixtures.
-- Scene segments on the same timeline; scene↔speech↔acoustic alignment edges.
+Done: frame sampler over the existing FFmpeg pipe (64×36 gray at 2 fps),
+shot-boundary detection (perceptual hash + luma histogram, adaptive threshold),
+scene segments on the same timeline, video-only input.
+
+Next:
+- Scene↔speech alignment edges; keyframe selection and deduplication, with
+  `artifacts` referenced from the document.
+- OCR for on-screen text.
 - Optional vision provider (ONNX embedding/classifier) behind a feature.
 - Speaker-to-face association only when diarization and face embeddings agree;
   otherwise report "unresolved", never a guess.

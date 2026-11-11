@@ -18,11 +18,11 @@ sonolytica query timeline lecture.json --from 00:18:00 --to 00:22:00
 sonolytica query search lecture.json "gradient descent"
 ```
 
-For video lectures, on-screen text and frames exist only after the video
-milestone; until then say so:
+For video lectures, shot boundaries exist (technical cuts); on-screen text,
+slides and frames do not:
 
 ```bash
-sonolytica query summary lecture.json     # no scenes → no visual data
+sonolytica query timeline lecture.json --type scene    # cuts only
 ```
 
 ## Answer shape

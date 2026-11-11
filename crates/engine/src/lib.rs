@@ -22,12 +22,13 @@ use std::time::Instant;
 use sonolytica_core::{
     AcousticSummary, AnalysisBlock, AnalysisConfig, Audio, Bpm, Capability, Chord, ChordQuality,
     Confidence, Document, DocumentBuilder, KeyEstimate, Loudness, MediaTime, Mode, ModelRef,
-    MusicSummary, PitchClass, RunRecord, RunStatus, SpeakerId, SpeechSummary, TimeRange, TrackKind,
-    VadConfig, Warning, now_unix_ms,
+    MusicSummary, PitchClass, RunRecord, RunStatus, SegmentKind, SpeakerId, SpeechSummary,
+    TimeRange, TrackKind, VadConfig, Warning, now_unix_ms,
 };
 use sonolytica_dsp::FrameConfig;
 use sonolytica_media::{
-    DecodeOptions, MediaTools, decode_mono, probe, sha256_file, validate_input,
+    DecodeOptions, FrameOptions, MediaTools, decode_mono, detect_shots, probe, sample_video,
+    sha256_file, validate_input,
 };
 use sonolytica_providers::{
     AsrConfig, AsrSegment, DiarTurn, DiarizationOutput, ModelStore, ProviderError, Registry,
@@ -88,7 +89,7 @@ impl Engine {
             .modules
             .iter()
             .copied()
-            .filter(|c| matches!(c, Capability::Scene | Capability::Vision))
+            .filter(|c| matches!(c, Capability::Vision))
             .collect();
         config.normalize();
 
@@ -110,7 +111,8 @@ impl Engine {
             .modules
             .iter()
             .all(|c| matches!(c, Capability::Inspect));
-        if !media.has_audio() && !inspection_only {
+        let video_analysis = config.wants(Capability::Scene) && media.has_video();
+        if !media.has_audio() && !inspection_only && !video_analysis {
             return Err(EngineError::NoAudio);
         }
 
@@ -144,6 +146,109 @@ impl Engine {
                         .join("; "),
                 )
             });
+        }
+
+        // --- scenes ---------------------------------------------------------
+        // Video needs no model: FFmpeg decodes a small grayscale grid, and a
+        // spike in the frame signature is a cut. This runs before audio so a
+        // video-only file can still produce a document.
+        if config.wants(Capability::Scene) && builder.document().media.has_video() {
+            let options = FrameOptions {
+                max_duration_secs: config.limits.max_duration_secs,
+                timeout_secs: config.limits.timeout_secs,
+                ..FrameOptions::default()
+            };
+            let started = (now_unix_ms(), Instant::now());
+            match sample_video(&self.tools, &input.path, &options).await {
+                Ok(frames) if !frames.is_empty() => {
+                    let shots = detect_shots(&frames);
+                    let run = builder.add_run(run_record(
+                        Capability::Scene,
+                        "sonolytica-media",
+                        None,
+                        "cpu",
+                        &config,
+                        started,
+                        RunStatus::Complete,
+                    ));
+                    let track = builder.add_track(TrackKind::Scene, "shots", run);
+                    let end = builder
+                        .document()
+                        .media
+                        .duration
+                        .or_else(|| {
+                            frames.last().map(|frame| {
+                                MediaTime::from_secs_f64(
+                                    f64::from(frame.time_s) + f64::from(1.0 / options.fps),
+                                )
+                            })
+                        })
+                        .unwrap_or(MediaTime::ZERO);
+
+                    let mut boundaries = vec![MediaTime::ZERO];
+                    for shot in &shots {
+                        let instant = MediaTime::from_secs_f64(f64::from(shot.start_s));
+                        let instant = instant.min(end);
+                        if instant > MediaTime::ZERO && instant < end {
+                            boundaries.push(instant);
+                        }
+                    }
+                    boundaries.dedup();
+                    for (index, start) in boundaries.iter().enumerate() {
+                        let next = boundaries.get(index + 1).copied().unwrap_or(end);
+                        if next <= *start {
+                            continue;
+                        }
+                        builder.add_segment(
+                            track,
+                            TimeRange::new(*start, next),
+                            SegmentKind::Scene {
+                                index: u32::try_from(index).unwrap_or(u32::MAX),
+                                cut: *start > MediaTime::ZERO,
+                            },
+                            None,
+                            run,
+                        );
+                    }
+                }
+                Ok(_) => {
+                    let run = builder.add_run(run_record(
+                        Capability::Scene,
+                        "sonolytica-media",
+                        None,
+                        "cpu",
+                        &config,
+                        started,
+                        RunStatus::Failed {
+                            reason: "the video stream produced no decodable frames".into(),
+                        },
+                    ));
+                    builder.warn(
+                        Warning::new(
+                            "scene_failed",
+                            "scene detection decoded no frames from the video stream",
+                        )
+                        .with_run(run),
+                    );
+                }
+                Err(error) => {
+                    let run = builder.add_run(run_record(
+                        Capability::Scene,
+                        "sonolytica-media",
+                        None,
+                        "cpu",
+                        &config,
+                        started,
+                        RunStatus::Failed {
+                            reason: error.to_string(),
+                        },
+                    ));
+                    builder.warn(
+                        Warning::new("scene_failed", format!("scene detection failed: {error}"))
+                            .with_run(run),
+                    );
+                }
+            }
         }
 
         let needs_speech = config.wants(Capability::Vad)

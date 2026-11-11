@@ -30,9 +30,12 @@ query COMMAND →  the answer to one question, as a table or typed JSON
 
 | Profile | Runs | Use when |
 |---|---|---|
-| `structure` | VAD, diarization, music/acoustic aggregates | "what is this, who talks, how is it structured", long recordings, first pass |
+| `structure` | VAD, diarization, music/acoustic aggregates, shot boundaries | "what is this, who talks, how is it structured", long recordings, first pass |
 | `standard` | + speech recognition | any question about content, quotes, search |
 | `ultra` | standard, plus exit 2 if any requested capability failed or never ran | automation that must not silently degrade |
+
+`scene` is a no-op on audio-only files and is excluded from the `ultra`
+degradation check there.
 
 `ultra` does **not** add detail in this release: forced alignment, notes/bass,
 OCR and keyframes are separate milestones. Do not promise the user "more
@@ -202,11 +205,18 @@ model (`--model whisper-small`).
 
 - `sonolytica inspect FILE` gives container and stream metadata only. It is a
   top-level command, not a `query` subcommand.
-- If the document has no scene segments, video content was not analysed: say so
-  and do not describe what is in the picture. A file with only an audio stream
-  has no picture at all.
-- Scenes, keyframes and OCR are not in this release. When they land they will
-  arrive as `query scenes` / `query frames` / `query ocr`; this file will say so.
+- The standard profile runs **shot detection** when the file has a video stream.
+  `query timeline DOC --type scene` returns scene segments: `index` is the shot
+  number, `cut` is true when the scene starts at a detected cut, and the range
+  is the shot on the media timeline.
+- A scene is a technical cut from 2 fps frame signatures. It is **not** a topic,
+  a chapter, or a description of what is in the frame. Never turn a scene index
+  into content ("scene 3 shows the product").
+- If there are no scene segments, the visual layer did not run (audio-only file,
+  or the stage was not requested). Say so; do not describe the picture.
+- Objects, faces, keyframes and on-screen text are **not** analysed in this
+  release. Do not claim them; a question about what is visible is answered with
+  "видео не анализировалось" plus the available metadata.
 
 ## 13. Failures and gaps
 
@@ -216,7 +226,7 @@ model (`--model whisper-small`).
 | run `partial` | what is missing, from `reason` | re-run with the model installed |
 | empty transcript | whether silence was measured | check `acoustic.silence`, then VAD/model |
 | `doctor` says ffmpeg missing | nothing can be analysed | install FFmpeg |
-| video "not analysed" | the document has no visual data | `--profile ultra` once video lands |
+| video has no scene segments | the visual layer did not run | check `query runs` for a `scene` run; the file may have no video stream |
 
 Troubleshooting detail: `references/troubleshooting.md`.
 

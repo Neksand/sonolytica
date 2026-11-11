@@ -65,7 +65,9 @@ measurements, not an error. For "who spoke most" use `query speakers`.
 
 ## Video
 
-- `query timeline --type scene` empty → the visual layer did not run.
+- `query timeline --type scene` empty → either the file has no video stream or
+  the scene stage did not run. Check `query runs` for a `scene` run and
+  `inspect --json` for a video stream.
 - `inspect --json` is the only source of resolution/frame-rate facts until
   scenes exist.
 - Never describe frames you were not given; never claim "видео без звука" from

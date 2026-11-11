@@ -203,5 +203,7 @@ milliseconds and the realtime factor for a given machine.
 - Speech emotion, intent, topic segmentation and summarisation are not
   implemented. They are listed in the roadmap as analysis blocks, not added as
   empty fields.
-- Video analysis is not implemented in this cycle. The schema already has
-  scene/object segments and the timeline is modality-agnostic.
+- Video analysis: shot boundaries are detected without a model (2 fps gray
+  signatures, adaptive cut threshold) and emitted as `scene` segments. Objects,
+  faces, keyframes and OCR are not implemented; the schema already reserves
+  `object`/`face` kinds for them.

@@ -66,7 +66,8 @@ struct InspectArgs {
 struct AnalyzeArgs {
     /// Input media file
     file: PathBuf,
-    /// Preset: structure (no transcript), standard, ultra (all + no silent degradation)
+    /// Preset: structure (no transcript), standard, ultra (all + no silent degradation).
+    /// Default: standard.
     #[arg(long, value_enum, conflicts_with = "modules")]
     profile: Option<Profile>,
     /// Write the document here instead of stdout ("-" means stdout)
@@ -114,11 +115,23 @@ impl Profile {
                 Capability::Diarize,
                 Capability::Music,
                 Capability::Acoustic,
+                Capability::Scene,
             ],
-            Self::Standard | Self::Ultra => &Capability::AUDIO,
+            Self::Standard | Self::Ultra => &STANDARD_MODULES,
         }
     }
 }
+
+/// Everything the local pipeline can do on a media file. `Scene` is a no-op on
+/// audio-only input: the stage checks for a video stream and produces nothing.
+const STANDARD_MODULES: [Capability; 6] = [
+    Capability::Vad,
+    Capability::Transcribe,
+    Capability::Diarize,
+    Capability::Music,
+    Capability::Acoustic,
+    Capability::Scene,
+];
 
 #[derive(Debug, Subcommand)]
 enum ModelsCommand {
@@ -330,7 +343,8 @@ fn build_config(args: &AnalyzeArgs) -> Result<AnalysisConfig> {
             parsed.push(capability);
         }
         config.modules = parsed;
-    } else if let Some(profile) = args.profile {
+    } else {
+        let profile = args.profile.unwrap_or(Profile::Standard);
         config.modules = profile.modules().to_vec();
     }
     config.normalize();
@@ -340,14 +354,19 @@ fn build_config(args: &AnalyzeArgs) -> Result<AnalysisConfig> {
 /// True when the document is weaker than what was asked for: a stage failed, or
 /// a requested capability produced no run at all (a missing model is a warning,
 /// so `is_complete()` alone would call that a success).
+///
+/// Capabilities that cannot apply to this media are not degradations: `scene`
+/// on an audio file is expected to produce nothing.
 fn is_degraded(document: &Document, config: &AnalysisConfig) -> bool {
     if !document.is_complete() {
         return true;
     }
+    let has_video = document.media.has_video();
     config
         .modules
         .iter()
         .filter(|capability| **capability != Capability::Inspect)
+        .filter(|capability| **capability != Capability::Scene || has_video)
         .any(|capability| {
             !document
                 .runs
@@ -530,7 +549,21 @@ mod tests {
                 .modules()
                 .contains(&Capability::Transcribe)
         );
+        assert!(
+            Profile::Standard.modules().contains(&Capability::Scene),
+            "video scenes are part of the standard preset"
+        );
         assert!(Profile::Ultra.modules().contains(&Capability::Transcribe));
+    }
+
+    #[test]
+    fn scene_on_an_audio_only_file_is_not_a_degradation() {
+        let document = Document::new(MediaInfo::default(), AnalysisConfig::default());
+        let requested = AnalysisConfig {
+            modules: vec![Capability::Scene],
+            ..AnalysisConfig::default()
+        };
+        assert!(!is_degraded(&document, &requested));
     }
 
     #[test]

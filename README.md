@@ -33,12 +33,16 @@ This is the first development cycle. What is real today:
 - **Failure isolation**: a missing model produces a warning and a `Partial`
   document, never a fabricated result.
 - **CLI** with `inspect`, `analyze`, `query`, `models`, `doctor`, `schema`.
-  `query` answers timeline, search, speaker, music, acoustic and run-status
-  questions without `jq`.
+  `query` answers timeline, search, speaker, music, acoustic, scene and
+  run-status questions without `jq`.
+- **Video shots, no model**: FFmpeg samples 2 fps grayscale signatures, an
+  adaptive hash/histogram spike marks a cut, and `scene` segments land on the
+  same timeline as speech.
 - **Evaluation harness**: WER/CER, diarization error rate, per-run timings.
 
-Not implemented yet (roadmap): video scene/vision analysis, MCP server, HTTP
-server, Python bridge, forced alignment, sound-event classification.
+Not implemented yet (roadmap): video vision (objects, faces, keyframes, OCR),
+MCP server, HTTP server, Python bridge, forced alignment, sound-event
+classification.
 
 No accuracy numbers are claimed in this repository. The eval harness exists so
 numbers can be produced honestly against licensed datasets.
@@ -83,6 +87,7 @@ sonolytica query timeline interview.json --from 00:00:10 --to 00:00:20
 sonolytica query transcript interview.json        # full text, untruncated
 sonolytica query search interview.json pricing
 sonolytica query speakers interview.json
+sonolytica query timeline interview.json --type scene   # video shots, if any
 sonolytica query runs interview.json          # which stages failed, and why
 ```
 
@@ -96,7 +101,7 @@ no language model, no invented titles.
 
 | Profile | What runs | Use when |
 |---|---|---|
-| `structure` | VAD, diarization, music/acoustic — no transcript | orientation, first pass, music-only |
+| `structure` | VAD, diarization, music/acoustic, shot boundaries — no transcript | orientation, first pass, music-only |
 | `standard` | everything, with a transcript | default; any content question |
 | `ultra` | standard + exit 2 if a requested capability failed or never ran | automation that must not silently degrade |
 
