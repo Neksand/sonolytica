@@ -7,7 +7,7 @@ those is not a measurement.
 
 Machine: Apple M5 Pro, 24 GB, macOS 26.6.2, FFmpeg 9.0.2, Rust 1.99.0.
 Binary: `target/debug/sonolytica`, built with `--features full-metal`.
-Run date: 2026-11-11.
+Run date: 2026-11-11; VAD-gate and JER sections added 2026-11-12.
 
 These are **baselines**, not claims of state-of-the-art performance. They exist
 so that every later change can be judged by a delta instead of an opinion.

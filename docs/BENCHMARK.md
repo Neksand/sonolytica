@@ -1,6 +1,7 @@
 # Benchmark: does the skill make an agent better at media?
 
-Date: 2026-11-11. Three fixtures (a 14 s clip, Russian speech, a 4 min meeting),
+Date: 2026-11-11; the `query brief` section was added 2026-11-12. Three
+fixtures (a 14 s clip, Russian speech, a 4 min meeting),
 18 tasks, eleven scored sessions across three models, and two contaminated
 attempts that are recorded as failures rather than hidden.
 

@@ -1,12 +1,14 @@
-# Handoff — SONOLYTICA after the media/agent cycle
+# Handoff — SONOLYTICA after the diarization/agent cycle
 
-Last updated: 2026-11-11. Branch `main`, working tree clean, **no remote
-configured** (the user pushes).
+Last updated: 2026-11-12. Branch `main`, base commit `1960e26` plus this
+handoff commit, working tree clean, **no remote configured** (the user pushes).
 
 Read this first, then `docs/STATUS.md` (numbers), `docs/EVAL.md` (methods),
-`docs/BENCHMARK.md` (agent tests), `docs/OCR.md` (OCR), `docs/SCHEMA.md`
-(schema 1.4.0). The forward plan lives outside the repo at
-`/Users/neksand/.opencode/plan/sonolytica-next-cycle-2026-11-11.md`.
+`docs/BENCHMARK.md` (agent tests), `docs/MODELS.md` (cap/gate notes),
+`docs/OCR.md` (OCR), `docs/SCHEMA.md` (schema 1.4.0). The forward plan lives
+outside the repo at
+`/Users/neksand/.opencode/plan/sonolytica-skill-cost-2026-11-12.md` — the goal
+is a skill that is **cheaper and better at the same time**.
 
 ---
 
@@ -89,6 +91,11 @@ previous skill. Details and caveats: BENCHMARK.
 - Diarization runs a **dedicated VAD gate pass at threshold 0.70**; the
   configured 0.45 pass belongs to ASR and must not be tightened to gate. A gate
   failure warns `diarization_vad_gate_unavailable` and leaves turns ungated.
+- Sortformer files longer than 10 minutes carry `diarization_speaker_cap`; an
+  agent must say "at least N" there, never an exact count.
+- Skill cost/quality baseline: hard **16/16 / 22 410 fresh / 15 commands**,
+  easy **8/8 / 9 521 fresh / 9 commands**. Re-run the paired benchmark before
+  claiming an improvement; do not preload reference files.
 - `ort` pinned `=2.0.0-rc.15`; one environment per process; **shared session
   builder uses `AutoDevicePolicy::PreferCPU`** (CoreML silently mis-executes
   dynamic-shape graphs: PP-OCRv5 detection collapsed, recognition blank; VAD
@@ -134,6 +141,14 @@ previous skill. Details and caveats: BENCHMARK.
   tolerance) while the text stays complete. A word outside the range is still
   in `query words` and in the dialogue; only the turn's time is clamped. This
   clamping is what turns the VAD gate's trims into measured DER.
+- **`query brief` is a map, not evidence**: 1.7–3.1 KB, up to 5 chapters and 8
+  speakers with true totals. Exact quotes and ranges come from `search`,
+  `words` or `transcript`. Do not grow it with prose; grow it with small
+  machine-readable facts (scene cuts, capped OCR lines) only if a benchmark
+  shows fewer commands and no score loss.
+- **Reference preloading is the main fixed skill cost**: reading the cheatsheet
+  and two workflows cost 4 588 fresh tokens and bought nothing. The skill says
+  read `SKILL.md` once, open one reference only when needed.
 - **Keyframes**: one per scene by default; OCR runs on those keyframes and adds
   `text_overlay` with a **point range** (the frame instant, not the shot).
   Artifacts use paths relative to the document; `query frames` resolves them.
@@ -160,9 +175,11 @@ sortformer-4spk-v2.onnx, wespeaker CAM++, pp_ocrv5_det/rec.onnx. `models list`
 shows status.
 
 Fixtures under `/private/tmp` (not committed; regenerate):
-`sono-eval` (LibriSpeech, VoxConverse parquet), `bench-hard` (meeting.mp4 +
-ref.json + artifacts), `sono-bench` (14 s video), `sono-query-e2e`,
-`sono-stats` (abc/aba wavs). They survive a session clear but not a reboot.
+`sono-eval` (LibriSpeech, VoxConverse parquet + `der-test2-*`, `der-test3-*`
+workdirs and JSON scores), `bench-hard` (meeting.mp4 + ref.json + artifacts),
+`sono-bench` (14 s video), `sono-query-e2e`, `sono-stats` (abc/aba wavs).
+Benchmark scratch dirs: `bench-brief`, `bench-easy`; baseline binary:
+`sonolytica-baseline`. They survive a session clear but not a reboot.
 
 ## 6. How to verify and reproduce
 
@@ -171,28 +188,47 @@ cd /Users/neksand/orca/projects/SONOLYTICA
 git status                       # must be clean
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace           # 121, no models
-cargo test --workspace --all-features   # 136
+cargo test --workspace           # 136, no models
+cargo test --workspace --all-features   # 151
 
 # real models (macOS fixtures, ~10 s)
 SONOLYTICA_E2E=1 cargo test -p sonolytica-engine --features "full,metal" --test e2e_speech
 SONOLYTICA_E2E=1 cargo test -p sonolytica-engine --features "full,metal" --test e2e_alignment
 
 # evals (datasets downloaded by hand, see scripts/eval/README.md)
-python3 scripts/eval/wer_librispeech.py --root /tmp/sono-eval/LibriSpeech/test-clean --count 100
-python3 scripts/eval/der_voxconverse.py --parquet /tmp/sono-eval/voxconverse/dev-00000-of-00005.parquet --count 5
-
-# diarization on the fresh shard used by the Sortformer report
-curl -L -o /tmp/sono-eval/voxconverse-test2.parquet \
-  https://huggingface.co/datasets/diarizers-community/voxconverse/resolve/main/data/test-00002-of-00011.parquet
+python3 scripts/eval/wer_librispeech.py \
+  --root /private/tmp/sono-eval/librispeech/LibriSpeech/test-clean --count 100
 python3 scripts/eval/der_voxconverse.py \
-  --parquet /tmp/sono-eval/voxconverse-test2.parquet \
+  --parquet /private/tmp/sono-eval/voxconverse/dev-00000-of-00005.parquet --count 5
+
+# fresh diarization shards already downloaded on this machine
+python3 scripts/eval/der_voxconverse.py \
+  --parquet /private/tmp/sono-eval/voxconverse-test2.parquet \
   --count 0 --min-speakers 2 --max-speakers 4 \
-  --workdir /tmp/sono-eval/der-test2 --json-out /tmp/sono-eval/der-test2.json
+  --workdir /private/tmp/sono-eval/der-test2-final \
+  --json-out /private/tmp/sono-eval/der-test2-final.json
+python3 scripts/eval/der_voxconverse.py \
+  --parquet /private/tmp/sono-eval/voxconverse-test3.parquet \
+  --count 0 --min-speakers 2 --max-speakers 4 \
+  --workdir /private/tmp/sono-eval/der-test3-env \
+  --json-out /private/tmp/sono-eval/der-test3-env.json
+
+# query brief smoke: expect 1.7-3.1 KB, key sections present
+cargo build -p sonolytica-cli --features full-metal
+./target/debug/sonolytica query brief /private/tmp/bench-hard/meeting-gate2.json --json | wc -c
+
+# JER is printed by the eval binary; the script aggregates weighted/unweighted
+./target/debug/sonolytica-eval der --rttm REF.rttm --document DOC.json --file-id NAME
 
 # hard benchmark fixture
-python3 scripts/bench/make_meeting_fixture.py --out /tmp/bench-hard
+python3 scripts/bench/make_meeting_fixture.py --out /private/tmp/bench-hard
 ```
+
+Agent benchmark protocol (see the plan for the next cycle): make a clean
+directory with only the media, a copy of `skills/sonolytica/` and the full-metal
+binary. Forbid `whisper`, `tesseract`, `ffmpeg`, Python and the repository.
+Ask the questions in Russian, require ranges, start with `query brief`. Record
+the model, date, score, every command and fresh tokens from `session_v2`.
 
 Note: `cargo test` compiles the bin **without** features and can overwrite
 `target/debug/sonolytica`. Rebuild with `--features full-metal` before using
@@ -204,6 +240,29 @@ Token accounting: OpenCode stores per-session totals in
 `cost`). "Fresh" = input + output.
 
 ## 7. Known gaps and next steps (priority)
+
+### Next cycle: skill cheaper + better (start here)
+
+Full plan: `/Users/neksand/.opencode/plan/sonolytica-skill-cost-2026-11-12.md`.
+Baseline: hard **16/16 at 22 410 fresh in 15 commands**, easy **8/8 at 9 521 in
+9 commands**. Targets: hard **≤18 000** at 16/16, easy **≤8 000** at 8/8.
+
+1. **Make the measurement reproducible** before touching the skill: clean dir,
+   same prompt, record every command and `session_v2` fresh tokens; two runs of
+   the same config within ±10 %.
+2. **`brief` v2**: add scene-cut timestamps and one OCR line per scene (capped),
+   not more prose. Gate: hard ≤10 commands, ≤20k fresh, 16/16; JSON ≤4 KB.
+3. **Slim `SKILL.md` to ≤200 lines**: keep the iron rules, brief-first,
+   question routing and citation rules; move detail to references. Gate: score
+   unchanged, hard ≤18k.
+4. **A harder fixture**: 15–20 min real licensed meeting with 3–4 speakers,
+   overlap and a quiet speaker. Score 0/1/2 with and without the new skill; zero
+   invented facts.
+
+Do **not**: preload references (cost 4 588 fresh in the first run), retry the
+merge tie-break or the 0.45 VAD gate, or add models for this cycle.
+
+### Capability gaps (after the skill cycle)
 
 1. **Speaker count + overlap — first pass done.** Sortformer 4spk v2 ONNX is
    the default; on a fresh VoxConverse shard it gets 5/6 counts exact (MAE 0.33
@@ -269,7 +328,9 @@ Token accounting: OpenCode stores per-session totals in
 ## 9. For the next agent
 
 Start with `git status`, `docs/HANDOFF.md` (this file), `docs/STATUS.md`, then
-pick item 2 (overlap text attribution) or the streaming cache in item 1. Do not
-re-litigate the rejected count experiments; do not add GPL; keep the model-free
-build. If a change is not measured on a licensed or reproducible fixture, it is
-not done.
+the skill-cost plan above. First objective: make the skill cheaper and better
+**with the same model and fixtures** — the current baseline is hard 16/16 at
+22 410 fresh, easy 8/8 at 9 521. Do not re-litigate the rejected experiments
+(VAD gate at 0.45, merge tie-break, count heuristics) and do not preload
+reference files. Keep the model-free build and the docs-as-tests green. If a
+change is not measured on a licensed or reproducible fixture, it is not done.

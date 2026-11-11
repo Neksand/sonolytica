@@ -1,4 +1,4 @@
-# Project status — 2026-11-11
+# Project status — 2026-11-12
 
 A snapshot for deciding what SONOLYTICA is actually good for. Every number
 below comes from a run on this machine and a file in this repository; links go
@@ -125,5 +125,7 @@ makes the agent **honest and citable**, not more perceptive.
   benchmark are the differentiator; perception is deliberately local and
   replaceable.
 
-Next, in order of payoff: overlap text attribution, streaming cache for long
-files, music notes/stems, non-English alignment, object/face models, MCP.
+Next, in order of payoff: make the skill cheaper and better at the same time
+(`brief` v2, slimmer SKILL.md, reproducible benchmark), then overlap text
+attribution, streaming cache for long files, music notes/stems, non-English
+alignment, object/face models, MCP.
