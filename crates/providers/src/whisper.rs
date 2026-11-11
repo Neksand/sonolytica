@@ -10,7 +10,9 @@ use std::path::Path;
 use std::sync::OnceLock;
 
 use sonolytica_core::{Audio, Capability, Confidence, MediaTime, TimeRange, Word};
-use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
+use whisper_rs::{
+    FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, WhisperState,
+};
 
 use crate::models::ModelSpec;
 use crate::traits::{
@@ -264,9 +266,25 @@ impl WhisperAsr {
             });
         }
 
-        let lang_id = state.full_lang_id_from_state();
-        let language = whisper_rs::get_lang_str(lang_id).map(str::to_string);
+        let language = self.language(&state, cfg);
         Ok((language, segments))
+    }
+
+    /// Language for this run, in order of authority.
+    ///
+    /// An English-only model is English by construction: whisper.cpp skips the
+    /// multilingual prompt there and never sets `lang_id`, so asking it for the
+    /// detected language returns a meaningless code (observed: `"my"` for a
+    /// base.en model). A requested language is what was forced. Only a
+    /// multilingual model without a request has a real auto-detection.
+    fn language(&self, state: &WhisperState, cfg: &AsrConfig) -> Option<String> {
+        if !self.context.is_multilingual() {
+            return Some("en".to_string());
+        }
+        match &cfg.language {
+            Some(language) => Some(language.trim().to_ascii_lowercase()),
+            None => whisper_rs::get_lang_str(state.full_lang_id_from_state()).map(str::to_string),
+        }
     }
 }
 

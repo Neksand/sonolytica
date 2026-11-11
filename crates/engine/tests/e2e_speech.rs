@@ -128,6 +128,11 @@ async fn two_speaker_conversation_end_to_end() {
         })
         .expect("speech summary");
     assert!(speech.word_count >= 15, "got {} words", speech.word_count);
+    assert_eq!(
+        speech.language.as_deref(),
+        Some("en"),
+        "an English-only model must report en, not a stray detected code"
+    );
     assert!(
         speech.speaker_count >= 2,
         "two clearly different voices should be separated, got {}",
