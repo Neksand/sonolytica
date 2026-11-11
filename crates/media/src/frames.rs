@@ -18,8 +18,10 @@ use crate::tools::MediaTools;
 pub const FRAME_WIDTH: usize = 64;
 pub const FRAME_HEIGHT: usize = 36;
 const FRAME_BYTES: usize = FRAME_WIDTH * FRAME_HEIGHT * 3;
-/// RGB histogram: 4 levels per channel, 4^3 bins. Luma alone misses a cut
-/// between two dark scenes of different hue (a red slide and a blue slide).
+/// Chromaticity histogram: 4 levels per channel after normalising by the
+/// brightest channel, 4^3 bins. Raw RGB would collapse every dark scene into
+/// one bin; luma alone misses a cut between equal-brightness, different-hue
+/// shots.
 const HIST_BINS: usize = 64;
 
 /// A cut must be at least this far from the previous one.
@@ -194,12 +196,17 @@ fn signatures(bytes: &[u8], fps: f32) -> Vec<FrameSignature> {
                     previous = value;
                 }
             }
+            // Chromaticity, not raw RGB: a 4-level bucket on raw values
+            // collapses every dark scene (all channels < 64) into bin 0, so
+            // two dark slides of different hue looked identical. Normalising
+            // by the pixel's brightest channel keeps hue and ignores exposure.
             let mut hist = [0.0_f32; HIST_BINS];
             for pixel in frame.chunks_exact(3) {
-                let bin = (usize::from(pixel[0]) >> 6) * 16
-                    + (usize::from(pixel[1]) >> 6) * 4
-                    + (usize::from(pixel[2]) >> 6);
-                hist[bin] += 1.0;
+                let max = pixel[0].max(pixel[1]).max(pixel[2]).max(1);
+                let r = (usize::from(pixel[0]) * 255 / usize::from(max)) >> 6;
+                let g = (usize::from(pixel[1]) * 255 / usize::from(max)) >> 6;
+                let b = (usize::from(pixel[2]) * 255 / usize::from(max)) >> 6;
+                hist[r * 16 + g * 4 + b] += 1.0;
             }
             let total = (FRAME_WIDTH * FRAME_HEIGHT) as f32;
             for bin in &mut hist {
@@ -351,9 +358,18 @@ mod tests {
     use super::*;
 
     fn signature(index: u64, fill: u8) -> FrameSignature {
-        let level = usize::from(fill) >> 6;
+        // A synthetic two-colour pixel that keeps the helper's "fill" meaning:
+        // low fills are teal-ish, high fills are orange-ish, so chromaticity
+        // bins differ even when both are dark.
+        let (r, g, b) = if fill > 128 {
+            (220_u8, 35_u8, 64_u8)
+        } else {
+            (30_u8, 225_u8, 64_u8)
+        };
+        let max = r.max(g).max(b).max(1);
+        let level = |c: u8| (usize::from(c) * 255 / usize::from(max)) >> 6;
         let mut hist = [0.0_f32; HIST_BINS];
-        hist[level * 16 + level * 4 + level] = 1.0;
+        hist[level(r) * 16 + level(g) * 4 + level(b)] = 1.0;
         FrameSignature {
             index,
             time_s: index as f32 / 2.0,
