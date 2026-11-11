@@ -180,16 +180,37 @@ const STANDARD_MODULES: [Capability; 6] = [
     Capability::Scene,
 ];
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum ModelSet {
+    /// Speech pipeline, about 1.5 GB
+    Core,
+    /// Every pinned model, about 1.7 GB
+    Full,
+}
+
+/// The speech-only preset: enough for transcript, speakers and alignment.
+const CORE_MODELS: [&str; 5] = [
+    "silero-vad-v5",
+    "whisper-base.en",
+    "whisper-small",
+    "wav2vec2-base-960h",
+    "sortformer-4spk-v2",
+];
+
 #[derive(Debug, Subcommand)]
 enum ModelsCommand {
     /// List known models and their local status
     List,
     /// Download and verify models
     Fetch {
-        /// Model ids; omit with --all to fetch every model
+        /// Model ids; omit with --set or --all
         ids: Vec<String>,
+        /// Fetch every pinned model
         #[arg(long)]
         all: bool,
+        /// Fetch a preset: core (speech) or full (speech, OCR, align)
+        #[arg(long, value_enum)]
+        set: Option<ModelSet>,
     },
 }
 
@@ -327,9 +348,16 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                         );
                     }
                 }
-                ModelsCommand::Fetch { ids, all } => {
-                    let specs: Vec<&_> = if all {
+                ModelsCommand::Fetch { ids, all, set } => {
+                    let specs: Vec<&_> = if all || set == Some(ModelSet::Full) {
                         MODELS.iter().collect()
+                    } else if set == Some(ModelSet::Core) {
+                        CORE_MODELS
+                            .iter()
+                            .map(|id| {
+                                sonolytica_providers::find_model(id).expect("core model is pinned")
+                            })
+                            .collect()
                     } else {
                         if ids.is_empty() {
                             bail!("name one or more model ids, or pass --all");
