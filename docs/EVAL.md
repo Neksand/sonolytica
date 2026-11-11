@@ -144,6 +144,19 @@ several. Reverted. Speaker counting needs a model trained for it (Sortformer,
 or an eigengap/NME estimate with a noise model), not another unsupervised
 score on the same embeddings.
 
+### Tried and rejected: widest dendrogram gap
+
+Hypothesis: choose the cut at the widest gap between consecutive merge levels —
+a scale-free alternative to the fixed similarity threshold. On the first dev
+recording it collapsed four speakers into two and scored 54 % DER, so the run
+was stopped and the change reverted. Chunk embeddings at 1.5 s are too noisy
+for a single global cut to be reliable: within-speaker and cross-speaker merge
+levels overlap.
+
+No further threshold heuristic is planned. Speaker counting needs a model
+trained for it (Sortformer) or an eigengap/NME estimate over a smoothed
+affinity, not another cut on the same dendrogram.
+
 ## What the numbers say to do next
 
 The planned order was forced alignment, then diarization. The measurements
