@@ -90,22 +90,56 @@ greedy speaker mapping in `sonolytica-eval` (an optimal assignment would lower
 confusion slightly); 0.25 s collar, frame 10 ms — do not compare with a paper
 that uses a different collar.
 
+### Held-out check on the test split
+
+The dev numbers above were produced with a threshold chosen on the same five
+files, so they are a pilot. The same configuration was run once on five
+recordings from the `test` shard, which had never been inspected:
+
+| Field | Value |
+|---|---|
+| Subset | first 5 recordings of `test-00000-of-00011` |
+| Reference speech | 3973 s |
+| **DER** | **19.90 %** (duration-weighted) |
+| Unweighted mean | 17.17 % |
+
+| file | DER | speakers ref → hyp |
+|---|---|---|
+| uedkc | 24.44 % | 7 → 8 |
+| heolf | 27.60 % | 12 → 7 |
+| otmpf | 5.86 % | 3 → 3 |
+| myjoe | 11.98 % | 2 → 7 |
+| jrfaz | 15.99 % | 9 → 8 |
+
+Reading it honestly:
+
+- The held-out number is 4.4 pp worse than the dev pilot (19.90 vs 15.46 %).
+  Part of the dev gain did not transfer; the threshold is not universal.
+- The failure mode is now **speaker-count estimation**, not threshold:
+  `myjoe` splits two speakers into seven, `heolf` merges twelve into seven.
+  A fixed similarity threshold cannot fix both directions.
+- Do not describe 15.46 % as the pipeline's quality. The defensible statement
+  today is "≈16–20 % DER on VoxConverse in-the-wild, pilot scale".
+- This test shard has now been seen. The next report must use a different
+  subset (or the full split) to stay honest.
+
 ## What the numbers say to do next
 
 The planned order was forced alignment, then diarization. The measurements
 argue for swapping that:
 
-1. **Diarization first.** Done in this cycle: 18.60 → 15.46 % DER. The
-   remaining error is still confusion on crowded files, which needs overlap
-   handling and a proper speaker-count estimate, not another threshold.
+1. **Diarization: speaker count, not another threshold.** The held-out check
+   shows over- and under-segmentation in the same run (2 → 7 and 12 → 7
+   speakers). The next change must estimate the number of speakers and handle
+   overlap, not move the similarity cut.
 2. **Alignment second.** WER 6.05 % is near the model ceiling and deletions are
    1.1 %; alignment improves *when* a word was said (citations, cutting), not
    *what* was said. Still worth doing, but it does not move the headline.
 3. **Do not touch the ASR model yet.** `base.en` on clean speech is not the
    bottleneck. A larger model is a cost decision, not a quality fix.
-4. **Held-out DER before the next claim.** The threshold was calibrated on the
-   same pilot files; the next diarization number must come from the `test`
-   split, or it is not a result.
+4. **Fresh data before the next claim.** Both pilot shards have been seen now;
+   the next diarization number needs a subset that has not been used for any
+   decision.
 
 ## Reproduce
 
