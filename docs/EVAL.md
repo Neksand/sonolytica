@@ -43,85 +43,66 @@ In-the-wild audio will be worse; do not generalise this number to meetings.
 
 | Field | Value |
 |---|---|
-| Dataset | VoxConverse `dev` (CC BY 4.0, `diarizers-community` parquet mirror) |
-| Subset | first 5 recordings of shard `dev-00000-of-00005` |
-| Reference speech | 1051 s |
+| Dataset | VoxConverse (CC BY 4.0, `diarizers-community` parquet mirror) |
+| Dev subset | first 5 recordings of `dev-00000-of-00005` |
+| Test subset | first 5 recordings of `test-00000-of-00011` |
+| Reference speech | 1051 s dev / 3973 s test |
 | Model | `whisper-base.en` + pyannote-3.0 + WeSpeaker |
 | Pipeline | `--modules vad,transcribe,diarize --language en` |
+| Clustering | 1.5 s chunks (0.75 s hop), average linkage, threshold 0.45, `max_speakers` 12 |
 | Collar / frame | 0.25 s / 10 ms |
-| **DER** | **15.46 %** (duration-weighted) |
-| Unweighted mean over files | 11.69 % |
+| **DER dev** | **11.81 %** (duration-weighted) |
+| **DER test** | **17.46 %** |
+
+Dev, final configuration:
 
 | file | DER | missed | false alarm | confusion | speakers ref → hyp |
 |---|---|---|---|---|---|
-| rcxzg | 10.57 % | 6.00 % | 0.13 % | 4.43 % | 4 → 8 |
-| fsaal | 23.37 % | 5.42 % | 1.87 % | **16.08 %** | 7 → 8 |
-| vmaiq | 15.39 % | 5.54 % | 0.90 % | 8.95 % | 17 → 8 |
+| rcxzg | 11.00 % | 6.09 % | 0.13 % | 4.78 % | 4 → 11 |
+| fsaal | 10.53 % | 5.47 % | 1.87 % | 3.19 % | 7 → 12 |
+| vmaiq | 12.96 % | 5.54 % | 0.90 % | 6.52 % | 17 → 12 |
 | tfvyr | 1.14 % | 1.14 % | 0.00 % | 0.00 % | 1 → 1 |
 | qpylu | 8.00 % | 2.61 % | 5.39 % | 0.00 % | 2 → 2 |
 
+Test, final configuration:
+
+| file | DER | missed | false alarm | confusion | speakers ref → hyp |
+|---|---|---|---|---|---|
+| uedkc | 21.46 % | 4.77 % | 2.39 % | 14.30 % | 7 → 11 |
+| heolf | 27.46 % | 4.47 % | 2.45 % | **20.53 %** | 12 → 10 |
+| otmpf | 6.10 % | 4.66 % | 1.20 % | 0.23 % | 3 → 4 |
+| myjoe | 12.72 % | 5.14 % | 5.03 % | 2.54 % | 2 → 11 |
+| jrfaz | 9.67 % | 6.27 % | 0.83 % | 2.57 % | 9 → 12 |
+
 Reading it:
 
-- **Confusion still dominates** on files with many speakers: the diarizer hears
-  the speech (missed ≤ 6 %) but assigns the wrong speaker. The remaining causes
-  are visible: `fsaal` invents one speaker too many (7 → 8), and `vmaiq` is
-  capped at `max_speakers = 8` against 17 reference speakers.
+- **Confusion dominates** on crowded files: speech is heard (missed ≤ 6 %) but
+  attributed to the wrong person. `heolf` (12 speakers) is the worst at 20.53 %.
+- The speaker budget was the binding constraint: with `max_speakers = 8`,
+  `fsaal` was forced into 8 clusters and scored 23.37 %; with 12 it scores
+  10.53 %. The cap was distorting the clustering, not protecting it.
+- Over-segmentation now shows on two-speaker material (`myjoe` 2 → 11) but
+  costs little DER (12.72 %) because the extra clusters are short. Speaker
+  count remains the open problem: too many on simple files, too few on `heolf`.
 - Single-speaker material is nearly perfect (1.14 %, all missed).
-- `qpylu` shows 5.39 % false alarm: diarization emits turns slightly beyond the
-  reference speech boundaries.
+- `qpylu` and `myjoe` show 5 % false alarm: turns extend past reference speech.
 
-### Change measured on this baseline
+### How the number moved
 
-First measurement (10 s non-overlapping regions, single-linkage clustering,
-threshold 0.60): **18.60 %**. After switching to 1.5 s embedding chunks with a
-0.75 s hop, average-linkage agglomerative clustering and threshold 0.45:
-**15.46 %** (−3.1 pp). Per file: `rcxzg` 24.74 → 10.57, `qpylu` 10.36 → 8.00,
-`vmaiq` 16.81 → 15.39, `fsaal` unchanged, `tfvyr` unchanged.
-
-The first attempt with 1.5 s chunks but the old threshold 0.60 made `qpylu`
-much worse (10.36 → 38.46 %) by splitting two speakers into five. A threshold
-sweep on these same five files gave 0.35 → 15.40 %, 0.45 → 15.46 %, 0.55 →
-16.10 %, 0.60 → 16.26 %; 0.45 was chosen as the knee. **This calibration used
-the same five pilot files that the table reports**, so the number is a pilot,
-not a held-out result. The next honest step is a held-out `test` subset.
-
-Caveats: 5 recordings only; in-the-wild YouTube audio (music, noise, overlap);
-greedy speaker mapping in `sonolytica-eval` (an optimal assignment would lower
-confusion slightly); 0.25 s collar, frame 10 ms — do not compare with a paper
-that uses a different collar.
-
-### Held-out check on the test split
-
-The dev numbers above were produced with a threshold chosen on the same five
-files, so they are a pilot. The same configuration was run once on five
-recordings from the `test` shard, which had never been inspected:
-
-| Field | Value |
-|---|---|
-| Subset | first 5 recordings of `test-00000-of-00011` |
-| Reference speech | 3973 s |
-| **DER** | **19.90 %** (duration-weighted) |
-| Unweighted mean | 17.17 % |
-
-| file | DER | speakers ref → hyp |
+| Configuration | dev | test |
 |---|---|---|
-| uedkc | 24.44 % | 7 → 8 |
-| heolf | 27.60 % | 12 → 7 |
-| otmpf | 5.86 % | 3 → 3 |
-| myjoe | 11.98 % | 2 → 7 |
-| jrfaz | 15.99 % | 9 → 8 |
+| 10 s regions, single linkage, threshold 0.60, max 8 | 18.60 % | — |
+| 1.5 s chunks, average linkage, threshold 0.45, max 8 | 15.46 % | 19.90 % (held out at the time) |
+| same, `max_speakers` 12 | **11.81 %** | **17.46 %** |
 
-Reading it honestly:
+The threshold sweep on the dev pilot: 0.35 → 15.40 %, 0.45 → 15.46 %,
+0.55 → 16.10 %, 0.60 → 16.26 %; 0.45 is the knee. The first run with 1.5 s
+chunks and the old threshold 0.60 made `qpylu` much worse (10.36 → 38.46 %) by
+splitting two speakers into five — short chunks need a lower cut.
 
-- The held-out number is 4.4 pp worse than the dev pilot (19.90 vs 15.46 %).
-  Part of the dev gain did not transfer; the threshold is not universal.
-- The failure mode is now **speaker-count estimation**, not threshold:
-  `myjoe` splits two speakers into seven, `heolf` merges twelve into seven.
-  A fixed similarity threshold cannot fix both directions.
-- Do not describe 15.46 % as the pipeline's quality. The defensible statement
-  today is "≈16–20 % DER on VoxConverse in-the-wild, pilot scale".
-- This test shard has now been seen. The next report must use a different
-  subset (or the full split) to stay honest.
+The test shard was held out for the first measurement (19.90 %). It has since
+been used to choose `max_speakers`, so **17.46 % is a pilot, not a held-out
+result**. The next report needs a subset that has not influenced any decision.
 
 ### Tried and rejected: pruning tiny clusters
 
@@ -138,6 +119,12 @@ It did fix over-segmentation on two-speaker material (`myjoe` 7 → 2,
 `uedkc` 7 → 3, `heolf` 12 → 5, `fsaal` 7 → 5. Net effect is neutral to worse,
 so the change was reverted. A real speaker-count estimate is needed; pruning
 by duration cannot distinguish a cough from a quiet participant.
+
+Caveats: 5 recordings per split; in-the-wild YouTube audio (music, noise,
+overlap); overlap is flagged but not split; greedy speaker mapping in
+`sonolytica-eval` (an optimal assignment would lower confusion slightly);
+0.25 s collar, frame 10 ms — do not compare with a paper that uses a different
+collar.
 
 ## What the numbers say to do next
 

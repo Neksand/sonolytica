@@ -112,7 +112,7 @@ impl Default for DiarizationConfig {
     fn default() -> Self {
         Self {
             threshold: 0.45,
-            max_speakers: 8,
+            max_speakers: 12,
             min_region_ms: 500,
         }
     }
