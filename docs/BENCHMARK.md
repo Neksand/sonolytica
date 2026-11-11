@@ -1,7 +1,8 @@
 # Benchmark: does the skill make an agent better at media?
 
-Date: 2026-11-11. One fixture, four questions, three scored sessions and two
-contaminated attempts that are recorded as failures rather than hidden.
+Date: 2026-11-11. Two fixtures (video with slides, Russian speech), ten tasks,
+five scored sessions and two contaminated attempts that are recorded as failures
+rather than hidden.
 
 The benchmark measures the **agent + skill + CLI** as a system, not a model on a
 leaderboard. The question is whether an agent with the skill answers media
@@ -82,15 +83,74 @@ column that the skill cannot fix by itself.
    `Free usage limit reached` mid-run. The matrix above is honest about which
    cells are missing.
 
+## Tokens
+
+Counted from OpenCode's own session records (`session_v2`), so the numbers are
+consistent across sessions. `input` is uncached prompt, `cache read` is the
+cached prefix re-read (much cheaper), `output` includes the answer, `reasoning`
+is the model's thinking. "Fresh" = `input + output`.
+
+| Session | Model | Skill | input | cache read | output | reasoning | total | fresh |
+|---|---|---|---|---|---|---|---|---|
+| A | Nemotron VL | no | 58 717 | 169 104 | 2 563 | 5 524 | 235 908 | 61 280 |
+| C | Nemotron VL | v3 + OCR | 32 905 | 182 112 | 2 108 | 6 612 | 223 737 | 35 013 |
+| B | LongCat 2.5 | v1 | 52 878 | 81 408 | 3 119 | 10 603 | 148 008 | 55 997 |
+| A′ (contaminated) | Nemotron VL | no | 110 418 | 13 008 | 1 309 | 4 345 | 129 080 | 111 727 |
+| LongCat baseline (quota) | LongCat 2.5 | no | 171 541 | 3 893 888 | 13 566 | 44 145 | 4 123 140 | 185 107 |
+
+Reading it:
+
+- The skill did **not** cost more: C used 43 % fewer fresh tokens than A
+  (35 013 vs 61 280) and 5 % fewer total tokens, while scoring 8/8 instead of
+  5/8. Reading the skill once paid for itself by removing exploratory ffmpeg and
+  whisper calls.
+- Cache reads dominate every session; they are the cheap part of the bill. The
+  number that matters for a paid model is the fresh column.
+- The LongCat baseline burned 4.1 M tokens (3.9 M of it cache) and hit the free
+  quota before finishing. That is the cost of "invent your own pipeline".
+- These are single sessions, not averages.
+
+## Second fixture: Russian, one speaker
+
+12 s of Russian speech (macOS `say -v Milena`), clean, one voice. Transcript
+from the reference run: three sentences about pricing, delivery and a quarterly
+result; the only number is "20 %".
+
+Six tasks: quote 00:03–00:07, list amounts, say whether discounts are mentioned,
+identify the language and how, find «подписку» with a timestamp, count speakers.
+
+| Question | A (whisper CLI, no skill) | C (skill, whisper-small ru) |
+|---|---|---|
+| 1. quote 03–07 | 2 — exact | 2 — exact |
+| 2. amounts | 2 — 20 % | 2 — 20 % with word range |
+| 3. discounts | 2 — none | 2 — none, searched a stem |
+| 4. language | 2 — `ru` from whisper output | 2 — from media/document, not the prompt |
+| 5. «подписку» | 2 — 04.80–05.34 | 2 — 04.880–05.490 |
+| 6. speakers | 1 — "probably one", unverified | 2 — S1, 3 turns, 10.890 s |
+| **Total** | **11/12** | **12/12** |
+
+This is the case where the skill is **more expensive**: A2 used 23 131 fresh
+tokens (87 685 total) with three whisper commands; C2 used 34 558 fresh
+(233 790 total) because it built a full five-stage document and read the skill.
+The extra 11.4k fresh tokens bought a verified speaker count, word-level timing
+and provenance; for a 12 s voice memo that is arguably overkill. On the video
+fixture the same skill was *cheaper* than exploring with ffmpeg.
+
+Combined across both fixtures: **A 16/20 (80 %), C 20/20 (100 %)**, zero
+invented facts in both.
+
 ## Limits
 
-- One fixture, four questions, three sessions. This is a smoke benchmark, not a
-  statistical claim.
-- Sessions are not the same model: A/C are Nemotron VL, B is LongCat. The
-  skill's effect is visible in A vs C; B adds a second model.
+- Two fixtures, ten questions, six sessions. This is a smoke benchmark, not a
+  statistical claim; one fixture is synthetic slides, the other a synthetic
+  single voice.
+- Sessions are not all the same model: A/C are Nemotron VL on both fixtures, B
+  is LongCat on the video fixture. The skill's effect is visible in A vs C.
 - Scoring is manual, by comparing each answer with the reference document.
 - The baseline had a `whisper` CLI available; in a shell without it, A would
   score lower. That is a fair part of "what an agent can do with a shell".
+- The video fixture has no motion, no subtitles and only one cut; the Russian
+  fixture has one speaker. Neither stresses diarization or long media.
 
 ## Reproduce
 

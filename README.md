@@ -49,7 +49,8 @@ server, Python bridge, forced alignment, sound-event classification, music
 notes and sections.
 
 No accuracy numbers are claimed in this repository. The eval harness exists so
-numbers can be produced honestly against licensed datasets.
+numbers can be produced honestly against licensed datasets. A measured snapshot
+of the whole project is in [`docs/STATUS.md`](docs/STATUS.md).
 
 ## Install
 
