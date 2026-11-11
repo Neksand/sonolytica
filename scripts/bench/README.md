@@ -6,9 +6,6 @@ and a baseline environment **without** `whisper` or `tesseract`.
 
 ## Reproducible session
 
-Do not hand-assemble the working directory: a neighbour's JSON is how a
-benchmark fakes itself.
-
 ```bash
 # 1. clean directory: media + skill copy + full-metal binary + PROMPT.md
 scripts/bench/prepare_agent_fixture.sh --name hard \
@@ -23,10 +20,34 @@ scripts/bench/session_tokens.sh ses_…     # or --last
 
 The prompt is `scripts/bench/prompts/<name>.md`, copied verbatim into the
 fixture and printed by the script: same questions, same rules, every run.
-`easy.md` is the 14.4 s clip. Record model, date, harness, score, commands and
-`fresh` (input + output) in `docs/BENCHMARK.md`. A run is only comparable when
-the prompt, the fixture and the model match; two runs of one configuration must
-agree within ±10 % on fresh tokens, otherwise run more and report the median.
+`easy.md` is the 14.4 s clip, `long.md` the 20-minute meeting below.
+`--skill PATH` swaps the skill for an A/B run (e.g. a `git archive` of an older
+commit). Record model, date, harness, score, commands and `fresh` (input +
+output) in `docs/BENCHMARK.md`. A run is only comparable when the prompt, the
+fixture and the model match; two runs of one configuration must agree within
+±10 % on fresh tokens, otherwise run more and report the median.
+
+## Long fixture: 20-minute real meeting
+
+`long.md` asks eight questions about a 20-minute, four-speaker debate: speaker
+count and its warning, who spoke most/least, overlap span, a verbatim quote in
+00:12–00:12:30, one word lookup, duration and speech ratio, and five structural
+chapters. No OCR and no slides.
+
+The media is VoxConverse `fvhrk` (CC BY 4.0), extracted by the eval script:
+
+```bash
+python3 scripts/eval/der_voxconverse.py \
+  --parquet /private/tmp/sono-eval/voxconverse-test2.parquet \
+  --count 0 --min-speakers 4 --max-speakers 4 \
+  --workdir /private/tmp/sono-eval/der-test2-final
+# -> audio/fvhrk.wav (20:00) and fvhrk.rttm (4 speakers)
+```
+
+Ground truth from the RTTM: 4 speakers, 818.2 s / 238.7 s / 50.3 s / 18.5 s of
+speech, no annotated overlap. The document reports 2 labels and a
+`diarization_speaker_cap` warning — the known long-file collapse, and the reason
+the first question asks how much the count can be trusted.
 
 ## Build the fixture
 

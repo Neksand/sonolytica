@@ -19,6 +19,7 @@ media=""
 dest=""
 prompt=""
 binary=""
+skill=""
 force=0
 build=1
 
@@ -31,6 +32,7 @@ Options:
   --media PATH    the media file the session is allowed to see
   --dest PATH     destination (default: /private/tmp/bench-agent-NAME)
   --prompt PATH   override the prompt file
+  --skill PATH    skill directory to copy (default: skills/sonolytica)
   --binary PATH   override the CLI (default: target/debug/sonolytica)
   --no-build      fail instead of running cargo when the binary is missing
   --force         wipe an existing destination
@@ -44,6 +46,7 @@ while (($#)); do
         --media) media=${2:?}; shift 2 ;;
         --dest) dest=${2:?}; shift 2 ;;
         --prompt) prompt=${2:?}; shift 2 ;;
+        --skill) skill=${2:?}; shift 2 ;;
         --binary) binary=${2:?}; shift 2 ;;
         --no-build) build=0; shift ;;
         --force) force=1; shift ;;
@@ -56,6 +59,8 @@ done
 [[ -f $media ]] || { echo "no such media: $media" >&2; exit 1; }
 prompt=${prompt:-$repo/scripts/bench/prompts/$name.md}
 [[ -f $prompt ]] || { echo "no such prompt: $prompt" >&2; exit 1; }
+skill=${skill:-$repo/skills/sonolytica}
+[[ -f $skill/SKILL.md ]] || { echo "no such skill: $skill" >&2; exit 1; }
 dest=${dest:-/private/tmp/bench-agent-$name}
 binary=${binary:-$repo/target/debug/sonolytica}
 
@@ -74,7 +79,7 @@ if [[ ! -x $binary ]]; then
 fi
 
 cp "$media" "$dest/"
-cp -R "$repo/skills/sonolytica" "$dest/skills-sonolytica"
+cp -R "$skill" "$dest/skills-sonolytica"
 cp "$binary" "$dest/sonolytica"
 cp "$prompt" "$dest/PROMPT.md"
 
