@@ -21,6 +21,52 @@ sonolytica query <command> "$DOC" [flags]
 Bad input exits 1 with a message on stderr. `--to` earlier than `--from` is an
 error, not an empty result.
 
+## brief
+
+```bash
+sonolytica query brief "$DOC"
+sonolytica query brief "$DOC" --json
+```
+
+One compact call (typically 2–4 KB of JSON) for the first pass and for broad
+questions. Nothing is inferred beyond counts:
+
+- `media`: path, duration, sha256, `has_video`;
+- `config`: modules, requested language, ASR model, `align_words`;
+- `complete`, `runs` (capability/provider/status/duration), `warnings`;
+- `speech`: words, language, speakers, VAD ratio and duration when the speech
+  analysis block exists (otherwise counts are derived from segments and the
+  ratio is `null`);
+- `speakers`: id, speaking time, turns, first/last (up to 8; `speaker_count` is
+  the true total);
+- `chapters`: up to 5 structural chapters (same rule as `query chapters`), with
+  `chapter_count` as the true total;
+- `video`: scene, keyframe and text-overlay counts;
+- `music`: BPM, key, section count when the music block exists;
+- `acoustic`: peak, LRA, silence count when the acoustic block exists.
+
+JSON:
+
+```json
+{ "media": { "path": "…", "duration_us": 155600000, "duration_display": "00:02:35.600", "sha256": "…", "has_video": false },
+  "config": { "modules": ["vad", "transcribe", "diarize"], "language": "en", "asr_model": "whisper-base.en", "align_words": false },
+  "complete": true,
+  "runs": [ { "capability": "vad", "provider": "silero-vad", "status": "complete", "duration_ms": 120 } ],
+  "warnings": [],
+  "speech": { "word_count": 402, "language": "en", "speaker_count": 2, "speech_ratio": 0.61, "speech_duration_us": 94900000 },
+  "speaker_count": 2,
+  "speakers": [ { "id": "S1", "speech_duration_us": 52000000, "speech_display": "00:00:52.000", "turn_count": 12, "first_start_us": 1200000, "last_end_us": 149000000 } ],
+  "chapter_count": 4,
+  "chapters": [ { "start": 0, "end": 61200000, "start_display": "00:00:00.000", "end_display": "00:01:01.200", "title_hint": "…", "speakers": ["S1"], "segment_count": 9 } ],
+  "video": { "scenes": 0, "keyframes": 0, "text_overlays": 0 },
+  "music": null,
+  "acoustic": { "peak_dbfs": -1.2, "lra_lu": 6.3, "silence_count": 3 } }
+```
+
+`brief` is a map, not a quote source: use `search` / `words` / `transcript` for
+exact wording and ranges. A `null` block means that stage did not run or had no
+data — say so; do not fill it from the audio yourself.
+
 ## timeline
 
 ```bash

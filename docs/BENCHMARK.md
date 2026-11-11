@@ -213,6 +213,48 @@ Reading it:
   missing from the transcript entirely. No task scores those; they are recorded
   as the next work.
 
+## `query brief`: one call instead of five (2026-11-12)
+
+`query brief` returns media facts, run status, speech totals, speakers, up to
+five chapters and modality counts in one 2–3 KB read. The skill now starts
+there and tells the agent not to preload reference files.
+
+Method: same hard and easy fixtures, DeepSeek V4.1 Flash (OpenCode subagent),
+clean directory containing only the media, a copy of `skills/sonolytica/` and
+the CLI; `whisper`, `tesseract`, `ffmpeg` and Python were forbidden. The prompt
+asked for answers with ranges and to start with `query brief`.
+
+| Fixture | Session | Commands | Score | Fresh tokens | Comparison |
+|---|---|---|---|---|---|
+| easy 14.4 s | brief, context budget | 9 | **8/8** | **9 521** | skill v3: 41 399 |
+| hard 4 min | brief, preloaded 3 refs | 30 | **16/16** | 26 998 | — |
+| hard 4 min | brief, context budget | 15 | **16/16** | **22 410** | skill v3: 15 813 |
+
+Reading it:
+
+- **Easy fixture: 4.3× fewer fresh tokens than the previous skill session**
+  (9 521 vs 41 399) with the same 8/8. Most of the old cost was exploration;
+  `brief` plus four targeted queries replaced it.
+- **Hard fixture: 16/16 and under the 25k gate**, but not cheaper than the
+  earlier 15 813-token session. That session was already lean; this run is a
+  different harness and produced longer answers. Do not claim a hard-fixture
+  token win.
+- **Preloading references is expensive.** The first hard run opened the
+  cheatsheet and two workflow files and made 30 commands: 26 998 fresh. The
+  context-budget rule in the skill (read `SKILL.md` once, open one reference
+  only when needed, two absence searches max) cut it to 22 410 fresh and 15
+  commands, score unchanged.
+- **No invented facts, no false sight.** The text-only model explicitly said it
+  could not see frames and cited OCR as document text. On the easy fixture it
+  reported the second speaker's time as 6.660 s instead of the old reference's
+  8.400 s: the VAD gate and alignment now trim to audible speech (the old
+  00:07.992 start includes ASR padding). The "who spoke more" answer is
+  correct; the duration follows the improved document.
+
+Caveat: two hard runs and one easy run, single sessions, one model. The
+comparison with earlier sessions is within the same OpenCode token store but
+not the same harness version.
+
 ## Limits
 
 - Three fixtures, 18 questions, eleven sessions. This is a smoke benchmark, not

@@ -19,14 +19,14 @@ OCR text, and provenance on every segment. Agents read it via
 
 | | |
 |---|---|
-| Rust | 15 349 lines, 7 crates: `providers` (4.3k), `cli` (3.1k), `engine` (2.6k), `core` (2.1k), `dsp` (1.4k), `media` (1.2k), `eval` (0.6k) |
+| Rust | 15 858 lines, 7 crates: `providers` (4.3k), `cli` (3.6k), `engine` (2.6k), `core` (2.1k), `dsp` (1.4k), `media` (1.2k), `eval` (0.6k) |
 | Binary | `sonolytica` (`sonolytica-cli`) |
 | SDK | `sonolytica-engine` (`Engine::analyze`) |
 | Schema | **1.4.0**, additive 1.0 → 1.4 |
 | Models | 10, SHA-256 pinned, in `~/.cache/sonolytica/models` |
-| Query commands | 13: timeline, at, search, transcript, words, speakers, chapters, frames, music, acoustic, runs, summary, help |
+| Query commands | 14: brief, timeline, at, search, transcript, words, speakers, chapters, frames, music, acoustic, runs, summary, help |
 | Skill | `skills/sonolytica/` (SKILL.md + 9 references + install README) |
-| Tests | **131** model-free / **146** all-features |
+| Tests | **134** model-free / **149** all-features |
 
 Features: `sonolytica-cli --features full-metal` = whisper + silero + diarize +
 ocr + align + metal. `cargo test --workspace` runs without models/cmake/ORT.
@@ -71,6 +71,11 @@ whisper/tesseract/sonolytica (8 tasks, max 16):
 
 `*` one false "visually confirmed" claim, fixed in the skill: text-only models
 must not claim sight.
+
+`query brief` (2026-11-12): the hard fixture scores **16/16 at 22 410 fresh**
+tokens in 15 commands (the first run, with three reference files preloaded, used
+26 998); the easy fixture scores **8/8 at 9 521 fresh** versus 41 399 for the
+previous skill. Details and caveats: BENCHMARK.
 
 ## 3. Things that must not regress
 
@@ -208,10 +213,12 @@ Token accounting: OpenCode stores per-session totals in
    Whisper still emits one merged line for overlapped speech. Measure JER and
    split words by speaker with a speaker-attributed pass; a missing line is an
    ASR limitation, not a diarization one.
-3. **`query brief`** — one compact read (runs, chapters, speakers, highlights,
-   counts) instead of 5–8 queries; add a "minimum commands per question" table
-   to the skill. Target: cut DeepSeek skill sessions from ~41k to ~20k fresh
-   tokens.
+3. **`query brief` — done (2026-11-12).** One compact read (media, runs,
+   speech, speakers, chapters, video/OCR, music/acoustic) shipped with a
+   "minimum commands per question" table and a context budget in the skill.
+   Measured: hard fixture **16/16 at 22 410 fresh** in 15 commands (≤25k gate),
+   easy **8/8 at 9 521 fresh** versus 41 399. Do not regress those numbers; the
+   easy win is the one to quote.
 4. **Modes** `--effort low|normal|max` + `--vision agent|local`, with the RAM
    table in the skill: low ≈40 MB (no ASR), normal +200–500 MB, max +400 MB
    (OCR/align), local VLM +2–4 GB opt-in. Store the chosen mode in config.
@@ -238,6 +245,11 @@ Token accounting: OpenCode stores per-session totals in
 - **Do not tune on the same split you report.** VoxConverse dev was used for
   the threshold, test for one check, then test was seen again. The next number
   needs unseen data.
+- **Context preloading is a real cost.** The first `query brief` hard session
+  opened the cheatsheet and two workflow files and made 30 commands: 26 998
+  fresh tokens. Reading `SKILL.md` once and opening one reference only when
+  needed cut it to 22 410 in 15 commands, score unchanged. The skill now states
+  that budget.
 - **Synthetic fixtures exposed real bugs** three times: colour-blind cuts
   (red/blue), dark-slide collapse (chromaticity), ASR padding vs onset. Keep
   making fixtures uncomfortable.
@@ -245,7 +257,7 @@ Token accounting: OpenCode stores per-session totals in
 ## 9. For the next agent
 
 Start with `git status`, `docs/HANDOFF.md` (this file), `docs/STATUS.md`, then
-pick item 2 (overlap text attribution) or item 3 (`query brief`) in §7. Do not
+pick item 2 (overlap text attribution) or the streaming cache in item 1. Do not
 re-litigate the rejected count experiments; do not add GPL; keep the model-free
 build. If a change is not measured on a licensed or reproducible fixture, it is
 not done.

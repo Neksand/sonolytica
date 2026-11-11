@@ -87,7 +87,8 @@ sonolytica models fetch \
 # 3. Analyse (--profile structure | standard | ultra)
 sonolytica analyze interview.mp3 --out interview.json --profile standard --summary
 
-# 4. Ask the document questions — typed output, no jq required
+# 4. Ask the document questions — start with one compact read
+sonolytica query brief interview.json       # media, runs, speech, speakers, chapters, counts
 sonolytica query summary interview.json
 sonolytica query timeline interview.json --from 00:00:10 --to 00:00:20
 sonolytica query transcript interview.json        # full text, untruncated

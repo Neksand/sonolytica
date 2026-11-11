@@ -477,3 +477,106 @@ fn bad_input_exits_one() {
         );
     }
 }
+
+fn empty_fixture_path() -> PathBuf {
+    let media = MediaInfo {
+        path: "/tmp/query-empty.wav".into(),
+        duration: Some(MediaTime::from_secs_f64(5.0)),
+        ..MediaInfo::default()
+    };
+    let document = DocumentBuilder::new(media, AnalysisConfig::default())
+        .finish()
+        .expect("empty document must be valid");
+    let path = std::env::temp_dir().join(format!(
+        "sonolytica-query-empty-{}.json",
+        std::process::id()
+    ));
+    std::fs::write(&path, document.to_json_pretty().unwrap()).expect("write fixture");
+    path
+}
+
+#[test]
+fn brief_json_carries_every_section_and_stays_compact() {
+    let path = fixture_path();
+    let json = query_json(&["query", "brief", path.to_str().unwrap(), "--json"]);
+
+    assert_eq!(json["media"]["duration_us"], 15_000_000);
+    assert_eq!(json["media"]["duration_display"], "00:00:15.000");
+    assert_eq!(json["media"]["has_video"], false);
+    assert_eq!(json["complete"], false);
+
+    // No `speech` analysis block in the fixture: the counts are derived from
+    // the segments, and the ratio stays null instead of being guessed.
+    assert_eq!(json["speech"]["word_count"], 5);
+    assert_eq!(json["speech"]["speaker_count"], 2);
+    assert_eq!(json["speech"]["language"], "en");
+    assert!(json["speech"]["speech_ratio"].is_null());
+
+    assert_eq!(json["speaker_count"], 2);
+    assert_eq!(json["speakers"][0]["id"], "S1");
+    assert_eq!(json["speakers"][0]["speech_duration_us"], 12_000_000);
+    assert_eq!(json["speakers"][1]["id"], "S2");
+
+    assert!(json["chapter_count"].as_u64().unwrap() >= 1);
+    assert_eq!(
+        json["chapters"].as_array().unwrap().len(),
+        json["chapter_count"].as_u64().unwrap().min(5) as usize
+    );
+
+    assert_eq!(json["video"]["scenes"], 0);
+    assert_eq!(json["video"]["keyframes"], 0);
+    assert_eq!(json["music"]["bpm"], 98.0);
+    assert_eq!(json["music"]["key"], "F# minor");
+    assert_eq!(json["music"]["section_count"], 2);
+    assert_eq!(json["acoustic"]["silence_count"], 1);
+    assert_eq!(json["acoustic"]["peak_dbfs"], -1.0);
+
+    let bytes = serde_json::to_string(&json).unwrap();
+    assert!(
+        bytes.len() <= 4096,
+        "brief JSON must stay under 4 KB, got {} bytes",
+        bytes.len()
+    );
+}
+
+#[test]
+fn brief_text_is_one_compact_screen() {
+    let path = fixture_path();
+    let output = query(&["query", "brief", path.to_str().unwrap()]);
+    assert!(output.status.success());
+    let text = String::from_utf8_lossy(&output.stdout);
+    for needle in [
+        "file",
+        "speech",
+        "S1",
+        "chapters",
+        "music",
+        "98.0 BPM",
+        "warnings",
+        "provider_unavailable",
+    ] {
+        assert!(text.contains(needle), "missing `{needle}` in:\n{text}");
+    }
+    assert!(
+        text.lines().count() <= 40,
+        "brief must fit one screen, got {} lines",
+        text.lines().count()
+    );
+}
+
+#[test]
+fn brief_survives_a_document_without_speech_or_video() {
+    let path = empty_fixture_path();
+    let doc = path.to_str().unwrap();
+    let json = query_json(&["query", "brief", doc, "--json"]);
+    assert!(json["speech"].is_null());
+    assert_eq!(json["speaker_count"], 0);
+    assert_eq!(json["speakers"].as_array().unwrap().len(), 0);
+    assert_eq!(json["video"]["scenes"], 0);
+    assert!(json["chapters"].is_array());
+
+    let output = query(&["query", "brief", doc]);
+    assert!(output.status.success());
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(text.contains("speech     (none)"), "{text}");
+}

@@ -13,6 +13,12 @@ speaker, an emotion or an event.
 **Iron rule:** every factual claim you make must be traceable to a `query`
 result from the document. If it is not in the document, say so.
 
+**Context budget:** read this file once. Open a `references/` file only when a
+section below tells you to for the task at hand — do not preload the cheatsheet
+or every workflow. Aim for `brief` plus 1–3 targeted queries per question. For
+an absence claim, search the word once and its stem once; do not walk a
+thesaurus. Fewer, better queries also mean fewer tokens.
+
 ## 1. The one-minute model
 
 ```
@@ -53,7 +59,8 @@ material (multi-hour media, `ultra`). Details: `references/profiles.md`.
 sonolytica doctor                          # ffmpeg + models + providers
 sonolytica models list                     # what is installed and verified
 sonolytica analyze FILE --out doc.json --profile standard --summary
-sonolytica query runs doc.json             # do this before reading content
+sonolytica query brief doc.json            # one compact overview — start here
+sonolytica query runs doc.json             # stage status in detail
 sonolytica query summary doc.json
 ```
 
@@ -79,9 +86,15 @@ and `analyze` and start at `query runs`.
 
 ## 4. Read in this order
 
-1. `query runs` — complete / partial / failed per stage.
-2. `query summary` — media, counts, analyses, warnings.
-3. `query ...` for the actual question.
+1. `query brief` — one compact call with media facts, run status, speech
+   totals, speakers, up to five chapters, video/OCR counts and music/acoustic
+   headlines. Most overview questions are answered here.
+2. Only the command the question actually needs (§5). Go deeper when the user
+   asks for an exact quote, a time window, a frame or the full speaker list.
+
+`brief` is a map, not a citation source: quote exact wording and ranges from
+`search`, `words` or `transcript`. It prints at most 8 speakers and 5 chapters
+with the true totals; use `speakers`/`chapters` for the full lists.
 
 If a stage is `partial` or `failed`, say so **before** answering, in one line.
 Do not silently answer from half a document.
@@ -90,6 +103,7 @@ Do not silently answer from half a document.
 
 | Question | Command |
 |---|---|
+| overview: what is this, who talks, chapters | `query brief doc` |
 | what happened between 00:10 and 00:20 | `query timeline doc --from 00:00:10 --to 00:00:20` |
 | what is active at 00:12.450 | `query at doc 00:00:12.450` |
 | the whole transcript, untruncated | `query transcript doc` |
@@ -103,6 +117,20 @@ Do not silently answer from half a document.
 | silence and levels | `query acoustic doc` |
 | which stages ran or failed | `query runs doc` |
 | media facts and totals | `query summary doc` |
+
+**Minimum commands per question.** Start at the top row and add a command only
+when the answer needs evidence the brief does not contain:
+
+| Question | Commands |
+|---|---|
+| what is this / who speaks / how is it structured | `brief` |
+| who spoke most, how long, when | `brief` (speaker table is included) |
+| exact quote or "find the moment" | `brief` + `search` + `words` (or `transcript`) |
+| what was said in a window | `brief` + `timeline --from … --to …` |
+| what is on screen | `brief` + `timeline --type text_overlay` |
+| look at a frame | `brief` + `frames` |
+| chords, beats, detailed loudness | `brief` + `music` / `acoustic` |
+| full chapter or speaker list | `brief` + `chapters` / `speakers` |
 
 Rules of use:
 
@@ -276,7 +304,8 @@ Troubleshooting detail: `references/troubleshooting.md`.
 
 ## 14. Workflows
 
-Step-by-step command sequences per media type:
+Step-by-step command sequences per media type. Open **one** file for the media
+type at hand, not all of them:
 
 - `references/workflows/interview.md` — interview, podcast, 1:1
 - `references/workflows/meeting.md` — meeting, call, standup

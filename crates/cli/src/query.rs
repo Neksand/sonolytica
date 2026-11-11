@@ -14,7 +14,7 @@ use serde::Serialize;
 use sonolytica_core::{
     AcousticSummary, AnalysisBlock, AnalysisConfig, Bpm, Capability, Chord, Document, KeyEstimate,
     Loudness, MediaInfo, MediaTime, MusicSummary, RunRecord, RunStatus, Section, Segment,
-    SegmentKind, SpeakerId, TimeRange, Warning, Word,
+    SegmentKind, SpeakerId, SpeechSummary, TimeRange, Warning, Word,
 };
 
 /// Segment kinds a document can contain. Kept explicit so `--type` rejects a
@@ -165,6 +165,14 @@ pub enum QueryCommand {
         #[arg(long)]
         json: bool,
     },
+    /// One compact overview: media, runs, speech, speakers, chapters, counts
+    Brief {
+        /// Document produced by `sonolytica analyze`
+        doc: PathBuf,
+        /// Emit typed JSON on stdout instead of a table
+        #[arg(long)]
+        json: bool,
+    },
     /// Media, counts, analyses, runs and warnings
     Summary {
         /// Document produced by `sonolytica analyze`
@@ -218,6 +226,7 @@ pub fn run(command: QueryCommand) -> Result<()> {
             max,
             json,
         ),
+        QueryCommand::Brief { doc, json } => brief(&load(&doc)?, json),
         QueryCommand::Summary { doc, json } => summary(&load(&doc)?, json),
     }
 }
@@ -536,16 +545,17 @@ fn words(doc: &Document, segment: u32, json: bool) -> Result<()> {
 }
 
 // ------------------------------------------------------------------ speakers
-fn speakers(doc: &Document, json: bool) -> Result<()> {
-    #[derive(Default)]
-    struct Acc {
-        duration: MediaTime,
-        turns: u32,
-        first: Option<MediaTime>,
-        last: Option<MediaTime>,
-    }
+#[derive(Default)]
+struct SpeakerAcc {
+    duration: MediaTime,
+    turns: u32,
+    first: Option<MediaTime>,
+    last: Option<MediaTime>,
+}
 
-    let mut acc: BTreeMap<&SpeakerId, Acc> = BTreeMap::new();
+/// Speaking time per speaker, longest first. Shared by `speakers` and `brief`.
+fn speaker_views(doc: &Document) -> Vec<SpeakerView<'_>> {
+    let mut acc: BTreeMap<&SpeakerId, SpeakerAcc> = BTreeMap::new();
     for segment in doc.segments_of_kind("speaker_turn") {
         let SegmentKind::SpeakerTurn { speaker, .. } = &segment.kind else {
             continue;
@@ -581,6 +591,11 @@ fn speakers(doc: &Document, json: bool) -> Result<()> {
             .cmp(&a.speech_duration_us)
             .then_with(|| a.id.cmp(b.id))
     });
+    speakers
+}
+
+fn speakers(doc: &Document, json: bool) -> Result<()> {
+    let speakers = speaker_views(doc);
 
     if json {
         emit(&SpeakersOutput {
@@ -620,7 +635,39 @@ const CHAPTER_MERGE_GAP: MediaTime = MediaTime::from_millis(5_000);
 const MIN_CHAPTER: MediaTime = MediaTime::from_millis(2_000);
 
 fn chapters(doc: &Document, min_gap: &str, json: bool) -> Result<()> {
-    let min_gap = parse_time(min_gap)?;
+    let chapters = chapter_views(doc, parse_time(min_gap)?);
+
+    if json {
+        emit(&ChaptersOutput {
+            count: chapters.len(),
+            chapters,
+        })
+    } else {
+        if chapters.is_empty() {
+            println!("(none)");
+            return Ok(());
+        }
+        for chapter in &chapters {
+            println!(
+                "{}–{}  {:<12}  {}  [{} seg]",
+                chapter.start_display,
+                chapter.end_display,
+                if chapter.speakers.is_empty() {
+                    "-".to_string()
+                } else {
+                    chapter.speakers.join(", ")
+                },
+                chapter.title_hint.as_deref().unwrap_or(""),
+                chapter.segment_count
+            );
+        }
+        Ok(())
+    }
+}
+
+/// Chapters from structure: long silence, speaker change, scene cut. Shared by
+/// `chapters` and `brief`.
+fn chapter_views(doc: &Document, min_gap: MediaTime) -> Vec<ChapterView<'_>> {
     let end = doc.duration();
     let end = if end == MediaTime::ZERO {
         MediaTime::MAX
@@ -678,7 +725,7 @@ fn chapters(doc: &Document, min_gap: &str, json: bool) -> Result<()> {
         }
     }
 
-    let chapters: Vec<ChapterView<'_>> = merged
+    merged
         .iter()
         .map(|range| {
             let segments = doc.segments_in(*range);
@@ -697,34 +744,7 @@ fn chapters(doc: &Document, min_gap: &str, json: bool) -> Result<()> {
                 segment_count: segments.len(),
             }
         })
-        .collect();
-
-    if json {
-        emit(&ChaptersOutput {
-            count: chapters.len(),
-            chapters,
-        })
-    } else {
-        if chapters.is_empty() {
-            println!("(none)");
-            return Ok(());
-        }
-        for chapter in &chapters {
-            println!(
-                "{}–{}  {:<12}  {}  [{} seg]",
-                chapter.start_display,
-                chapter.end_display,
-                if chapter.speakers.is_empty() {
-                    "-".to_string()
-                } else {
-                    chapter.speakers.join(", ")
-                },
-                chapter.title_hint.as_deref().unwrap_or(""),
-                chapter.segment_count
-            );
-        }
-        Ok(())
-    }
+        .collect()
 }
 
 /// First words of the first utterance in a range. A hint for the reader, never
@@ -820,10 +840,7 @@ fn frames(
 
 // --------------------------------------------------------------------- music
 fn music(doc: &Document, json: bool) -> Result<()> {
-    let found = doc.analyses.iter().find_map(|block| match block {
-        AnalysisBlock::Music(summary) => Some(summary),
-        _ => None,
-    });
+    let found = analysis_music(doc);
 
     match found {
         Some(summary) if json => emit(&MusicView::new(summary)),
@@ -897,10 +914,7 @@ fn print_music(summary: &MusicSummary) {
 // ------------------------------------------------------------------ acoustic
 
 fn acoustic(doc: &Document, json: bool) -> Result<()> {
-    let found = doc.analyses.iter().find_map(|block| match block {
-        AnalysisBlock::Acoustic(summary) => Some(summary),
-        _ => None,
-    });
+    let found = analysis_acoustic(doc);
 
     match found {
         Some(summary) if json => emit(&AcousticView::new(summary)),
@@ -974,6 +988,318 @@ fn runs(doc: &Document, json: bool) -> Result<()> {
     Ok(())
 }
 
+// --------------------------------------------------------------------- brief
+
+/// Chapters shown by `brief`; the document can hold many more.
+const BRIEF_CHAPTERS: usize = 5;
+/// Speakers shown by `brief` (Sortformer caps at 4, pyannote at 12).
+const BRIEF_SPEAKERS: usize = 8;
+/// Same 1.2 s that `query chapters` uses by default.
+const BRIEF_CHAPTER_GAP: MediaTime = MediaTime::from_millis(1_200);
+
+fn analysis_speech(doc: &Document) -> Option<&SpeechSummary> {
+    doc.analyses.iter().find_map(|block| match block {
+        AnalysisBlock::Speech(summary) => Some(summary),
+        _ => None,
+    })
+}
+
+fn analysis_music(doc: &Document) -> Option<&MusicSummary> {
+    doc.analyses.iter().find_map(|block| match block {
+        AnalysisBlock::Music(summary) => Some(summary),
+        _ => None,
+    })
+}
+
+fn analysis_acoustic(doc: &Document) -> Option<&AcousticSummary> {
+    doc.analyses.iter().find_map(|block| match block {
+        AnalysisBlock::Acoustic(summary) => Some(summary),
+        _ => None,
+    })
+}
+
+fn brief(doc: &Document, json: bool) -> Result<()> {
+    let summary = analysis_speech(doc);
+    let speech_segments: Vec<&Segment> = doc.segments_of_kind("speech").collect();
+    let turns = doc.dialogue();
+    let has_speech = summary.is_some() || !speech_segments.is_empty() || !turns.is_empty();
+
+    let word_count = summary.map_or_else(
+        || {
+            speech_segments
+                .iter()
+                .map(|segment| match &segment.kind {
+                    SegmentKind::Speech { words, .. } => words.len() as u64,
+                    _ => 0,
+                })
+                .sum()
+        },
+        |speech| speech.word_count,
+    );
+    let language = summary
+        .and_then(|speech| speech.language.clone())
+        .or_else(|| {
+            speech_segments
+                .iter()
+                .find_map(|segment| match &segment.kind {
+                    SegmentKind::Speech { language, .. } => language.clone(),
+                    _ => None,
+                })
+        });
+    let speaker_count = summary.map_or_else(
+        || u32::try_from(doc.speakers().len()).unwrap_or(0),
+        |speech| speech.speaker_count,
+    );
+    let speech = has_speech.then(|| BriefSpeech {
+        word_count,
+        language,
+        speaker_count,
+        speech_ratio: summary.map(|speech| speech.speech_ratio),
+        speech_duration_us: summary.map(|speech| speech.speech_duration.micros()),
+    });
+
+    let all_chapters = chapter_views(doc, BRIEF_CHAPTER_GAP);
+    let chapter_count = all_chapters.len();
+    let all_speakers = speaker_views(doc);
+    let speaker_total = all_speakers.len();
+    let video = BriefVideo {
+        scenes: doc.segments_of_kind("scene").count(),
+        keyframes: doc
+            .artifacts
+            .iter()
+            .filter(|artifact| artifact.kind == "keyframe")
+            .count(),
+        text_overlays: doc.segments_of_kind("text_overlay").count(),
+    };
+    let music = analysis_music(doc).map(|music| BriefMusic {
+        bpm: music.bpm.as_ref().map(|bpm| bpm.value),
+        key: music.key.as_ref().map(|key| {
+            format!(
+                "{} {}",
+                key.tonic.name(),
+                if key.mode == sonolytica_core::Mode::Major {
+                    "major"
+                } else {
+                    "minor"
+                }
+            )
+        }),
+        section_count: music.sections.len(),
+    });
+    let acoustic = analysis_acoustic(doc).map(|acoustic| BriefAcoustic {
+        peak_dbfs: acoustic.peak_dbfs,
+        lra_lu: acoustic.dynamic_range_lu,
+        silence_count: acoustic.silence.len(),
+    });
+    let runs: Vec<BriefRun<'_>> = doc
+        .runs
+        .iter()
+        .map(|run| BriefRun {
+            capability: run.capability,
+            provider: &run.provider,
+            status: status_of(run).0,
+            duration_ms: run.duration_ms,
+        })
+        .collect();
+
+    if json {
+        return emit(&BriefOutput {
+            media: BriefMedia {
+                path: &doc.media.path,
+                duration_us: doc.duration().micros(),
+                duration_display: doc.duration().to_string(),
+                sha256: doc.media.sha256.as_deref(),
+                has_video: doc.media.has_video(),
+            },
+            config: BriefConfig {
+                modules: &doc.config.modules,
+                language: doc.config.language.as_deref(),
+                asr_model: doc.config.asr_model.as_deref(),
+                align_words: doc.config.align_words,
+            },
+            complete: doc.is_complete(),
+            runs,
+            warnings: &doc.warnings,
+            speech,
+            speaker_count: speaker_total,
+            speakers: all_speakers.into_iter().take(BRIEF_SPEAKERS).collect(),
+            chapter_count,
+            chapters: all_chapters.into_iter().take(BRIEF_CHAPTERS).collect(),
+            video,
+            music,
+            acoustic,
+        });
+    }
+
+    println!(
+        "file       {}  {}  {}",
+        doc.media.path,
+        doc.duration(),
+        if doc.media.has_video() {
+            "video"
+        } else {
+            "audio"
+        }
+    );
+    println!("sha256     {}", doc.media.sha256.as_deref().unwrap_or("-"));
+    let modules = doc
+        .config
+        .modules
+        .iter()
+        .map(|capability| capability.as_str())
+        .collect::<Vec<_>>()
+        .join(",");
+    print!("modules    {modules}");
+    if let Some(language) = &doc.config.language {
+        print!(" · language {language}");
+    }
+    if let Some(model) = &doc.config.asr_model {
+        print!(" · asr {model}");
+    }
+    if doc.config.align_words {
+        print!(" · align");
+    }
+    println!();
+    println!(
+        "status     {}",
+        if doc.is_complete() {
+            "complete"
+        } else {
+            "not complete (see warnings/runs)"
+        }
+    );
+    if runs.is_empty() {
+        println!("runs       (none)");
+    } else {
+        let line = doc
+            .runs
+            .iter()
+            .map(|run| {
+                let (status, reason) = status_of(run);
+                let mut text = format!(
+                    "{} {} {status} {} ms",
+                    run.capability, run.provider, run.duration_ms
+                );
+                if let Some(reason) = reason {
+                    let _ = write!(text, " ({reason})");
+                }
+                text
+            })
+            .collect::<Vec<_>>()
+            .join(" · ");
+        println!("runs       {line}");
+    }
+
+    match &speech {
+        Some(speech) => {
+            let ratio = speech.speech_ratio.map_or_else(String::new, |ratio| {
+                format!(" · {:.0}% of media", ratio * 100.0)
+            });
+            println!(
+                "speech     {} words · {} · {} · {}{ratio}",
+                speech.word_count,
+                count_label(speech.speaker_count as usize, "speaker", "speakers"),
+                speech.language.as_deref().unwrap_or("language ?"),
+                speech.speech_duration_us.map_or_else(
+                    || "duration ?".to_string(),
+                    |micros| MediaTime::from_micros(micros).to_string()
+                )
+            );
+        }
+        None => println!("speech     (none)"),
+    }
+
+    if all_speakers.is_empty() {
+        println!("speakers   (none)");
+    } else {
+        for (index, speaker) in all_speakers.iter().take(BRIEF_SPEAKERS).enumerate() {
+            let label = if index == 0 {
+                "speakers  "
+            } else {
+                "          "
+            };
+            println!(
+                "{label} {:<4} {:>9.3} s  {:>2} {}  {}–{}",
+                speaker.id,
+                speaker.speech_duration_us as f64 / 1e6,
+                speaker.turn_count,
+                if speaker.turn_count == 1 {
+                    "turn "
+                } else {
+                    "turns"
+                },
+                MediaTime::from_micros(speaker.first_start_us),
+                MediaTime::from_micros(speaker.last_end_us)
+            );
+        }
+        if speaker_total > BRIEF_SPEAKERS {
+            println!("           … {} more", speaker_total - BRIEF_SPEAKERS);
+        }
+    }
+
+    if all_chapters.is_empty() {
+        println!("chapters   (none)");
+    } else {
+        println!("chapters   {} total", chapter_count);
+        for chapter in all_chapters.iter().take(BRIEF_CHAPTERS) {
+            println!(
+                "           {}–{}  {:<8}  {}",
+                chapter.start_display,
+                chapter.end_display,
+                if chapter.speakers.is_empty() {
+                    "-".to_string()
+                } else {
+                    chapter.speakers.join(",")
+                },
+                chapter.title_hint.as_deref().unwrap_or("")
+            );
+        }
+        if chapter_count > BRIEF_CHAPTERS {
+            println!("           … {} more", chapter_count - BRIEF_CHAPTERS);
+        }
+    }
+
+    if doc.media.has_video() || video.scenes > 0 {
+        println!(
+            "video      {} · {} · {}",
+            count_label(video.scenes, "scene", "scenes"),
+            count_label(video.keyframes, "keyframe", "keyframes"),
+            count_label(video.text_overlays, "text overlay", "text overlays")
+        );
+    }
+    if let Some(music) = &music {
+        println!(
+            "music      {} · {} · {}",
+            music
+                .bpm
+                .map_or_else(|| "tempo ?".to_string(), |bpm| format!("{bpm:.1} BPM")),
+            music.key.as_deref().unwrap_or("key ?"),
+            count_label(music.section_count, "section", "sections")
+        );
+    }
+    if let Some(acoustic) = &acoustic {
+        println!(
+            "acoustic   peak {} · LRA {} · {}",
+            acoustic
+                .peak_dbfs
+                .map_or_else(|| "?".to_string(), |peak| format!("{peak:.1} dBFS")),
+            acoustic
+                .lra_lu
+                .map_or_else(|| "?".to_string(), |lra| format!("{lra:.1} LU")),
+            count_label(acoustic.silence_count, "silence region", "silence regions")
+        );
+    }
+    if doc.warnings.is_empty() {
+        println!("warnings   none");
+    } else {
+        println!("warnings   {} total", doc.warnings.len());
+        for warning in &doc.warnings {
+            println!("           [{}] {}", warning.code, warning.message);
+        }
+    }
+    Ok(())
+}
+
 // ------------------------------------------------------------------- summary
 
 fn summary(doc: &Document, json: bool) -> Result<()> {
@@ -1042,6 +1368,10 @@ fn truncate(text: &str) -> String {
         out.push('…');
     }
     out
+}
+
+fn count_label(count: usize, singular: &str, plural: &str) -> String {
+    format!("{count} {}", if count == 1 { singular } else { plural })
 }
 
 // ------------------------------------------------------------------------ DTOs
@@ -1304,13 +1634,17 @@ struct RunView<'a> {
     reason: Option<&'a str>,
 }
 
+fn status_of(run: &RunRecord) -> (&'static str, Option<&str>) {
+    match &run.status {
+        RunStatus::Complete => ("complete", None),
+        RunStatus::Partial { reason } => ("partial", Some(reason.as_str())),
+        RunStatus::Failed { reason } => ("failed", Some(reason.as_str())),
+    }
+}
+
 impl<'a> RunView<'a> {
     fn new(run: &'a RunRecord) -> Self {
-        let (status, reason) = match &run.status {
-            RunStatus::Complete => ("complete", None),
-            RunStatus::Partial { reason } => ("partial", Some(reason.as_str())),
-            RunStatus::Failed { reason } => ("failed", Some(reason.as_str())),
-        };
+        let (status, reason) = status_of(run);
         Self {
             id: run.id,
             capability: run.capability,
@@ -1322,6 +1656,78 @@ impl<'a> RunView<'a> {
             reason,
         }
     }
+}
+
+#[derive(Debug, Serialize)]
+struct BriefOutput<'a> {
+    media: BriefMedia<'a>,
+    config: BriefConfig<'a>,
+    complete: bool,
+    runs: Vec<BriefRun<'a>>,
+    warnings: &'a [Warning],
+    speech: Option<BriefSpeech>,
+    speaker_count: usize,
+    speakers: Vec<SpeakerView<'a>>,
+    chapter_count: usize,
+    chapters: Vec<ChapterView<'a>>,
+    video: BriefVideo,
+    music: Option<BriefMusic>,
+    acoustic: Option<BriefAcoustic>,
+}
+
+#[derive(Debug, Serialize)]
+struct BriefMedia<'a> {
+    path: &'a str,
+    duration_us: i64,
+    duration_display: String,
+    sha256: Option<&'a str>,
+    has_video: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct BriefConfig<'a> {
+    modules: &'a [Capability],
+    language: Option<&'a str>,
+    asr_model: Option<&'a str>,
+    align_words: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct BriefRun<'a> {
+    capability: Capability,
+    provider: &'a str,
+    status: &'static str,
+    duration_ms: u64,
+}
+
+#[derive(Debug, Serialize)]
+struct BriefSpeech {
+    word_count: u64,
+    language: Option<String>,
+    speaker_count: u32,
+    speech_ratio: Option<f32>,
+    speech_duration_us: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+struct BriefVideo {
+    scenes: usize,
+    keyframes: usize,
+    text_overlays: usize,
+}
+
+#[derive(Debug, Serialize)]
+struct BriefMusic {
+    bpm: Option<f32>,
+    key: Option<String>,
+    section_count: usize,
+}
+
+#[derive(Debug, Serialize)]
+struct BriefAcoustic {
+    peak_dbfs: Option<f32>,
+    lra_lu: Option<f32>,
+    silence_count: usize,
 }
 
 #[derive(Debug, Serialize)]

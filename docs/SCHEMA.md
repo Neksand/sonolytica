@@ -231,6 +231,9 @@ A capability with no provider does **not** create a failed run: it appears in
 Nothing is mutated and no model is loaded.
 
 ```bash
+# One compact overview: media, runs, speech, speakers, chapters, counts
+sonolytica query brief doc.json --json
+
 # Everything that happens between 00:12 and 00:30 (half-open window)
 sonolytica query timeline doc.json --from 00:00:12 --to 00:00:30
 

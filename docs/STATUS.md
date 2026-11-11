@@ -16,8 +16,8 @@ runtime, no GPL.
 
 | | |
 |---|---|
-| Rust | 15 349 lines across 7 crates (`providers` 4 347, `cli` 3 089, `engine` 2 602, `core` 2 080, `dsp` 1 360, `media` 1 226, `eval` 645) |
-| Query commands | 13 (`timeline`, `at`, `search`, `transcript`, `words`, `speakers`, `chapters`, `frames`, `music`, `acoustic`, `runs`, `summary`, `help`) |
+| Rust | 15 858 lines across 7 crates (`providers` 4 347, `cli` 3 598, `engine` 2 602, `core` 2 080, `dsp` 1 360, `media` 1 226, `eval` 645) |
+| Query commands | 14 (`brief`, `timeline`, `at`, `search`, `transcript`, `words`, `speakers`, `chapters`, `frames`, `music`, `acoustic`, `runs`, `summary`, `help`) |
 | Models | 10, all SHA-256 pinned: Silero VAD, whisper tiny/base/small, wav2vec2 aligner, Sortformer 4spk, pyannote segmentation, WeSpeaker, PP-OCRv5 det/rec |
 | Schema | 1.4.0 (`Document::validate`, additive 1.0 → 1.4) |
 | Agent skill | `SKILL.md` (290 lines) + 10 reference files + install guide |
@@ -27,8 +27,8 @@ runtime, no GPL.
 
 | Check | Result |
 |---|---|
-| `cargo test --workspace` | 131 passed, 0 failed |
-| with `full,metal` | 146 passed, 0 failed |
+| `cargo test --workspace` | 134 passed, 0 failed |
+| with `full,metal` | 149 passed, 0 failed |
 | `cargo clippy -D warnings` | clean (default and full) |
 | `cargo fmt --check` | clean |
 | Model-free build | tests pass with no models, no cmake, no ONNX runtime |
@@ -51,6 +51,7 @@ runtime, no GPL.
 | Throughput | realtime factor | **16.9×** on the 240 s hard fixture (17.9× without the VAD gate pass); 14.1× was the 155.6 s pipeline before the gate | full audio pipeline with Sortformer |
 | Russian | transcript | exact | 12 s, `whisper-small --language ru`, 0 word errors on a clean fixture |
 | Agent | answers | **16/20 vs 20/20** easy; **7/16 vs 16/16** hard | no skill vs skill; the hard fixture is a 4 min, 4-voice meeting with no ASR/OCR tools for the baseline |
+| Agent, `query brief` | fresh tokens | easy **9 521** vs 41 399 (skill v3); hard **22 410** in 14 commands, 16/16 | DeepSeek V4.1 Flash, one 2–3 KB brief first; see BENCHMARK |
 
 WER and DER are **pilots**, not leaderboard results: small subsets, one machine,
 and the VoxConverse threshold was calibrated on the same dev files. The numbers
@@ -62,14 +63,19 @@ exist so changes can be judged by deltas, not to claim state of the art.
 
 - video fixture: 5/8 without, 8/8 with; the skill used **43 % fewer fresh
   tokens** (35 013 vs 61 280) because it queried instead of experimenting;
+- with `query brief` (2026-11-12) the easy fixture fell to **9 521 fresh**
+  tokens (41 399 for skill v3) at 8/8, and the hard fixture scored 16/16 at
+  **22 410 fresh** in 14 commands — start with one brief, open references only
+  when needed;
 - Russian fixture: 11/12 without, 12/12 with; here the skill cost **more**
   (34 558 vs 23 131 fresh tokens) because a 12 s voice memo does not need a
   five-stage document;
 - both: zero invented facts, citations with exact ranges, explicit refusals.
 
 The pattern: the skill pays for itself when the media needs diarization, video
-frames or OCR, and is overhead for a short clean recording. It makes the agent
-**honest and citable**, not more perceptive.
+frames or OCR. `query brief` removes most of the fixed reading cost, but a very
+short clean recording is still cheaper with a bare `whisper` call. The skill
+makes the agent **honest and citable**, not more perceptive.
 
 ## Where it stands against the usual alternatives
 
