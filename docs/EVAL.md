@@ -123,6 +123,22 @@ Reading it honestly:
 - This test shard has now been seen. The next report must use a different
   subset (or the full split) to stay honest.
 
+### Tried and rejected: pruning tiny clusters
+
+Hypothesis: over-segmentation comes from 1–4 s noise clusters, so merge any
+cluster shorter than `max(2 s, 1 % of speech)` into the nearest large one.
+
+| | dev | test |
+|---|---|---|
+| before | 15.46 % | 19.90 % |
+| with pruning | 15.61 % | 19.97 % |
+
+It did fix over-segmentation on two-speaker material (`myjoe` 7 → 2,
+`rcxzg` 8 → 4) but caused under-segmentation wherever real speakers are brief:
+`uedkc` 7 → 3, `heolf` 12 → 5, `fsaal` 7 → 5. Net effect is neutral to worse,
+so the change was reverted. A real speaker-count estimate is needed; pruning
+by duration cannot distinguish a cough from a quiet participant.
+
 ## What the numbers say to do next
 
 The planned order was forced alignment, then diarization. The measurements
