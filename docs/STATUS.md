@@ -44,6 +44,8 @@ runtime, no GPL.
 | Diarization | failure mode | speaker count | 2→11 on one file, 12→10 on another; confusion dominates |
 | OCR | lines | 2/2, 6/6, 7/7 CJK | synthetic slides and a terminal screenshot, PP-OCRv5, 0.987 confidence on the benchmark slide |
 | Video | cut accuracy | ±0.5 s | 3-shot synthetic video, 2 fps signatures; colour-cut bug found and fixed |
+| Music | tempo / key | 120.3 vs 120 BPM; C major triad correct | synthetic clicks and sines; sustained-chord tempo correctly reports score 0.0 |
+| Throughput | realtime factor | **21.64×** | 121.7 s full pipeline, 8.28 s wall, all stages complete |
 | Russian | transcript | exact | 12 s, `whisper-small --language ru`, 0 word errors on a clean fixture |
 | Agent | answers | **16/20 vs 20/20** | no skill vs skill across two fixtures, 0 invented facts in both |
 
@@ -102,7 +104,8 @@ frames or OCR, and is overhead for a short clean recording. It makes the agent
   citations, honest gaps — with a known diarization caveat on crowded audio.
 - **Slides / screencasts: strong.** Cuts, keyframes and exact on-screen text.
 - **General video understanding: partial.** Navigation and text, no semantics.
-- **Music: basic.** Measurements, not transcription.
+- **Music: basic but measured.** Tempo and key are correct on synthetic signals
+  with known answers; no notes, bass, sections or instruments.
 - **As an agent interface: the strongest part.** The protocol, schema and
   benchmark are the differentiator; perception is deliberately local and
   replaceable.

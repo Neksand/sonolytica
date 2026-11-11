@@ -157,6 +157,34 @@ No further threshold heuristic is planned. Speaker counting needs a model
 trained for it (Sortformer) or an eigengap/NME estimate over a smoothed
 affinity, not another cut on the same dendrogram.
 
+## Music sanity checks
+
+Synthetic signals with a known answer, 10 s each, `--modules music,acoustic`:
+
+| Signal | Expected | Measured |
+|---|---|---|
+| clicks every 0.5 s | 120 BPM | **120.3 BPM** (0.25 % error), score 0.001 |
+| C4+E4+G4 sines | C major triad | key **C major** (score 0.317), chord **C major** (0.999) |
+| same sustained chord | tempo is undefined | 250 BPM with score **0.0** |
+
+Reading it: tempo is useful when there are onsets and meaningless on a sustained
+chord — which is exactly why confidence is reported. Key and triads are
+template-based and correct on a clean triad; real mixes are harder.
+
+## Throughput
+
+121.7 s of two-voice speech, full five-stage pipeline, on this machine:
+
+```
+vad 374 ms · transcribe 3217 ms · diarize 1442 ms · music 199 ms · acoustic 92 ms
+total stage time 5324 ms · wall 8.28 s · 21.64× realtime
+all stages complete
+```
+
+Model load and process startup are included in the wall time; the stage total
+is what the document records. A 2-hour recording is therefore roughly 5–6
+minutes of analysis here, dominated by ASR.
+
 ## What the numbers say to do next
 
 The planned order was forced alignment, then diarization. The measurements
