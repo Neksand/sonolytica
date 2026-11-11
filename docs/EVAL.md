@@ -171,7 +171,8 @@ Reading it:
   ranges intersect.
 - Limits: at most four speakers; 300 s windows with 10 s overlap and
   activity-based label matching across windows; 469 MB on disk, ~2.8 GB peak
-  RSS on a 4-minute file (5.9 s for the forward pass).
+  RSS on a 4-minute file (5.9 s for the forward pass). Past 10 minutes a
+  `diarization_speaker_cap` warning marks the count as approximate.
 
 Caveat: one fresh shard, six files, one machine. The numbers are a pilot for
 direction, not a leaderboard entry.
@@ -388,6 +389,7 @@ argue for swapping that:
    (test-00003 weighted DER 11.02 → 9.95 %, JER 10.74 → 9.85 %). The remaining
    error is under-segmentation on a 20-minute four-speaker file, so the next
    change is the model's native streaming cache, not another similarity cut.
+   Until then the document warns `diarization_speaker_cap` above 10 minutes.
 2. **Alignment second.** WER 6.05 % is near the model ceiling and deletions are
    1.1 %; alignment improves *when* a word was said (citations, cutting), not
    *what* was said. Still worth doing, but it does not move the headline.

@@ -16,7 +16,7 @@ runtime, no GPL.
 
 | | |
 |---|---|
-| Rust | 15 904 lines across 7 crates (`providers` 4 347, `cli` 3 598, `engine` 2 602, `core` 2 080, `dsp` 1 360, `media` 1 226, `eval` 691) |
+| Rust | 15 933 lines across 7 crates (`providers` 4 347, `cli` 3 598, `engine` 2 631, `core` 2 080, `dsp` 1 360, `media` 1 226, `eval` 691) |
 | Query commands | 14 (`brief`, `timeline`, `at`, `search`, `transcript`, `words`, `speakers`, `chapters`, `frames`, `music`, `acoustic`, `runs`, `summary`, `help`) |
 | Models | 10, all SHA-256 pinned: Silero VAD, whisper tiny/base/small, wav2vec2 aligner, Sortformer 4spk, pyannote segmentation, WeSpeaker, PP-OCRv5 det/rec |
 | Schema | 1.4.0 (`Document::validate`, additive 1.0 → 1.4) |
@@ -27,8 +27,8 @@ runtime, no GPL.
 
 | Check | Result |
 |---|---|
-| `cargo test --workspace` | 135 passed, 0 failed |
-| with `full,metal` | 150 passed, 0 failed |
+| `cargo test --workspace` | 136 passed, 0 failed |
+| with `full,metal` | 151 passed, 0 failed |
 | `cargo clippy -D warnings` | clean (default and full) |
 | `cargo fmt --check` | clean |
 | Model-free build | tests pass with no models, no cmake, no ONNX runtime |
@@ -44,7 +44,7 @@ runtime, no GPL.
 | Diarization | JER | **10.93 %** weighted / **7.67 %** unweighted on `test-00002`; **9.85 %** / **7.34 %** on `test-00003` | frame Jaccard, same collar and mapping as DER |
 | Diarization | speaker count | AHC MAE **5.0** → Sortformer **0.33** (5/6 exact) on the fresh 2-4 speaker subset; **0.00** (6/6) on `test-00003` | 6 files each, 2140 s / 2401 s |
 | Diarization | false alarm | **4.27 → 2.47 %** (`gwloo`) and **13.41 → 6.53 %** (`uicid`); **15.61 → 5.71 %** (`xtdcl`) on fresh data | 1-spk and 2-spk real recordings |
-| Diarization | failure mode | one 20-min 4-speaker file collapses to 2 voices; speaker-turn ranges are clamped to VAD-gated turns (raw `query words` stay complete) | Sortformer caps at 4 |
+| Diarization | failure mode | one 20-min 4-speaker file collapses to 2 voices (warning `diarization_speaker_cap` above 10 min); speaker-turn ranges are clamped to VAD-gated turns (raw `query words` stay complete) | Sortformer caps at 4 |
 | OCR | lines | 2/2, 6/6, 7/7 CJK | synthetic slides and a terminal screenshot, PP-OCRv5, 0.987 confidence on the benchmark slide |
 | Video | cut accuracy | ±0.5 s | 3-shot synthetic video, 2 fps signatures; colour-cut bug found and fixed |
 | Alignment | word drift vs Whisper | **median 110 ms** | wav2vec2 CTC, English, two-voice fixture; 88 % within 600 ms |
@@ -96,7 +96,8 @@ makes the agent **honest and citable**, not more perceptive.
 1. **Speaker count is fixed for 2-4 speakers, not for long files.** Sortformer
    gets six of six counts right on freshly seen `test-00003`, and the 0.70 VAD
    gate cuts false alarm on noisy recordings (weighted DER 11.02 → 9.95 %).
-   A 20-minute four-speaker file still collapses to two voices. The next
+   A 20-minute four-speaker file still collapses to two voices, but the document
+   now carries a `diarization_speaker_cap` warning above 10 minutes. The next
    attempt is the model's native streaming cache.
 2. **One-fixture benchmark.** Ten questions, synthetic media. Real interviews,
    meetings, music and long videos are untested.

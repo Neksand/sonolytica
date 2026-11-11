@@ -19,14 +19,14 @@ OCR text, and provenance on every segment. Agents read it via
 
 | | |
 |---|---|
-| Rust | 15 904 lines, 7 crates: `providers` (4.3k), `cli` (3.6k), `engine` (2.6k), `core` (2.1k), `dsp` (1.4k), `media` (1.2k), `eval` (0.7k) |
+| Rust | 15 933 lines, 7 crates: `providers` (4.3k), `cli` (3.6k), `engine` (2.6k), `core` (2.1k), `dsp` (1.4k), `media` (1.2k), `eval` (0.7k) |
 | Binary | `sonolytica` (`sonolytica-cli`) |
 | SDK | `sonolytica-engine` (`Engine::analyze`) |
 | Schema | **1.4.0**, additive 1.0 → 1.4 |
 | Models | 10, SHA-256 pinned, in `~/.cache/sonolytica/models` |
 | Query commands | 14: brief, timeline, at, search, transcript, words, speakers, chapters, frames, music, acoustic, runs, summary, help |
 | Skill | `skills/sonolytica/` (SKILL.md + 9 references + install README) |
-| Tests | **135** model-free / **150** all-features |
+| Tests | **136** model-free / **151** all-features |
 
 Features: `sonolytica-cli --features full-metal` = whisper + silero + diarize +
 ocr + align + metal. `cargo test --workspace` runs without models/cmake/ORT.
@@ -210,9 +210,10 @@ Token accounting: OpenCode stores per-session totals in
    vs 5.0), 6.40 % vs 8.99 % DER on files ≤7 min, and splits overlap into two
    simultaneous turns. One 20-minute 4-speaker file still collapses to two
    voices; noisy single-speaker files show false alarm. The 0.70 VAD gate now
-   cuts that (fresh `test-00003`: weighted DER 9.95 %, 6/6 counts exact); next
-   is the model's native streaming cache for long files and an AMI subset.
-   pyannote remains the fallback.
+   cuts that (fresh `test-00003`: weighted DER 9.95 %, 6/6 counts exact). Files
+   longer than 10 minutes carry a `diarization_speaker_cap` warning; the next
+   step is the model's native streaming cache and an AMI subset. pyannote
+   remains the fallback.
 2. **Overlap text attribution — JER shipped, tie-break rejected.** `sonolytica-eval
    der` now prints JER (test-00003 **9.85 % weighted / 7.34 % unweighted**) and
    `scripts/eval/der_voxconverse.py` aggregates it. A merge tie-break changed

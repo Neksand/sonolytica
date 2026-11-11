@@ -41,6 +41,10 @@ pub use merge::{Utterance, build_speaker_turns};
 
 const SPEECH_RATE: u32 = 16_000;
 const MUSIC_RATE: u32 = 32_000;
+/// Sortformer's 4-speaker cap becomes unreliable on long recordings: after
+/// 10 minutes voices start merging. The document says so instead of pretending
+/// the count is exact.
+const SPEAKER_CAP_WARN_AFTER: MediaTime = MediaTime::from_millis(600_000);
 /// Silero speech probability used for the diarization gate. The configured
 /// 0.45 is tuned for ASR recall and calls music and room noise speech; at 0.70
 /// the same regions reject non-speech while clean-speech WER is unchanged.
@@ -536,6 +540,15 @@ impl Engine {
                     started,
                     status,
                 ));
+                if provider_info
+                    .as_ref()
+                    .is_some_and(|info| info.name == "sortformer-4spk-v2")
+                {
+                    if let Some(message) = speaker_cap_warning(builder.document().duration()) {
+                        builder
+                            .warn(Warning::new("diarization_speaker_cap", message).with_run(run));
+                    }
+                }
                 if gated_out > 0 {
                     builder.warn(
                         Warning::new(
@@ -1101,6 +1114,16 @@ fn merge_speech_regions(regions: &[SpeechRegion], limit: MediaTime) -> Vec<TimeR
     out
 }
 
+/// A long Sortformer run is not just "up to four speakers" — past ten minutes
+/// the model starts merging voices, so the document must say the count is
+/// approximate rather than let an agent cite it as fact.
+fn speaker_cap_warning(duration: MediaTime) -> Option<&'static str> {
+    (duration > SPEAKER_CAP_WARN_AFTER).then_some(
+        "Sortformer tracks at most 4 speakers; files longer than 10 minutes can merge voices. \
+         Treat the speaker count and short turns as approximate.",
+    )
+}
+
 fn union_duration(ranges: Vec<TimeRange>) -> MediaTime {
     if ranges.is_empty() {
         return MediaTime::ZERO;
@@ -1235,6 +1258,12 @@ mod tests {
         ];
         assert_eq!(union_duration(ranges), MediaTime::from_millis(4_000));
         assert_eq!(union_duration(Vec::new()), MediaTime::ZERO);
+    }
+
+    #[test]
+    fn speaker_cap_warning_starts_after_ten_minutes() {
+        assert!(speaker_cap_warning(MediaTime::from_millis(600_000)).is_none());
+        assert!(speaker_cap_warning(MediaTime::from_millis(600_001)).is_some());
     }
 
     #[test]

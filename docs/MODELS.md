@@ -43,7 +43,10 @@ list`. If a file's digest does not match, it is rejected and the run reports a
   simultaneous turns, which the pyannote path only flags. It tracks at most
   four speakers; beyond that voices are collapsed, so the doc says "up to 4".
   Long files are processed in 300 s windows with 10 s overlap and the speaker
-  channels are matched by activity co-occurrence across the seam.
+  channels are matched by activity co-occurrence across the seam. Past ten
+  minutes voices can merge even with fewer than four speakers; the document
+  carries a `diarization_speaker_cap` warning so an agent cannot cite the count
+  as exact.
 - **pyannote segmentation-3.0** emits powerset classes on 10 s windows:
   silence, three local speakers, or a two-speaker overlap. It remains the
   fallback when Sortformer is not installed or inference fails. SONOLYTICA uses

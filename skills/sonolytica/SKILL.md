@@ -242,6 +242,9 @@ model (`--model whisper-small`).
 
 - Speaker labels (`S1`, `S2`) are local to one document; they are not people.
   Never attach a name unless the user supplied it and the document supports it.
+- Sortformer tracks at most four speakers. Above 10 minutes the document adds a
+  `diarization_speaker_cap` warning: the count is approximate, so say "at least
+  N", never an exact count.
 - `overlap: true` means two people spoke at once. With Sortformer the document
   has two simultaneous `speaker_turn` segments; on the pyannote fallback it only
   flags the overlap. The transcript is still one ASR stream, so do not invent
