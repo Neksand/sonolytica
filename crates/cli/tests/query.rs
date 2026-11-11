@@ -372,6 +372,67 @@ fn summary_reports_counts_and_media() {
 }
 
 #[test]
+fn chapters_split_on_speaker_change() {
+    let path = fixture_path();
+    let json = query_json(&["query", "chapters", path.to_str().unwrap(), "--json"]);
+    assert_eq!(json["count"], 2);
+    let chapters = json["chapters"].as_array().unwrap();
+    assert_eq!(chapters[0]["start_display"], "00:00:00.000");
+    assert_eq!(chapters[0]["title_hint"], "Hello pricing team");
+    assert_eq!(chapters[0]["speakers"], serde_json::json!(["S1"]));
+    assert_eq!(chapters[1]["start"], 6_000_000);
+    let second_speakers = chapters[1]["speakers"].as_array().unwrap();
+    assert!(second_speakers.iter().any(|speaker| speaker == "S2"));
+    assert!(second_speakers.iter().any(|speaker| speaker == "S1"));
+}
+
+#[test]
+fn transcript_is_untruncated_and_carries_the_speaker() {
+    let path = fixture_path();
+    let json = query_json(&["query", "transcript", path.to_str().unwrap(), "--json"]);
+    assert_eq!(json["count"], 3);
+    let segments = json["segments"].as_array().unwrap();
+    assert_eq!(segments[0]["speaker"], "S1");
+    assert_eq!(segments[0]["text"], "Hello pricing team");
+    assert_eq!(segments[1]["speaker"], "S2");
+    // Text is never truncated in JSON or in the transcript table.
+    assert_eq!(segments[2]["text"], "closing remarks about pricing");
+
+    let windowed = query_json(&[
+        "query",
+        "transcript",
+        path.to_str().unwrap(),
+        "--from",
+        "6s",
+        "--to",
+        "9s",
+        "--json",
+    ]);
+    assert_eq!(windowed["count"], 1);
+    assert_eq!(windowed["segments"][0]["text"], "second part");
+}
+
+#[test]
+fn words_are_available_per_segment_and_turns_point_at_their_parent() {
+    let path = fixture_path();
+    let doc = path.to_str().unwrap();
+
+    let json = query_json(&["query", "words", doc, "0", "--json"]);
+    assert_eq!(json["segment"], 0);
+    assert_eq!(json["speaker"], "S1");
+    let words = json["words"].as_array().unwrap();
+    assert_eq!(words[1]["text"], "pricing");
+    assert_eq!(words[1]["start"], 1_000_000);
+    assert_eq!(words[1]["end"], 1_600_000);
+
+    // Segment 1 is a speaker turn: the words live in parent segment 0.
+    let output = query(&["query", "words", doc, "1"]);
+    assert_eq!(output.status.code(), Some(1));
+    let message = String::from_utf8_lossy(&output.stderr);
+    assert!(message.contains("parent segment 0"), "got: {message}");
+}
+
+#[test]
 fn human_output_is_plain_and_readable() {
     let path = fixture_path();
     let output = query(&["query", "timeline", path.to_str().unwrap()]);

@@ -3,6 +3,26 @@
 Milestones are ordered by technical dependency, not by marketing appeal. Each
 phase has an acceptance gate that must be demonstrated, not asserted.
 
+## Current cycle (2026-11)
+
+Delivered: the typed `query` interface (no `jq`), `--profile
+structure|standard|ultra`, derived chapters, and the agent skill rewritten as a
+citation protocol with references and workflows.
+
+Ordered next, each gated on a measured number:
+
+1. **Baselines** — WER on LibriSpeech test-clean, DER on AMI/VoxConverse;
+   recorded in `docs/EVAL.md` with dataset, model, parameters and date.
+2. **Speech quality** — forced alignment (wav2vec2 CTC), VAD-boundary word loss,
+   overlap-aware diarization.
+3. **Video** — frame sampler, shot boundaries, keyframe deduplication,
+   `artifacts`, `query scenes/frames`, OCR.
+4. **Music depth** — section segmentation, note transcription, stems/bass.
+5. **MCP** — only for a shell-less client.
+
+The skill is the interface; it can never be stronger than the document, so
+capability work comes before skill work on any new modality.
+
 ## Phase 0 — Foundation ✅
 
 Workspace, domain model, provenance, configuration, invariant validator,

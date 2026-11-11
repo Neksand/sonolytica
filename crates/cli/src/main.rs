@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use anyhow::{Context, Result, bail};
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use sonolytica_core::{AnalysisBlock, AnalysisConfig, Capability, Document, MediaTime, RunStatus};
 use sonolytica_engine::Engine;
 use sonolytica_providers::{ModelStore, default_model_dir, models::MODELS};
@@ -66,6 +66,9 @@ struct InspectArgs {
 struct AnalyzeArgs {
     /// Input media file
     file: PathBuf,
+    /// Preset: structure (no transcript), standard, ultra (all + no silent degradation)
+    #[arg(long, value_enum, conflicts_with = "modules")]
+    profile: Option<Profile>,
     /// Write the document here instead of stdout ("-" means stdout)
     #[arg(short, long)]
     out: Option<PathBuf>,
@@ -87,9 +90,34 @@ struct AnalyzeArgs {
     /// Print a human summary to stderr as well as JSON
     #[arg(long)]
     summary: bool,
-    /// Exit with status 2 if any analysis stage failed
+    /// Exit with status 2 if any stage failed or a requested capability did not run
     #[arg(long)]
     strict: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum Profile {
+    /// Speech regions, speakers, music and acoustic structure — no transcript
+    Structure,
+    /// Everything the audio pipeline can do, with a transcript
+    Standard,
+    /// Standard plus a hard guarantee: exit 2 if any requested capability failed
+    /// or did not run at all
+    Ultra,
+}
+
+impl Profile {
+    fn modules(self) -> &'static [Capability] {
+        match self {
+            Self::Structure => &[
+                Capability::Vad,
+                Capability::Diarize,
+                Capability::Music,
+                Capability::Acoustic,
+            ],
+            Self::Standard | Self::Ultra => &Capability::AUDIO,
+        }
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -171,7 +199,9 @@ async fn run(cli: Cli) -> Result<ExitCode> {
             if args.summary {
                 eprintln!("{}", summarize(&document));
             }
-            if args.strict && !document.is_complete() {
+            if (args.strict || args.profile == Some(Profile::Ultra))
+                && is_degraded(&document, &config)
+            {
                 return Ok(ExitCode::from(2));
             }
             Ok(ExitCode::SUCCESS)
@@ -300,9 +330,30 @@ fn build_config(args: &AnalyzeArgs) -> Result<AnalysisConfig> {
             parsed.push(capability);
         }
         config.modules = parsed;
+    } else if let Some(profile) = args.profile {
+        config.modules = profile.modules().to_vec();
     }
     config.normalize();
     Ok(config)
+}
+
+/// True when the document is weaker than what was asked for: a stage failed, or
+/// a requested capability produced no run at all (a missing model is a warning,
+/// so `is_complete()` alone would call that a success).
+fn is_degraded(document: &Document, config: &AnalysisConfig) -> bool {
+    if !document.is_complete() {
+        return true;
+    }
+    config
+        .modules
+        .iter()
+        .filter(|capability| **capability != Capability::Inspect)
+        .any(|capability| {
+            !document
+                .runs
+                .iter()
+                .any(|run| run.capability == *capability)
+        })
 }
 
 fn describe_media(document: &Document) -> String {
@@ -456,4 +507,60 @@ fn schema_example() -> Result<String> {
     };
     let document = Document::new(media, AnalysisConfig::default());
     Ok(document.to_json_pretty()?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sonolytica_core::MediaInfo;
+
+    #[test]
+    fn profiles_expand_to_the_expected_capabilities() {
+        assert!(
+            !Profile::Structure
+                .modules()
+                .contains(&Capability::Transcribe)
+        );
+        assert!(
+            Profile::Structure.modules().contains(&Capability::Diarize),
+            "structure still separates speakers"
+        );
+        assert!(
+            Profile::Standard
+                .modules()
+                .contains(&Capability::Transcribe)
+        );
+        assert!(Profile::Ultra.modules().contains(&Capability::Transcribe));
+    }
+
+    #[test]
+    fn profile_and_modules_conflict() {
+        let error = Cli::try_parse_from([
+            "sonolytica",
+            "analyze",
+            "a.wav",
+            "--profile",
+            "structure",
+            "--modules",
+            "vad",
+        ])
+        .unwrap_err();
+        assert_eq!(error.kind(), clap::error::ErrorKind::ArgumentConflict);
+    }
+
+    #[test]
+    fn a_capability_without_a_run_is_degraded() {
+        let document = Document::new(MediaInfo::default(), AnalysisConfig::default());
+        let requested = AnalysisConfig {
+            modules: vec![Capability::Vad],
+            ..AnalysisConfig::default()
+        };
+        assert!(is_degraded(&document, &requested));
+
+        let nothing_requested = AnalysisConfig {
+            modules: Vec::new(),
+            ..AnalysisConfig::default()
+        };
+        assert!(!is_degraded(&document, &nothing_requested));
+    }
 }

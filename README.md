@@ -74,12 +74,13 @@ sonolytica models fetch \
   silero-vad-v5 whisper-base.en \
   pyannote-segmentation-3.0 wespeaker-campplus
 
-# 3. Analyse
-sonolytica analyze interview.mp3 --out interview.json --summary
+# 3. Analyse (--profile structure | standard | ultra)
+sonolytica analyze interview.mp3 --out interview.json --profile standard --summary
 
 # 4. Ask the document questions — typed output, no jq required
 sonolytica query summary interview.json
 sonolytica query timeline interview.json --from 00:00:10 --to 00:00:20
+sonolytica query transcript interview.json        # full text, untruncated
 sonolytica query search interview.json pricing
 sonolytica query speakers interview.json
 sonolytica query runs interview.json          # which stages failed, and why
@@ -87,6 +88,21 @@ sonolytica query runs interview.json          # which stages failed, and why
 
 Times accept `HH:MM:SS.mmm`, `MM:SS`, `12.5s`, `950ms` or raw microseconds.
 Every subcommand takes `--json` for a typed object on stdout.
+
+`query chapters` derives chapters from silences, speaker changes and scene cuts —
+no language model, no invented titles.
+
+### Profiles
+
+| Profile | What runs | Use when |
+|---|---|---|
+| `structure` | VAD, diarization, music/acoustic — no transcript | orientation, first pass, music-only |
+| `standard` | everything, with a transcript | default; any content question |
+| `ultra` | standard + exit 2 if a requested capability failed or never ran | automation that must not silently degrade |
+
+`--profile` and `--modules` are mutually exclusive. `ultra` does not add detail
+yet — forced alignment, note transcription, OCR and keyframes are separate
+milestones; until then it means "nothing silently skipped".
 
 `analyze` emits one versioned JSON document (`schema_version: 1.0.0`). A
 compact excerpt:

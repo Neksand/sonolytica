@@ -4,7 +4,7 @@
 //! without `jq`: every result is either a stable plain-text table or a typed
 //! JSON object. Nothing here mutates the document or touches a model.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
@@ -80,6 +80,30 @@ pub enum QueryCommand {
         #[arg(long)]
         json: bool,
     },
+    /// The whole transcript, untruncated, one line per utterance
+    Transcript {
+        /// Document produced by `sonolytica analyze`
+        doc: PathBuf,
+        /// Only utterances intersecting this window start
+        #[arg(long)]
+        from: Option<String>,
+        /// Only utterances intersecting this window end
+        #[arg(long)]
+        to: Option<String>,
+        /// Emit typed JSON on stdout instead of a table
+        #[arg(long)]
+        json: bool,
+    },
+    /// Every word of one speech segment, with its own range
+    Words {
+        /// Document produced by `sonolytica analyze`
+        doc: PathBuf,
+        /// Segment id from `query timeline`
+        segment: u32,
+        /// Emit typed JSON on stdout instead of a table
+        #[arg(long)]
+        json: bool,
+    },
     /// Speaking time per speaker, longest first
     Speakers {
         /// Document produced by `sonolytica analyze`
@@ -112,6 +136,17 @@ pub enum QueryCommand {
         #[arg(long)]
         json: bool,
     },
+    /// Chapter boundaries from silences, speaker changes and scene cuts
+    Chapters {
+        /// Document produced by `sonolytica analyze`
+        doc: PathBuf,
+        /// Minimum silence that starts a new chapter
+        #[arg(long, default_value = "1.2s")]
+        min_gap: String,
+        /// Emit typed JSON on stdout instead of a table
+        #[arg(long)]
+        json: bool,
+    },
     /// Media, counts, analyses, runs and warnings
     Summary {
         /// Document produced by `sonolytica analyze`
@@ -139,10 +174,18 @@ pub fn run(command: QueryCommand) -> Result<()> {
         ),
         QueryCommand::At { doc, time, json } => at(&load(&doc)?, &time, json),
         QueryCommand::Search { doc, needle, json } => search(&load(&doc)?, &needle, json),
+        QueryCommand::Transcript {
+            doc,
+            from,
+            to,
+            json,
+        } => transcript(&load(&doc)?, from.as_deref(), to.as_deref(), json),
+        QueryCommand::Words { doc, segment, json } => words(&load(&doc)?, segment, json),
         QueryCommand::Speakers { doc, json } => speakers(&load(&doc)?, json),
         QueryCommand::Music { doc, json } => music(&load(&doc)?, json),
         QueryCommand::Acoustic { doc, json } => acoustic(&load(&doc)?, json),
         QueryCommand::Runs { doc, json } => runs(&load(&doc)?, json),
+        QueryCommand::Chapters { doc, min_gap, json } => chapters(&load(&doc)?, &min_gap, json),
         QueryCommand::Summary { doc, json } => summary(&load(&doc)?, json),
     }
 }
@@ -322,15 +365,7 @@ fn search(doc: &Document, needle: &str, json: bool) -> Result<()> {
         // A turn is a refinement of its utterance (`parent`), so the speaker
         // for an ASR segment comes from the turn that points at it. Reporting
         // both rows would duplicate every match.
-        let speaker = doc
-            .segments
-            .iter()
-            .find(|candidate| {
-                candidate.parent == Some(segment.id)
-                    && matches!(candidate.kind, SegmentKind::SpeakerTurn { .. })
-            })
-            .and_then(|turn| turn.kind.speaker())
-            .map(SpeakerId::as_str);
+        let speaker = speaker_of(doc, segment);
 
         matches.push(MatchView {
             segment: SegmentView::with_speaker(segment, speaker),
@@ -360,8 +395,115 @@ fn search(doc: &Document, needle: &str, json: bool) -> Result<()> {
     }
 }
 
-// ------------------------------------------------------------------ speakers
+// ---------------------------------------------------------------- transcript
 
+fn transcript(doc: &Document, from: Option<&str>, to: Option<&str>, json: bool) -> Result<()> {
+    let start = from.map(parse_time).transpose()?.unwrap_or(MediaTime::ZERO);
+    let end = match to {
+        Some(value) => parse_time(value)?,
+        None => {
+            let duration = doc.duration();
+            if duration == MediaTime::ZERO {
+                MediaTime::MAX
+            } else {
+                duration
+            }
+        }
+    };
+    if end < start {
+        bail!("`--to` ({}) is before `--from` ({})", end, start);
+    }
+
+    let mut rows: Vec<SegmentView<'_>> = doc
+        .segments_of_kind("speech")
+        .filter(|segment| segment.range.intersects(&TimeRange::new(start, end)))
+        .map(|segment| SegmentView::with_speaker(segment, speaker_of(doc, segment)))
+        .collect();
+    rows.sort_by_key(|row| (row.start, row.id));
+
+    if json {
+        emit(&TranscriptOutput {
+            count: rows.len(),
+            segments: rows,
+        })
+    } else {
+        if rows.is_empty() {
+            println!("(no speech)");
+            return Ok(());
+        }
+        for row in &rows {
+            println!(
+                "{}–{}  {:<4}  {}",
+                row.start_display,
+                row.end_display,
+                row.speaker.unwrap_or("--"),
+                row.text.unwrap_or("")
+            );
+        }
+        Ok(())
+    }
+}
+
+/// The speaker of an ASR segment, taken from the turn that refines it.
+fn speaker_of<'a>(doc: &'a Document, segment: &'a Segment) -> Option<&'a str> {
+    doc.segments
+        .iter()
+        .find(|candidate| {
+            candidate.parent == Some(segment.id)
+                && matches!(candidate.kind, SegmentKind::SpeakerTurn { .. })
+        })
+        .and_then(|turn| turn.kind.speaker())
+        .map(SpeakerId::as_str)
+}
+
+// --------------------------------------------------------------------- words
+fn words(doc: &Document, segment: u32, json: bool) -> Result<()> {
+    let Some(segment) = doc.segment(segment) else {
+        bail!("document has no segment {segment}");
+    };
+    let SegmentKind::Speech { text, words, .. } = &segment.kind else {
+        if let Some(parent) = segment.parent {
+            bail!(
+                "segment {} is a {}; its words are in parent segment {parent}",
+                segment.id,
+                segment.kind.kind_name()
+            );
+        }
+        bail!(
+            "segment {} is a {}; it has no words",
+            segment.id,
+            segment.kind.kind_name()
+        );
+    };
+    let speaker = speaker_of(doc, segment);
+
+    if json {
+        emit(&WordsOutput {
+            segment: segment.id,
+            speaker,
+            text,
+            start: segment.range.start.micros(),
+            end: segment.range.end.micros(),
+            start_display: segment.range.start.to_string(),
+            end_display: segment.range.end.to_string(),
+            words: words.iter().map(WordView::new).collect(),
+        })
+    } else {
+        if words.is_empty() {
+            println!("(no words)");
+            return Ok(());
+        }
+        for word in words.iter().map(WordView::new) {
+            let confidence = word
+                .confidence
+                .map_or_else(String::new, |value| format!("  [{value:.3}]"));
+            println!("{}  {}{confidence}", word.range_display, word.text);
+        }
+        Ok(())
+    }
+}
+
+// ------------------------------------------------------------------ speakers
 fn speakers(doc: &Document, json: bool) -> Result<()> {
     #[derive(Default)]
     struct Acc {
@@ -435,6 +577,139 @@ fn speakers(doc: &Document, json: bool) -> Result<()> {
         }
         Ok(())
     }
+}
+
+// ------------------------------------------------------------------- chapters
+
+/// Boundaries closer than this are the same moment (a speaker change inside a
+/// pause, a scene cut at a chapter start): keep the earliest.
+const CHAPTER_MERGE_GAP: MediaTime = MediaTime::from_millis(5_000);
+/// Chapters shorter than this are noise; they merge into the previous one.
+const MIN_CHAPTER: MediaTime = MediaTime::from_millis(2_000);
+
+fn chapters(doc: &Document, min_gap: &str, json: bool) -> Result<()> {
+    let min_gap = parse_time(min_gap)?;
+    let end = doc.duration();
+    let end = if end == MediaTime::ZERO {
+        MediaTime::MAX
+    } else {
+        end
+    };
+
+    // A chapter is a stretch between meaningful changes. Three cheap signals,
+    // no language model involved: long silence, a change of speaker, a cut.
+    let mut boundaries: Vec<MediaTime> = Vec::new();
+    for block in &doc.analyses {
+        if let AnalysisBlock::Acoustic(acoustic) = block {
+            boundaries.extend(
+                acoustic
+                    .silence
+                    .iter()
+                    .filter(|silence| silence.duration() >= min_gap)
+                    .map(|silence| silence.start),
+            );
+        }
+    }
+    let turns = doc.dialogue();
+    for pair in turns.windows(2) {
+        if pair[0].speaker != pair[1].speaker {
+            boundaries.push(pair[1].range.start);
+        }
+    }
+    for segment in doc.segments_of_kind("scene") {
+        if matches!(segment.kind, SegmentKind::Scene { cut: true, .. }) {
+            boundaries.push(segment.range.start);
+        }
+    }
+
+    boundaries.retain(|instant| *instant > MediaTime::ZERO && *instant < end);
+    boundaries.sort_unstable();
+    boundaries.dedup_by(|later, earlier| (*later).saturating_sub(*earlier) < CHAPTER_MERGE_GAP);
+
+    let mut ranges: Vec<TimeRange> = Vec::new();
+    let mut start = MediaTime::ZERO;
+    for boundary in boundaries {
+        if boundary > start {
+            ranges.push(TimeRange::new(start, boundary));
+            start = boundary;
+        }
+    }
+    ranges.push(TimeRange::new(start, end));
+
+    let mut merged: Vec<TimeRange> = Vec::new();
+    for range in ranges {
+        match merged.last_mut() {
+            Some(previous) if range.duration() < MIN_CHAPTER || range.is_empty() => {
+                *previous = TimeRange::new(previous.start, range.end);
+            }
+            _ => merged.push(range),
+        }
+    }
+
+    let chapters: Vec<ChapterView<'_>> = merged
+        .iter()
+        .map(|range| {
+            let segments = doc.segments_in(*range);
+            let speakers: BTreeSet<&str> = segments
+                .iter()
+                .filter_map(|segment| segment.kind.speaker())
+                .map(SpeakerId::as_str)
+                .collect();
+            ChapterView {
+                start: range.start.micros(),
+                end: range.end.micros(),
+                start_display: range.start.to_string(),
+                end_display: range.end.to_string(),
+                title_hint: title_hint(&segments),
+                speakers: speakers.into_iter().collect(),
+                segment_count: segments.len(),
+            }
+        })
+        .collect();
+
+    if json {
+        emit(&ChaptersOutput {
+            count: chapters.len(),
+            chapters,
+        })
+    } else {
+        if chapters.is_empty() {
+            println!("(none)");
+            return Ok(());
+        }
+        for chapter in &chapters {
+            println!(
+                "{}–{}  {:<12}  {}  [{} seg]",
+                chapter.start_display,
+                chapter.end_display,
+                if chapter.speakers.is_empty() {
+                    "-".to_string()
+                } else {
+                    chapter.speakers.join(", ")
+                },
+                chapter.title_hint.as_deref().unwrap_or(""),
+                chapter.segment_count
+            );
+        }
+        Ok(())
+    }
+}
+
+/// First words of the first utterance in a range. A hint for the reader, never
+/// presented as a generated title.
+fn title_hint(segments: &[&Segment]) -> Option<String> {
+    segments.iter().find_map(|segment| {
+        let text = segment.kind.text()?.trim();
+        if text.is_empty() {
+            return None;
+        }
+        Some(
+            text.split_whitespace()
+                .take(8)
+                .collect::<Vec<_>>()
+                .join(" "),
+        )
+    })
 }
 
 // --------------------------------------------------------------------- music
@@ -747,6 +1022,24 @@ impl<'a> WordView<'a> {
 }
 
 #[derive(Debug, Serialize)]
+struct TranscriptOutput<'a> {
+    count: usize,
+    segments: Vec<SegmentView<'a>>,
+}
+
+#[derive(Debug, Serialize)]
+struct WordsOutput<'a> {
+    segment: u32,
+    speaker: Option<&'a str>,
+    text: &'a str,
+    start: i64,
+    end: i64,
+    start_display: String,
+    end_display: String,
+    words: Vec<WordView<'a>>,
+}
+
+#[derive(Debug, Serialize)]
 struct SpeakersOutput<'a> {
     speaker_count: usize,
     speakers: Vec<SpeakerView<'a>>,
@@ -828,6 +1121,24 @@ impl<'a> AcousticView<'a> {
             event_count: 0,
         }
     }
+}
+
+#[derive(Debug, Serialize)]
+struct ChaptersOutput<'a> {
+    count: usize,
+    chapters: Vec<ChapterView<'a>>,
+}
+
+#[derive(Debug, Serialize)]
+struct ChapterView<'a> {
+    start: i64,
+    end: i64,
+    start_display: String,
+    end_display: String,
+    /// First words of the first utterance. A hint, not a generated title.
+    title_hint: Option<String>,
+    speakers: Vec<&'a str>,
+    segment_count: usize,
 }
 
 #[derive(Debug, Serialize)]

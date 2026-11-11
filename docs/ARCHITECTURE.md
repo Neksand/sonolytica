@@ -150,7 +150,7 @@ design (media hash + config hash + model digest).
 
 | Interface | Status |
 |---|---|
-| CLI (`sonolytica`) | Implemented. Designed for scripts and agents: JSON to stdout, summary to stderr, exit code 2 with `--strict` when any stage failed. |
+| CLI (`sonolytica`) | Implemented. Designed for scripts and agents: JSON to stdout, summary to stderr, typed `query` subcommands instead of `jq`, and exit code 2 with `--strict` (or `--profile ultra`) when a stage failed or a requested capability never ran. |
 | Rust SDK | The `sonolytica-engine` crate *is* the SDK (`Engine::analyze`). |
 | MCP | Next phase. It will be `sonolytica mcp`, using the official `rmcp` SDK (stable MCP 2026-07-28), because agents should subscribe to a server, not shell out and parse logs. The CLI already exposes every operation it needs. |
 | HTTP server | Optional later (`axum`), same engine. Not implemented to avoid two half-finished server paths. |

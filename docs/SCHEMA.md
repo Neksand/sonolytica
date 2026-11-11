@@ -208,6 +208,12 @@ Nothing is mutated and no model is loaded.
 # Everything that happens between 00:12 and 00:30 (half-open window)
 sonolytica query timeline doc.json --from 00:00:12 --to 00:00:30
 
+# Full transcript, untruncated, one line per utterance
+sonolytica query transcript doc.json
+
+# One utterance, word by word
+sonolytica query words doc.json 0
+
 # One modality only
 sonolytica query timeline doc.json --type speaker_turn
 
@@ -220,6 +226,9 @@ sonolytica query search doc.json pricing
 # Speaking time per speaker, longest first
 sonolytica query speakers doc.json --json
 
+# Chapters from silences, speaker changes and scene cuts
+sonolytica query chapters doc.json
+
 # Tempo, key, chords, loudness; silence and levels
 sonolytica query music doc.json --json
 sonolytica query acoustic doc.json --json
@@ -230,6 +239,11 @@ sonolytica query runs doc.json
 
 `--type` accepts `speech`, `speaker_turn`, `music_label`, `acoustic_event`,
 `scene`, `object`.
+
+Chapters are derived, not stored: `query chapters` boundaries on silence longer
+than `--min-gap` (default 1.2 s), a change of speaker, or a scene cut. The
+`title_hint` is the first eight words of the chapter's first utterance — a hint,
+never a generated title.
 
 ### Time input
 
