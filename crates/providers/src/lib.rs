@@ -33,6 +33,9 @@ mod whisper;
 #[cfg(feature = "diarize")]
 mod diarize;
 
+#[cfg(feature = "diarize")]
+mod sortformer;
+
 pub use align::{LazyWav2Vec2Aligner, Wav2Vec2Aligner};
 pub use models::{MODELS, ModelSpec, ModelStore, default_model_dir, find_model};
 pub use registry::{Registry, Unavailable};

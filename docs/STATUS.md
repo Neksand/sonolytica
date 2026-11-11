@@ -16,9 +16,9 @@ runtime, no GPL.
 
 | | |
 |---|---|
-| Rust | 14 382 lines across 7 crates (`providers` 3 704, `cli` 3 089, `engine` 2 294, `core` 2 080, `dsp` 1 360, `media` 1 210, `eval` 645) |
+| Rust | 15 045 lines across 7 crates (`providers` 4 330, `cli` 3 089, `engine` 2 315, `core` 2 080, `dsp` 1 360, `media` 1 226, `eval` 645) |
 | Query commands | 13 (`timeline`, `at`, `search`, `transcript`, `words`, `speakers`, `chapters`, `frames`, `music`, `acoustic`, `runs`, `summary`, `help`) |
-| Models | 9, all SHA-256 pinned: Silero VAD, whisper tiny/base/small, wav2vec2 aligner, pyannote segmentation, WeSpeaker, PP-OCRv5 det/rec |
+| Models | 10, all SHA-256 pinned: Silero VAD, whisper tiny/base/small, wav2vec2 aligner, Sortformer 4spk, pyannote segmentation, WeSpeaker, PP-OCRv5 det/rec |
 | Schema | 1.4.0 (`Document::validate`, additive 1.0 → 1.4) |
 | Agent skill | `SKILL.md` (290 lines) + 10 reference files + install guide |
 | Docs | 15 files incl. 5 ADRs; `EVAL.md`, `BENCHMARK.md`, `DOGFOOD.md`, `OCR.md` |
@@ -27,8 +27,8 @@ runtime, no GPL.
 
 | Check | Result |
 |---|---|
-| `cargo test --workspace` | 105 passed, 20 suites, 0 failed |
-| with `full,metal` | 115 passed, 0 failed |
+| `cargo test --workspace` | 121 passed, 21 suites, 0 failed |
+| with `full,metal` | 136 passed, 0 failed |
 | `cargo clippy -D warnings` | clean (default and full) |
 | `cargo fmt --check` | clean |
 | Model-free build | tests pass with no models, no cmake, no ONNX runtime |
@@ -40,13 +40,14 @@ runtime, no GPL.
 |---|---|---|---|
 | ASR | WER | **6.05 %** | LibriSpeech test-clean, 100 utterances, 2048 words, `whisper-base.en` |
 | ASR | CER | 2.25 % | same run; 23 deletions (1.1 %), 0 empty hypotheses |
-| Diarization | DER | **11.81 %** dev / **17.46 %** test | VoxConverse pilots, 5 files each, 1051 s / 3973 s, collar 0.25 s |
-| Diarization | failure mode | speaker count | 2→11 on one file, 12→10 on another; confusion dominates |
+| Diarization | DER | **11.81 %** dev / **17.46 %** test (AHC pilots); **11.43 %** weighted / **8.19 %** unweighted with Sortformer on a fresh shard | VoxConverse, collar 0.25 s |
+| Diarization | speaker count | AHC MAE **5.0** → Sortformer **0.33** (5/6 exact) on the fresh 2-4 speaker subset | 6 files, 2140 s |
+| Diarization | failure mode | one 20-min 4-speaker file collapses to 2 voices; noisy single-speaker files show false alarm | Sortformer caps at 4 |
 | OCR | lines | 2/2, 6/6, 7/7 CJK | synthetic slides and a terminal screenshot, PP-OCRv5, 0.987 confidence on the benchmark slide |
 | Video | cut accuracy | ±0.5 s | 3-shot synthetic video, 2 fps signatures; colour-cut bug found and fixed |
 | Alignment | word drift vs Whisper | **median 110 ms** | wav2vec2 CTC, English, two-voice fixture; 88 % within 600 ms |
 | Music | tempo / key / sections | 120.3 vs 120 BPM; C major correct; A–B–A boundaries within 160 ms | synthetic clicks, triads and a 30 s C–G–C track |
-| Throughput | realtime factor | **21.64×** | 121.7 s full pipeline, 8.28 s wall, all stages complete |
+| Throughput | realtime factor | **14.1×** with Sortformer / **21.64×** AHC | 155.6 s and 121.7 s full pipeline, 11.0 s and 8.28 s wall |
 | Russian | transcript | exact | 12 s, `whisper-small --language ru`, 0 word errors on a clean fixture |
 | Agent | answers | **16/20 vs 20/20** easy; **7/16 vs 16/16** hard | no skill vs skill; the hard fixture is a 4 min, 4-voice meeting with no ASR/OCR tools for the baseline |
 
@@ -75,7 +76,7 @@ frames or OCR, and is overhead for a short clean recording. It makes the agent
 |---|---|---|---|
 | Open-ended visual semantics | strong | strong (Pegasus / 1 fps) | **none** (no object/face model) |
 | Exact word quotes + timestamps | weak / unverifiable | summary-level | **word-level, from the document** |
-| Speaker turns and overlap flag | inconsistent | yes (paid) | yes, overlap flagged not split |
+| Speaker turns and overlap flag | inconsistent | yes (paid) | yes, overlap split into simultaneous turns (Sortformer); pyannote fallback only flags |
 | Provenance and "absence is null" | no | no | **enforced by schema + validator** |
 | Local / private | no | no | **yes** |
 | Cost | per token | $1.75/hour of video | free after models |
@@ -84,15 +85,17 @@ frames or OCR, and is overhead for a short clean recording. It makes the agent
 
 ## Risks
 
-1. **Speaker count** is the weakest link in otherwise well-cited answers. Two
-   threshold heuristics failed and were reverted; the next attempt must be a
-   model (Sortformer) or a spectral estimate, measured on unseen data.
+1. **Speaker count is fixed for 2-4 speakers, not for long files.** Sortformer
+   gets five of six counts right on a fresh shard (MAE 0.33 vs 5.0) and splits
+   overlap; a 20-minute four-speaker file still collapses to two voices, and
+   noisy single-speaker audio produces false alarms. The next attempts are a
+   VAD gate and the model's native streaming cache.
 2. **One-fixture benchmark.** Ten questions, synthetic media. Real interviews,
    meetings, music and long videos are untested.
 3. **Music is shallow**: tempo, key, triads, sections and loudness. No notes,
    bass or instruments.
-4. **No alignment**: word timings are Whisper tokens, good enough to cite,
-   not to cut on.
+4. **Alignment is English-only**: word timings are aligned with wav2vec2 CTC
+   for English; other languages keep Whisper token timestamps.
 5. **No objects, faces or vision model**: keyframes and OCR are the whole
    visual layer.
 6. **Video keyframes are one per scene**: text or action inside a long static
@@ -100,9 +103,10 @@ frames or OCR, and is overhead for a short clean recording. It makes the agent
 
 ## Verdict
 
-- **Speech-heavy structured media (interviews, lectures, meetings with few
-  speakers): strong.** Exact quotes, speaker turns, chapters, keyframes, OCR,
-  citations, honest gaps — with a known diarization caveat on crowded audio.
+- **Speech-heavy structured media (interviews, lectures, meetings with up to
+  four speakers): strong.** Exact quotes, speaker turns, chapters, keyframes,
+  OCR, citations, honest gaps — with a known caveat on 5+ speakers and very
+  long meetings.
 - **Slides / screencasts: strong.** Cuts, keyframes and exact on-screen text.
 - **General video understanding: partial.** Navigation and text, no semantics.
 - **Music: measured but shallow.** Tempo, key and technical sections are
@@ -111,5 +115,6 @@ frames or OCR, and is overhead for a short clean recording. It makes the agent
   benchmark are the differentiator; perception is deliberately local and
   replaceable.
 
-Next, in order of payoff: speaker-count model, music notes/stems,
-non-English alignment, object/face models, MCP.
+Next, in order of payoff: overlap text attribution, VAD-gated diarization and
+streaming cache for long files, music notes/stems, non-English alignment,
+object/face models, MCP.

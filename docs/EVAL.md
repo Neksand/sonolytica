@@ -121,10 +121,60 @@ so the change was reverted. A real speaker-count estimate is needed; pruning
 by duration cannot distinguish a cough from a quiet participant.
 
 Caveats: 5 recordings per split; in-the-wild YouTube audio (music, noise,
-overlap); overlap is flagged but not split; greedy speaker mapping in
-`sonolytica-eval` (an optimal assignment would lower confusion slightly);
-0.25 s collar, frame 10 ms — do not compare with a paper that uses a different
-collar.
+overlap); on the pyannote path overlap is flagged but not split; greedy speaker
+mapping in `sonolytica-eval` (an optimal assignment would lower confusion
+slightly); 0.25 s collar, frame 10 ms — do not compare with a paper that uses a
+different collar.
+
+### Sortformer 4spk on a fresh shard
+
+The AHC threshold experiments above are closed. The next attempt was a model:
+NVIDIA Sortformer 4spk v2, 128-bin log-mel in, 80 ms speaker activity out,
+CC-BY-4.0, exported to ONNX (469 MB). It is the preferred provider when the
+model is installed; pyannote remains the fallback if inference fails.
+
+Dataset: `test-00002-of-00011`, never used for a decision, all six 2-4 speaker
+files (2140 s scored). Pipeline unchanged: `vad,transcribe,diarize`,
+`whisper-base.en`, collar 0.25 s.
+
+| Metric (2-4 speakers) | AHC (before) | Sortformer |
+|---|---|---|
+| DER, duration-weighted | **7.99 %** | 11.43 % |
+| DER, unweighted mean | 9.94 % | **8.19 %** |
+| Speaker-count MAE | 5.00 | **0.33** |
+| Exact speaker count | 0/6 | **5/6** |
+
+| file | speakers | AHC DER (hyp) | Sortformer DER (hyp) |
+|---|---|---|---|
+| wcxfk | 3 | 12.00 % (9) | **4.16 % (3)** |
+| rmvsh | 2 | 7.05 % (4) | **5.41 % (2)** |
+| fvhrk | 4 | **7.00 % (9)** | 16.38 % (2) |
+| ltgmz | 2 | 21.14 % (11) | **11.47 % (2)** |
+| ledhe | 3 | 6.74 % (10) | **6.06 % (3)** |
+| gylzn | 2 | 5.70 % (3) | **5.64 % (2)** |
+
+Reading it:
+
+- **The count is fixed on five of six files.** AHC never got a count right on
+  this shard; Sortformer got five. On the five files shorter than 7 minutes it
+  scores **6.40 %** versus 8.99 % for AHC, with an exact count everywhere.
+- **The exception dominates the weighted number.** `fvhrk` is a 20-minute,
+  four-speaker recording where Sortformer finds only the two dominant voices;
+  it is 56 % of the scored audio, so the weighted DER rises even though the
+  unweighted mean improves. The next step for files like this is the model's
+  native streaming cache, not a longer forward pass.
+- **Single-speaker files keep the right count** (`gwloo` 1→1, `uicid` 1→1) but
+  show false alarm on in-the-wild noise: 4.27 % and 13.41 %. A VAD gate before
+  diarization is the obvious next experiment.
+- **Overlap is split, not just flagged.** On the hard 4-minute meeting the known
+  simultaneous turn around 130 s comes back as two turns (S2 and S3) whose
+  ranges intersect.
+- Limits: at most four speakers; 300 s windows with 10 s overlap and
+  activity-based label matching across windows; 469 MB on disk, ~2.8 GB peak
+  RSS on a 4-minute file (5.9 s for the forward pass).
+
+Caveat: one fresh shard, six files, one machine. The numbers are a pilot for
+direction, not a leaderboard entry.
 
 ### Tried and rejected: silhouette-based splitting
 
@@ -215,6 +265,17 @@ Model load and process startup are included in the wall time; the stage total
 is what the document records. A 2-hour recording is therefore roughly 5–6
 minutes of analysis here, dominated by ASR.
 
+With the Sortformer diarizer (155.6 s VoxConverse file, all five audio stages):
+
+```
+vad 495 ms · transcribe 2805 ms · diarize 3304 ms · music 266 ms · acoustic 123 ms
+total stage time 6993 ms · wall 11.00 s · 14.1× realtime · peak RSS 2.3 GB
+```
+
+The earlier 21.64× used pyannote (1.44 s diarization on 121.7 s). Sortformer
+costs about 1.9 s more on a 2.5-minute file and ~0.5 GB of model memory; that
+is the price of getting the speaker count right.
+
 ### Tried and rejected: NME spectral count
 
 Hypothesis: estimate the speaker count from the largest eigengap of the
@@ -235,10 +296,11 @@ spectrum over 1.5 s chunks.
 The planned order was forced alignment, then diarization. The measurements
 argue for swapping that:
 
-1. **Diarization: speaker count, not another threshold.** The held-out check
-   shows over- and under-segmentation in the same run (2 → 7 and 12 → 7
-   speakers). The next change must estimate the number of speakers and handle
-   overlap, not move the similarity cut.
+1. **Diarization: the count is solved for 2-4 speakers, not for long files.**
+   Sortformer gets five of six counts right on a fresh shard, and its errors
+   are now under-segmentation on a 20-minute four-speaker file and false alarm
+   on noisy single-speaker audio. The next change is a VAD gate and the
+   model's native streaming cache, not another similarity cut.
 2. **Alignment second.** WER 6.05 % is near the model ceiling and deletions are
    1.1 %; alignment improves *when* a word was said (citations, cutting), not
    *what* was said. Still worth doing, but it does not move the headline.

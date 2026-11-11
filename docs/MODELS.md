@@ -16,6 +16,7 @@ their licenses are their own.
 | `whisper-tiny.en` | ASR (English) | 78 MB | MIT | ggerganov/whisper.cpp GGML |
 | `whisper-base.en` | ASR (English) | 148 MB | MIT | ggerganov/whisper.cpp GGML |
 | `whisper-small` | ASR (multilingual) | 488 MB | MIT | ggerganov/whisper.cpp GGML |
+| `sortformer-4spk-v2` | Diarization (up to 4 speakers, overlap) | 469 MB | CC-BY-4.0 | ONNX export of `nvidia/diar_streaming_sortformer_4spk-v2` |
 | `pyannote-segmentation-3.0` | Diarization (speaker change) | 6 MB | MIT | pyannote-rs release (ONNX export of pyannote/segmentation-3.0) |
 | `wespeaker-campplus` | Speaker embeddings | 28 MB | Apache-2.0 | pyannote-rs release (WeSpeaker CAM++) |
 
@@ -36,12 +37,20 @@ list`. If a file's digest does not match, it is rejected and the run reports a
   drop everything after a short utterance when the model emits an early
   end-of-text (an upstream Whisper/whisper.cpp behaviour, reproduced with a
   bare `whisper_full` call on a two-voice fixture).
+- **Sortformer 4spk v2** is an end-to-end diarizer: 128-bin NeMo log-mel in,
+  per-speaker activity at 80 ms out. SONOLYTICA computes the mel front-end in
+  Rust and thresholds the activity into turns. It resolves overlap into two
+  simultaneous turns, which the pyannote path only flags. It tracks at most
+  four speakers; beyond that voices are collapsed, so the doc says "up to 4".
+  Long files are processed in 300 s windows with 10 s overlap and the speaker
+  channels are matched by activity co-occurrence across the seam.
 - **pyannote segmentation-3.0** emits powerset classes on 10 s windows:
-  silence, three local speakers, or a two-speaker overlap. SONOLYTICA uses
+  silence, three local speakers, or a two-speaker overlap. It remains the
+  fallback when Sortformer is not installed or inference fails. SONOLYTICA uses
   single-speaker regions for embeddings and reports overlap globally; it does
   not invent two simultaneous speaker turns from the overlap classes.
 - **WeSpeaker CAM++** produces 256-dimensional speaker embeddings from Kaldi
-  fbank features. Clustering (cosine similarity, single linkage, budget-aware
+  fbank features. Clustering (cosine similarity, average linkage, budget-aware
   merging) is implemented in `crates/providers/src/diarize.rs`, not in a model.
   Speaker labels are document-local.
 
@@ -51,7 +60,7 @@ list`. If a file's digest does not match, it is rejected and the run reports a
 |---|---|---|
 | `silero` | VAD via ONNX Runtime | prebuilt ONNX Runtime (downloaded by `ort`) |
 | `whisper` | ASR via whisper.cpp | cmake, C/C++ toolchain |
-| `diarize` | segmentation + embeddings via ONNX Runtime and kaldi-native-fbank | cmake (fbank), ONNX Runtime |
+| `diarize` | Sortformer, pyannote segmentation and WeSpeaker embeddings via ONNX Runtime; Kaldi fbank for the fallback | ONNX Runtime (fbank path needs cmake) |
 | `metal` | whisper.cpp Metal backend (Apple silicon) | macOS |
 | `full` | all of the above | cmake, toolchain, ONNX Runtime |
 
@@ -71,9 +80,11 @@ divergence explained.
 ## Licensing notes
 
 - The project itself is MIT OR Apache-2.0.
-- All registered models are permissively licensed (MIT / Apache-2.0). GPL
-  music-analysis crates (`bliss-audio`, `aubio-rs`, `sonogram`) were evaluated
-  and rejected; GPL is also blocked in CI by `cargo-deny`.
+- All registered models are permissively licensed (MIT / Apache-2.0 /
+  CC-BY-4.0). GPL music-analysis crates (`bliss-audio`, `aubio-rs`, `sonogram`)
+  were evaluated and rejected; GPL is also blocked in CI by `cargo-deny`.
+  Sortformer's CC-BY-4.0 attribution stays in its `ModelSpec` and in
+  `docs/EVAL.md`.
 - FFmpeg is invoked as a separate process. A distributed binary does not link
   it, but users who redistribute FFmpeg must comply with FFmpeg's own license.
   Homebrew's build is GPL; an LGPL build works identically.

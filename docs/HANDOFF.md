@@ -1,7 +1,7 @@
 # Handoff — SONOLYTICA after the media/agent cycle
 
 Last updated: 2026-11-11. Branch `main`, working tree clean, **no remote
-configured** (the user pushes). Latest code commit: `e2f5592`; the handoff commit (`docs: handoff for a fresh session`) follows it.
+configured** (the user pushes).
 
 Read this first, then `docs/STATUS.md` (numbers), `docs/EVAL.md` (methods),
 `docs/BENCHMARK.md` (agent tests), `docs/OCR.md` (OCR), `docs/SCHEMA.md`
@@ -19,14 +19,14 @@ OCR text, and provenance on every segment. Agents read it via
 
 | | |
 |---|---|
-| Rust | 14 398 lines, 7 crates: `providers` (3.7k), `cli` (3.1k), `engine` (2.3k), `core` (2.1k), `dsp` (1.4k), `media` (1.2k), `eval` (0.6k) |
+| Rust | 15 045 lines, 7 crates: `providers` (4.3k), `cli` (3.1k), `engine` (2.3k), `core` (2.1k), `dsp` (1.4k), `media` (1.2k), `eval` (0.6k) |
 | Binary | `sonolytica` (`sonolytica-cli`) |
 | SDK | `sonolytica-engine` (`Engine::analyze`) |
 | Schema | **1.4.0**, additive 1.0 → 1.4 |
-| Models | 9, SHA-256 pinned, in `~/.cache/sonolytica/models` |
+| Models | 10, SHA-256 pinned, in `~/.cache/sonolytica/models` |
 | Query commands | 13: timeline, at, search, transcript, words, speakers, chapters, frames, music, acoustic, runs, summary, help |
 | Skill | `skills/sonolytica/` (SKILL.md + 9 references + install README) |
-| Tests | **121** model-free / **131** all-features |
+| Tests | **121** model-free / **136** all-features |
 
 Features: `sonolytica-cli --features full-metal` = whisper + silero + diarize +
 ocr + align + metal. `cargo test --workspace` runs without models/cmake/ORT.
@@ -36,12 +36,12 @@ ocr + align + metal. `cargo test --workspace` runs without models/cmake/ORT.
 | Area | Result | Where |
 |---|---|---|
 | ASR | WER **6.05 %**, CER 2.25 % — LibriSpeech test-clean, 100 utts, `whisper-base.en` | EVAL |
-| Diarization | DER **11.81 % dev / 17.46 % test** (VoxConverse pilots, 5 files each); speaker count is the weak spot | EVAL |
+| Diarization | AHC pilots: DER **11.81 % dev / 17.46 % test**; Sortformer 4spk on a fresh shard: **11.43 % weighted / 8.19 % unweighted**, speaker-count MAE **0.33** (5/6 exact) | EVAL |
 | Alignment | wav2vec2 CTC, 20 ms frames, English; **median 110 ms** vs Whisper, 88 % ≤600 ms; Whisper itself is 300–950 ms early on JFK | EVAL |
 | OCR | PP-OCRv5 det+rec; 12/12 lines exact on the 6-slide fixture; 7/7 CJK terminal | OCR |
 | Music | 120.3 BPM for a 120 BPM click; C major triad correct; A–B–A section boundaries within 80/160 ms | EVAL |
 | Video | 2 fps chromaticity signatures, cuts ±0.5 s; 6/6 scenes, 6 keyframes on the hard fixture | EVAL/BENCHMARK |
-| Throughput | **21.64× realtime** on 121.7 s, full pipeline, all stages complete | EVAL |
+| Throughput | **14.1× realtime** on 155.6 s, full audio pipeline with Sortformer (AHC-era: 21.64× on 121.7 s) | EVAL |
 | Russian | exact 12 s transcript with `whisper-small --language ru` | DOGFOOD |
 
 ### Agent benchmarks (details and prompts in BENCHMARK)
@@ -79,6 +79,8 @@ must not claim sight.
 - No fabricated data: missing = `null`/warning/`partial`, never a guess.
 - Every document passes `Document::validate`; timestamps never exceed media.
 - Every model is SHA-pinned + license-documented; unpinned refused.
+- Diarization prefers Sortformer when its pinned model is present; pyannote is
+  the fallback. The 4-speaker cap is documented, never silently exceeded.
 - `ort` pinned `=2.0.0-rc.15`; one environment per process; **shared session
   builder uses `AutoDevicePolicy::PreferCPU`** (CoreML silently mis-executes
   dynamic-shape graphs: PP-OCRv5 detection collapsed, recognition blank; VAD
@@ -96,10 +98,16 @@ must not claim sight.
 - **Language**: pass `--language`; English → `whisper-base.en`, others →
   `whisper-small --language xx`. Auto-detect mislabelled English as Italian
   twice. Never infer language from the user's prompt.
-- **Diarization**: 1.5 s chunks, average-linkage AHC, threshold 0.45,
-  `max_speakers=12`. Over-segments crowded audio (4 voices → 7 labels on the
-  hard fixture); overlap is flagged but not split; an overlapped line can be
-  missing from the transcript entirely.
+- **Diarization (default)**: Sortformer 4spk v2 ONNX, 128-bin log-mel with no
+  normalisation, 80 ms activity. Overlap becomes two simultaneous turns. It
+  caps at 4 speakers; crowded audio collapses into four voices. Files longer
+  than 300 s are processed in overlapping windows and speaker channels are
+  matched by activity co-occurrence. 469 MB on disk, ~2.8 GB peak RSS on a
+  4-minute file.
+- **Diarization (fallback)**: pyannote 3.0 + WeSpeaker, 1.5 s chunks,
+  average-linkage AHC, threshold 0.45, `max_speakers=12`. Over-segments crowded
+  audio (4 voices → 7 labels on the hard fixture); overlap is flagged but not
+  split; an overlapped line can be missing from the transcript entirely.
 - **Rejected count experiments** (do not retry without a new idea): single
   silhouette split, tiny-cluster pruning, NME eigengap (collapsed real files to
   1 speaker, DER 63.46 %), widest dendrogram gap (4→2 on the first file).
@@ -125,9 +133,10 @@ verified on PIL-rendered slides and real keyframes. `whisper` CLI and
 `tesseract` **are installed** on PATH — the first benchmarks' baselines used
 them; the hard benchmark forbids them by instruction.
 
-Model store `~/.cache/sonolytica/models` (~1.2 GB): silero_vad.onnx,
+Model store `~/.cache/sonolytica/models` (~1.7 GB): silero_vad.onnx,
 ggml-tiny.en/base.en/small, wav2vec2-base-960h.onnx, segmentation-3.0.onnx,
-wespeaker CAM++, pp_ocrv5_det/rec.onnx. `models list` shows status.
+sortformer-4spk-v2.onnx, wespeaker CAM++, pp_ocrv5_det/rec.onnx. `models list`
+shows status.
 
 Fixtures under `/private/tmp` (not committed; regenerate):
 `sono-eval` (LibriSpeech, VoxConverse parquet), `bench-hard` (meeting.mp4 +
@@ -142,7 +151,7 @@ git status                       # must be clean
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace           # 121, no models
-cargo test --workspace --all-features   # 131
+cargo test --workspace --all-features   # 136
 
 # real models (macOS fixtures, ~10 s)
 SONOLYTICA_E2E=1 cargo test -p sonolytica-engine --features "full,metal" --test e2e_speech
@@ -151,6 +160,14 @@ SONOLYTICA_E2E=1 cargo test -p sonolytica-engine --features "full,metal" --test 
 # evals (datasets downloaded by hand, see scripts/eval/README.md)
 python3 scripts/eval/wer_librispeech.py --root /tmp/sono-eval/LibriSpeech/test-clean --count 100
 python3 scripts/eval/der_voxconverse.py --parquet /tmp/sono-eval/voxconverse/dev-00000-of-00005.parquet --count 5
+
+# diarization on the fresh shard used by the Sortformer report
+curl -L -o /tmp/sono-eval/voxconverse-test2.parquet \
+  https://huggingface.co/datasets/diarizers-community/voxconverse/resolve/main/data/test-00002-of-00011.parquet
+python3 scripts/eval/der_voxconverse.py \
+  --parquet /tmp/sono-eval/voxconverse-test2.parquet \
+  --count 0 --min-speakers 2 --max-speakers 4 \
+  --workdir /tmp/sono-eval/der-test2 --json-out /tmp/sono-eval/der-test2.json
 
 # hard benchmark fixture
 python3 scripts/bench/make_meeting_fixture.py --out /tmp/bench-hard
@@ -167,11 +184,17 @@ Token accounting: OpenCode stores per-session totals in
 
 ## 7. Known gaps and next steps (priority)
 
-1. **Speaker count + overlap — the top gap.** 4 voices became 7 labels; one
-   overlapped line vanished. Next: Sortformer 4spk ONNX (CC-BY-4.0) for ≤4
-   speakers, powerset-class mapping for overlap when unavailable; evaluate on
-   a **fresh** VoxConverse/AMI subset (both current shards are burned).
-2. **Overlap splitting** (two simultaneous turns) with a measured DER/JER gain.
+1. **Speaker count + overlap — first pass done.** Sortformer 4spk v2 ONNX is
+   the default; on a fresh VoxConverse shard it gets 5/6 counts exact (MAE 0.33
+   vs 5.0), 6.40 % vs 8.99 % DER on files ≤7 min, and splits overlap into two
+   simultaneous turns. One 20-minute 4-speaker file still collapses to two
+   voices; noisy single-speaker files show false alarm. Next: a VAD gate, the
+   model's native streaming cache for long files, and an AMI subset. pyannote
+   remains the fallback.
+2. **Overlap text attribution.** Sortformer returns two simultaneous turns, but
+   Whisper still emits one merged line for overlapped speech. Measure JER and
+   split words by speaker with a speaker-attributed pass; a missing line is an
+   ASR limitation, not a diarization one.
 3. **`query brief`** — one compact read (runs, chapters, speakers, highlights,
    counts) instead of 5–8 queries; add a "minimum commands per question" table
    to the skill. Target: cut DeepSeek skill sessions from ~41k to ~20k fresh
@@ -209,6 +232,7 @@ Token accounting: OpenCode stores per-session totals in
 ## 9. For the next agent
 
 Start with `git status`, `docs/HANDOFF.md` (this file), `docs/STATUS.md`, then
-pick item 1 in §7. Do not re-litigate the rejected count experiments; do not
-add GPL; keep the model-free build. If a change is not measured on a licensed
-or reproducible fixture, it is not done.
+pick item 2 (overlap text attribution) or item 3 (`query brief`) in §7. Do not
+re-litigate the rejected count experiments; do not add GPL; keep the model-free
+build. If a change is not measured on a licensed or reproducible fixture, it is
+not done.

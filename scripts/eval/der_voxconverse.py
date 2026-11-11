@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Diarization error rate baseline on VoxConverse (dev split).
+"""Diarization error rate on VoxConverse (dev or test split).
 
 VoxConverse is CC BY 4.0; audio and RTTM are fetched by hand, never in CI.
 The Hugging Face mirror `diarizers-community/voxconverse` ships one parquet
 per shard with the audio bytes and the reference turn list:
 
     curl -LO https://huggingface.co/datasets/diarizers-community/voxconverse/\
-resolve/main/data/dev-00000-of-00005.parquet
+resolve/main/data/test-00002-of-00011.parquet
 
     python3 scripts/eval/der_voxconverse.py \
-        --parquet /private/tmp/sono-eval/voxconverse/dev-00000-of-00005.parquet \
-        --count 5
+        --parquet /private/tmp/sono-eval/voxconverse-test2.parquet \
+        --count 0 --min-speakers 2 --max-speakers 4
 
 Requires `pyarrow` (evaluation only, not a project dependency).
 """
@@ -50,18 +50,36 @@ def safe_id(value: str) -> str:
     return cleaned or "clip"
 
 
-def load_rows(parquet: Path, count: int) -> list[dict]:
+def row_speakers(row: dict) -> int:
+    return len(set(row["speakers"]))
+
+
+def load_rows(
+    parquet: Path,
+    count: int,
+    skip: int,
+    min_speakers: int,
+    max_speakers: int,
+) -> list[dict]:
     import pyarrow.parquet as pq  # imported here so --help works without it
 
     reader = pq.ParquetFile(parquet)
     rows: list[dict] = []
+    seen = 0
     for group in range(reader.num_row_groups):
-        rows.extend(reader.read_row_group(group).to_pylist())
-        if len(rows) >= count:
-            break
+        for row in reader.read_row_group(group).to_pylist():
+            seen += 1
+            if seen <= skip:
+                continue
+            speakers = row_speakers(row)
+            if not min_speakers <= speakers <= max_speakers:
+                continue
+            rows.append(row)
+            if count > 0 and len(rows) >= count:
+                return rows
     if not rows:
-        raise SystemExit(f"no rows in {parquet}")
-    return rows[:count]
+        raise SystemExit(f"no rows in {parquet} matched the speaker filter")
+    return rows
 
 
 def write_rttm(path: Path, file_id: str, row: dict) -> None:
@@ -82,7 +100,11 @@ def write_rttm(path: Path, file_id: str, row: dict) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--parquet", required=True, type=Path)
-    parser.add_argument("--count", type=int, default=5)
+    parser.add_argument("--count", type=int, default=5, help="0 means every matching row")
+    parser.add_argument("--skip", type=int, default=0, help="skip this many rows first")
+    parser.add_argument("--min-speakers", type=int, default=1)
+    parser.add_argument("--max-speakers", type=int, default=99)
+    parser.add_argument("--dataset", default="VoxConverse dev (diarizers-community parquet mirror)")
     parser.add_argument("--model", default="whisper-base.en")
     parser.add_argument("--language", default="en")
     parser.add_argument("--sonolytica", default=None)
@@ -104,7 +126,10 @@ def main() -> int:
     audio_dir.mkdir(parents=True, exist_ok=True)
 
     results = []
-    for index, row in enumerate(load_rows(args.parquet, args.count), start=1):
+    for index, row in enumerate(
+        load_rows(args.parquet, args.count, args.skip, args.min_speakers, args.max_speakers),
+        start=1,
+    ):
         audio = row["audio"]
         original = audio.get("path") or f"clip_{index}.wav"
         file_id = safe_id(Path(str(original)).stem)
@@ -116,7 +141,7 @@ def main() -> int:
         write_rttm(rttm_path, file_id, row)
         document_path = workdir / f"{file_id}.json"
 
-        print(f"[{index}/{args.count}] {file_id}", file=sys.stderr)
+        print(f"[{index}] {file_id}", file=sys.stderr)
         if not (args.reuse and document_path.exists()):
             subprocess.run(
                 [
@@ -184,10 +209,16 @@ def main() -> int:
         if scored_seconds > 0
         else unweighted
     )
+    count_errors = [
+        abs(entry["reference_speakers"] - entry["hypothesis_speakers"])
+        for entry in results
+    ]
+    exact_counts = sum(1 for error in count_errors if error == 0)
     summary = {
-        "dataset": "VoxConverse dev (diarizers-community parquet mirror)",
+        "dataset": args.dataset,
         "license": "CC BY 4.0",
         "files": len(results),
+        "speaker_filter": [args.min_speakers, args.max_speakers],
         "model": args.model,
         "language": args.language,
         "modules": ["vad", "transcribe", "diarize"],
@@ -195,6 +226,8 @@ def main() -> int:
         "scored_seconds": scored_seconds,
         "der": weighted,
         "unweighted_mean_der": unweighted,
+        "speaker_count_mae": sum(count_errors) / len(count_errors),
+        "speaker_count_exact": exact_counts / len(count_errors),
         "per_file": results,
     }
     print(json.dumps(summary, indent=2))

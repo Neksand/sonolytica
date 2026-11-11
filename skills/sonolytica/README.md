@@ -34,7 +34,7 @@ Symlinks work too and survive `git pull`. The directory name should stay
 ```bash
 sonolytica doctor
 sonolytica models fetch silero-vad-v5 whisper-base.en \
-  pyannote-segmentation-3.0 wespeaker-campplus
+  sortformer-4spk-v2 pyannote-segmentation-3.0 wespeaker-campplus
 ```
 
 Models live in `~/.cache/sonolytica/models`; override with `--models-dir` or

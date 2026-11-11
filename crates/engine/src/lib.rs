@@ -32,7 +32,7 @@ use sonolytica_media::{
 };
 use sonolytica_providers::{
     AsrConfig, AsrOutput, AsrSegment, DiarTurn, DiarizationOutput, ModelStore, ProviderError,
-    Registry, SpeechRegion,
+    ProviderInfo, Registry, SpeechRegion,
 };
 
 pub use error::EngineError;
@@ -436,15 +436,36 @@ impl Engine {
             if let Some(audio) = speech_audio.take() {
                 let registry = Arc::clone(&self.registry);
                 let diar_config = config.diarization.clone();
-                let provider_info = registry.diarizer().map(|p| p.info());
                 let started = (now_unix_ms(), Instant::now());
                 // Diarization is the last consumer of the speech-rate buffer,
-                // so the owned audio can be dropped inside the task.
-                let outcome = blocking(move || match registry.diarizer() {
-                    Some(provider) => provider.diarize(&audio, &diar_config),
-                    None => Err(ProviderError::Unsupported(
-                        "no diarization provider available".into(),
-                    )),
+                // so the owned audio can be dropped inside the task. Providers
+                // are tried in registry order: Sortformer first, then the
+                // pyannote fallback if a model fails at inference time.
+                let (outcome, provider_info) = blocking(move || {
+                    let mut last: Option<(ProviderError, ProviderInfo)> = None;
+                    for provider in &registry.diarizers {
+                        let info = provider.info();
+                        match provider.diarize(&audio, &diar_config) {
+                            Ok(output) => return (Ok(output), Some(info)),
+                            Err(error) => {
+                                tracing::warn!(
+                                    provider = info.name,
+                                    error = %error,
+                                    "diarization provider failed; trying the next one"
+                                );
+                                last = Some((error, info));
+                            }
+                        }
+                    }
+                    match last {
+                        Some((error, info)) => (Err(error), Some(info)),
+                        None => (
+                            Err(ProviderError::Unsupported(
+                                "no diarization provider available".into(),
+                            )),
+                            None,
+                        ),
+                    }
                 })
                 .await?;
 

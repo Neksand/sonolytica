@@ -13,8 +13,9 @@ default = []
 silero = ["dep:ort", "dep:ndarray"]
 # Whisper through whisper.cpp (requires cmake + clang at build time).
 whisper = ["dep:whisper-rs", "dep:hound"]
-# pyannote segmentation + WeSpeaker embeddings through ONNX Runtime (requires cmake for fbank).
-diarize = ["dep:ort", "dep:ndarray", "dep:knf-rs", "dep:hound"]
+# Sortformer 4spk (ONNX) plus pyannote segmentation and WeSpeaker embeddings;
+# the fallback path needs cmake for kaldi-native-fbank.
+diarize = ["dep:ort", "dep:ndarray", "dep:knf-rs", "dep:hound", "dep:rustfft"]
 # PP-OCRv5 text detection and recognition through ONNX Runtime.
 ocr = ["dep:ort", "dep:image"]
 # wav2vec2 CTC forced word alignment through ONNX Runtime.
@@ -31,6 +32,7 @@ ort = { workspace = true, optional = true }
 hound = { workspace = true, optional = true }
 image = { version = "0.25", default-features = false, features = ["jpeg"], optional = true }
 knf-rs = { version = "0.3.2", optional = true }
+rustfft = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }

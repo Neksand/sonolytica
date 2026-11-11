@@ -31,8 +31,12 @@ Models live in `~/.cache/sonolytica/models` (override with `--models-dir` or
 Do not claim the word was never said; note the limit.
 
 **Speakers look wrong (one person split into two, or everyone is S1).**
-- Diarization quality depends on clean turns; overlapping speech is flagged,
-  not split.
+- Diarization quality depends on clean turns; overlapping speech is split into
+  two simultaneous `speaker_turn` segments when Sortformer is installed, and
+  only flagged on the pyannote fallback.
+- Sortformer tracks at most four speakers. On crowded audio, labels can merge;
+  if all four are active and the room sounds busier, say "at least four", not
+  an exact count.
 - On a single-voice lecture, a high speaker count is a diarizer failure: say so.
 - Short files (< ~10 s) can produce one speaker only.
 

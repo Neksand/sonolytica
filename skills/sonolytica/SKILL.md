@@ -214,8 +214,10 @@ model (`--model whisper-small`).
 
 - Speaker labels (`S1`, `S2`) are local to one document; they are not people.
   Never attach a name unless the user supplied it and the document supports it.
-- `overlap: true` means two people spoke at once. The document flags it but does
-  not split the words between them.
+- `overlap: true` means two people spoke at once. With Sortformer the document
+  has two simultaneous `speaker_turn` segments; on the pyannote fallback it only
+  flags the overlap. The transcript is still one ASR stream, so do not invent
+  separate words for each speaker.
 - Confidence is a model probability for speech, an autocorrelation score for
   tempo, a template margin for key. Say "score", not "accuracy".
 - `language` is reported by the model. If it contradicts the text, say the
@@ -287,7 +289,8 @@ Step-by-step command sequences per media type:
 - No emotion, intent, topic modelling or abstractive summarisation. You may
   summarise what the document says, extractively, with citations.
 - No speaker identity, age, gender or language proficiency.
-- No overlap separation (flagged, not split).
+- No word-level overlap separation: simultaneous turns are labeled, but a
+  merged ASR line is not split word by word.
 - Word timings are Whisper token times unless `--align`/`ultra` ran; alignment
   is English-only, 20 ms frames, and keeps Whisper's text (it cannot recover a
   word the ASR never emitted).

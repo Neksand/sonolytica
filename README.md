@@ -28,9 +28,9 @@ This is the first development cycle. What is real today:
   peak, LRA, silence detection, onset/tempo/beat tracking, chroma, key and
   triad chord estimation, chroma self-similarity sections, plus loudness range.
 - **Speech**: Silero VAD, Whisper (whisper.cpp) with word timestamps, forced
-  word alignment (wav2vec2 CTC, English), local diarization (pyannote
-  segmentation + WeSpeaker embeddings, clustered in Rust), speaker-attributed
-  dialogue, overlap/interruption relations.
+  word alignment (wav2vec2 CTC, English), local diarization (Sortformer 4spk,
+  or pyannote segmentation + WeSpeaker embeddings as a fallback), speaker-
+  attributed dialogue, overlap as simultaneous turns.
 - **Failure isolation**: a missing model produces a warning and a `Partial`
   document, never a fabricated result.
 - **CLI** with `inspect`, `analyze`, `query`, `models`, `doctor`, `schema`.
@@ -81,7 +81,7 @@ sonolytica doctor
 
 # 2. Fetch pinned models (verified by SHA-256 before use)
 sonolytica models fetch \
-  silero-vad-v5 whisper-base.en \
+  silero-vad-v5 whisper-base.en sortformer-4spk-v2 \
   pyannote-segmentation-3.0 wespeaker-campplus
 
 # 3. Analyse (--profile structure | standard | ultra)
