@@ -60,6 +60,7 @@ sonolytica analyze talk.mp4 --out talk.json --profile standard --ocr --summary
 sonolytica query brief talk.json            # media, runs, speakers, chapters, cuts, OCR
 sonolytica query search talk.json budget    # exact ranges, never rounded
 sonolytica query timeline talk.json --from 00:01:20 --to 00:01:30
+sonolytica query verify talk.json --claims answer.json  # quotes + ranges, mechanically
 sonolytica report talk.json --out talk.html # human page: chapters, quotes, frames
 ```
 

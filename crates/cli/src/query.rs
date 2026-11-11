@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow, bail};
 use clap::{Args, Subcommand};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sonolytica_core::{
     AcousticSummary, AnalysisBlock, AnalysisConfig, Bpm, Capability, Chord, Document, KeyEstimate,
     Loudness, MediaInfo, MediaTime, MusicSummary, RunRecord, RunStatus, Section, Segment,
@@ -181,6 +181,18 @@ pub enum QueryCommand {
         #[arg(long)]
         json: bool,
     },
+    /// Check that quotes exist in the document and that their ranges match
+    Verify {
+        /// Document produced by `sonolytica analyze`
+        doc: PathBuf,
+        /// JSON file with `{"claims":[{"quote","start_us","end_us"}]}`;
+        /// `-` or omitted reads stdin
+        #[arg(long)]
+        claims: Option<PathBuf>,
+        /// Emit typed JSON on stdout instead of a table
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 pub fn run(command: QueryCommand) -> Result<()> {
@@ -228,6 +240,7 @@ pub fn run(command: QueryCommand) -> Result<()> {
         ),
         QueryCommand::Brief { doc, json } => brief(&load(&doc)?, json),
         QueryCommand::Summary { doc, json } => summary(&load(&doc)?, json),
+        QueryCommand::Verify { doc, claims, json } => verify(&load(&doc)?, claims.as_deref(), json),
     }
 }
 
@@ -1414,6 +1427,163 @@ fn brief(doc: &Document, json: bool) -> Result<()> {
         for warning in &doc.warnings {
             println!("           [{}] {}", warning.code, warning.message);
         }
+    }
+    Ok(())
+}
+
+// --------------------------------------------------------------------- verify
+
+/// One claim an agent wants to make: verbatim quote plus the range it will cite.
+#[derive(Debug, Deserialize)]
+struct ClaimsInput {
+    claims: Vec<Claim>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Claim {
+    quote: String,
+    start_us: i64,
+    end_us: i64,
+}
+
+#[derive(Debug, Serialize)]
+struct VerifyOutput {
+    ok: bool,
+    claim_count: usize,
+    failed: usize,
+    claims: Vec<VerifyClaim>,
+}
+
+#[derive(Debug, Serialize)]
+struct VerifyClaim {
+    index: usize,
+    quote: String,
+    start_us: i64,
+    end_us: i64,
+    status: &'static str,
+    matches: Vec<VerifyMatch>,
+}
+
+#[derive(Debug, Serialize)]
+struct VerifyMatch {
+    kind: String,
+    start_us: i64,
+    end_us: i64,
+}
+
+/// The self-check an answer protocol needs: does this quote exist, and does the
+/// cited range actually cover it? Nothing is inferred: a quote that is not in a
+/// speech or speaker-turn segment is `quote_not_found`, even if it sounds right.
+fn verify(doc: &Document, claims_path: Option<&Path>, json: bool) -> Result<()> {
+    let raw = match claims_path {
+        None => {
+            let mut buffer = String::new();
+            std::io::Read::read_to_string(&mut std::io::stdin(), &mut buffer)?;
+            buffer
+        }
+        Some(path) if path == Path::new("-") => {
+            let mut buffer = String::new();
+            std::io::Read::read_to_string(&mut std::io::stdin(), &mut buffer)?;
+            buffer
+        }
+        Some(path) => std::fs::read_to_string(path)
+            .with_context(|| format!("could not read {}", path.display()))?,
+    };
+    let input: ClaimsInput = serde_json::from_str(&raw)
+        .context("claims must be {\"claims\":[{quote,start_us,end_us}]}")?;
+
+    let mut results = Vec::with_capacity(input.claims.len());
+    for (index, claim) in input.claims.iter().enumerate() {
+        let quote = claim.quote.trim();
+        let mut matches = Vec::new();
+        let mut overlapping = false;
+        let mut status = "quote_not_found";
+        if quote.is_empty() {
+            status = "empty_quote";
+        } else if claim.end_us < claim.start_us {
+            status = "invalid_range";
+        } else {
+            for segment in doc
+                .segments_of_kind("speech")
+                .chain(doc.segments_of_kind("speaker_turn"))
+            {
+                let Some(text) = segment.kind.text() else {
+                    continue;
+                };
+                if !text.contains(quote) {
+                    continue;
+                }
+                let start = segment.range.start.micros();
+                let end = segment.range.end.micros();
+                if claim.start_us == claim.end_us {
+                    overlapping = (start..=end).contains(&claim.start_us);
+                } else {
+                    overlapping = start < claim.end_us && claim.start_us < end;
+                }
+                matches.push(VerifyMatch {
+                    kind: segment.kind.kind_name().to_string(),
+                    start_us: start,
+                    end_us: end,
+                });
+            }
+            if !matches.is_empty() {
+                status = if overlapping { "ok" } else { "range_mismatch" };
+            }
+        }
+        results.push(VerifyClaim {
+            index: index + 1,
+            quote: quote.to_string(),
+            start_us: claim.start_us,
+            end_us: claim.end_us,
+            status,
+            matches,
+        });
+    }
+
+    let failed = results.iter().filter(|claim| claim.status != "ok").count();
+    let output = VerifyOutput {
+        ok: failed == 0,
+        claim_count: results.len(),
+        failed,
+        claims: results,
+    };
+    if json {
+        emit(&output)?;
+    } else {
+        for claim in &output.claims {
+            let mut line = format!(
+                "claim {:<3} {:<16} {}–{}  {}",
+                claim.index,
+                claim.status,
+                MediaTime::from_micros(claim.start_us),
+                MediaTime::from_micros(claim.end_us),
+                claim.quote
+            );
+            if claim.status != "ok" && !claim.matches.is_empty() {
+                let found = claim
+                    .matches
+                    .iter()
+                    .map(|found| {
+                        format!(
+                            "{} {}–{}",
+                            found.kind,
+                            MediaTime::from_micros(found.start_us),
+                            MediaTime::from_micros(found.end_us)
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let _ = write!(line, "  [found: {found}]");
+            }
+            println!("{line}");
+        }
+        println!("{} claims, {} failed", output.claim_count, output.failed);
+    }
+    if failed > 0 {
+        bail!(
+            "{failed} of {} claims failed verification",
+            output.claim_count
+        );
     }
     Ok(())
 }

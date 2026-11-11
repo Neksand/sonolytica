@@ -84,6 +84,19 @@ Minimum commands per question — start at the top and add only what is missing:
 | chords, beats, detailed loudness | `brief` + `music` / `acoustic` |
 | full chapter or speaker list | `brief` + `chapters` / `speakers` |
 
+## verify
+
+```bash
+sonolytica query verify "$DOC" --claims claims.json --json
+```
+
+`claims.json` is `{"claims":[{"quote":"…","start_us":0,"end_us":1000000}]}`;
+the quote must be verbatim and the range in microseconds. Statuses: `ok`,
+`quote_not_found`, `range_mismatch`, `invalid_range`, `empty_quote`. Non-`ok`
+claims make the command exit 1. `matches` lists where the quote actually is, so
+a wrong range can be fixed instead of guessed. This is the mechanical self-check
+behind §8; it does not verify meaning, only text and time.
+
 ## timeline
 
 ```bash

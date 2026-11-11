@@ -17,7 +17,7 @@ runtime, no GPL.
 | | |
 |---|---|
 | Rust | 17 161 lines across 7 crates (`providers` 4 347, `cli` 4 826, `engine` 2 631, `core` 2 080, `dsp` 1 360, `media` 1 226, `eval` 691) |
-| Query commands | 14 (`brief`, `timeline`, `at`, `search`, `transcript`, `words`, `speakers`, `chapters`, `frames`, `music`, `acoustic`, `runs`, `summary`, `help`) |
+| Query commands | 15 (`brief`, `timeline`, `at`, `search`, `transcript`, `words`, `speakers`, `chapters`, `frames`, `music`, `acoustic`, `runs`, `summary`, `verify`, `help`) |
 | CLI | `analyze`, `query`, `report` (HTML), `install-skill` (4 harnesses), `models fetch --set core\|full`, `doctor`, `inspect`, `schema` |
 | Models | 10, all SHA-256 pinned: Silero VAD, whisper tiny/base/small, wav2vec2 aligner, Sortformer 4spk, pyannote segmentation, WeSpeaker, PP-OCRv5 det/rec |
 | Schema | 1.4.0 (`Document::validate`, additive 1.0 → 1.4) |
@@ -28,8 +28,8 @@ runtime, no GPL.
 
 | Check | Result |
 |---|---|
-| `cargo test --workspace` | 141 passed, 0 failed |
-| with `full,metal` | 156 passed, 0 failed |
+| `cargo test --workspace` | 142 passed, 0 failed |
+| with `full,metal` | 157 passed, 0 failed |
 | `cargo clippy -D warnings` | clean (default and full) |
 | `cargo fmt --check` | clean |
 | Model-free build | tests pass with no models, no cmake, no ONNX runtime |

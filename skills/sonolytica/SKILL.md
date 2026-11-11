@@ -140,8 +140,8 @@ Detail and edge cases: `references/citation-rules.md`.
 2. The answer, with verbatim quotes and ranges.
 3. What the document does **not** cover, when it matters.
 4. Self-check: every quote appears character-for-character in a `query` result;
-   every timestamp is copied, not computed; speaker labels are document-local;
-   confidence is a score.
+   every timestamp is copied, not computed; labels are document-local. For JSON,
+   `query verify` checks quotes and ranges mechanically.
 
 ## 9. When the word is not in the transcript
 

@@ -456,6 +456,63 @@ fn human_output_is_plain_and_readable() {
 }
 
 #[test]
+fn verify_checks_quotes_and_ranges() {
+    let path = fixture_path();
+    let claims =
+        std::env::temp_dir().join(format!("sonolytica-claims-{}.json", std::process::id()));
+    std::fs::write(
+        &claims,
+        r#"{"claims":[
+            {"quote":"Hello pricing team","start_us":0,"end_us":6000000},
+            {"quote":"Hello pricing team","start_us":10000000,"end_us":11000000},
+            {"quote":"the budget was cut","start_us":0,"end_us":1000000}
+        ]}"#,
+    )
+    .unwrap();
+
+    let output = query(&[
+        "query",
+        "verify",
+        path.to_str().unwrap(),
+        "--claims",
+        claims.to_str().unwrap(),
+        "--json",
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "a failed claim must exit 1: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let json: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("verify emits JSON");
+    assert_eq!(json["ok"], false);
+    assert_eq!(json["failed"], 2);
+    assert_eq!(json["claims"][0]["status"], "ok");
+    assert_eq!(json["claims"][1]["status"], "range_mismatch");
+    assert_eq!(json["claims"][2]["status"], "quote_not_found");
+    assert_eq!(
+        json["claims"][1]["matches"][0]["start_us"], 0,
+        "the report shows where the quote actually is"
+    );
+
+    std::fs::write(
+        &claims,
+        r#"{"claims":[{"quote":"Hello pricing team","start_us":0,"end_us":6000000}]}"#,
+    )
+    .unwrap();
+    let output = query(&[
+        "query",
+        "verify",
+        path.to_str().unwrap(),
+        "--claims",
+        claims.to_str().unwrap(),
+    ]);
+    assert!(output.status.success());
+    assert!(String::from_utf8_lossy(&output.stdout).contains("1 claims, 0 failed"));
+}
+
+#[test]
 fn bad_input_exits_one() {
     let path = fixture_path();
     let doc = path.to_str().unwrap();
