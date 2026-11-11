@@ -266,6 +266,22 @@ Results (medians, DeepSeek V4.1 Flash, one clean directory per run):
 | easy 14.4 s | 8/8, 9 521 | **8/8, 7 517** | ≤8 000 | met |
 | long 20 min | 16/16, 17 633 | **16/16, 11 308** | score ≥, ≤+10 % | met |
 
+Delivered in the same pass:
+
+- `brief.speech.overlaps`: merged overlap spans, measured above (long 22 → 8
+  commands, 15/16 → 16/16);
+- `query verify`: checks a verbatim quote and its range mechanically, exits 1
+  on a failed claim (`--claims` JSON or stdin);
+- `sonolytica report`: one self-contained HTML file plus copied keyframes —
+  chapters, quotes, OCR, frames, runs;
+- `sonolytica install-skill`: the skill is embedded in the binary and installed
+  into Claude Code, Codex, OpenCode and Cursor (`--project`, `--dry-run`,
+  `--uninstall`);
+- `models fetch --set core|full`;
+- `.github/workflows/release.yml` (macOS arm64/x86_64, Linux x86_64, checksums)
+  and `install.sh` with checksum verification;
+- a product README, issue forms and a PR checklist.
+
 Open, in priority order:
 
 1. **Video depth.** Objects and faces (detection only, no identity), dense

@@ -44,7 +44,11 @@ curl -fsSL "${url}/${archive}" -o "${tmp}/${archive}"
 curl -fsSL "${url}/${archive}.sha256" -o "${tmp}/${archive}.sha256"
 
 expected=$(awk '{print $1}' "${tmp}/${archive}.sha256")
-actual=$(shasum -a 256 "${tmp}/${archive}" | awk '{print $1}')
+if command -v sha256sum >/dev/null 2>&1; then
+    actual=$(sha256sum "${tmp}/${archive}" | awk '{print $1}')
+else
+    actual=$(shasum -a 256 "${tmp}/${archive}" | awk '{print $1}')
+fi
 if [[ $expected != "$actual" ]]; then
     echo "checksum mismatch: expected $expected, got $actual" >&2
     exit 1

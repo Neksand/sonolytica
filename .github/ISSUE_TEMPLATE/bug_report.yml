@@ -1,0 +1,39 @@
+name: Bug report
+description: Something is wrong: a crash, a wrong timecode, a missing fact.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not paste private media, transcripts or keys. A minimal document
+        excerpt and the exact command are enough.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The command, the expected result and the actual result.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "`sonolytica doctor`"
+      description: Paste the full output (it names the build, FFmpeg and models).
+      render: console
+    validations:
+      required: true
+  - type: textarea
+    id: document
+    attributes:
+      label: Document excerpt
+      description: |
+        The smallest `query` result that shows the problem (`query brief`,
+        `query timeline … --json`) and the `runs`/`warnings` entries.
+      render: json
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: sonolytica 0.1.0 (or commit hash)
+    validations:
+      required: true

@@ -34,7 +34,9 @@ jobs:
         run: |
           if [ "$RUNNER_OS" = "macOS" ]; then brew install cmake ffmpeg; else sudo apt-get update && sudo apt-get install -y cmake libasound2-dev; fi
       - name: Build
-        run: cargo build --release -p sonolytica-cli -p sonolytica-eval --features ${{ matrix.features }}
+        run: |
+          cargo build --release -p sonolytica-cli --features ${{ matrix.features }}
+          cargo build --release -p sonolytica-eval
       - name: Package
         run: |
           mkdir -p dist
