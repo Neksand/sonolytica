@@ -16,7 +16,7 @@ runtime, no GPL.
 
 | | |
 |---|---|
-| Rust | 15 045 lines across 7 crates (`providers` 4 330, `cli` 3 089, `engine` 2 315, `core` 2 080, `dsp` 1 360, `media` 1 226, `eval` 645) |
+| Rust | 15 349 lines across 7 crates (`providers` 4 347, `cli` 3 089, `engine` 2 602, `core` 2 080, `dsp` 1 360, `media` 1 226, `eval` 645) |
 | Query commands | 13 (`timeline`, `at`, `search`, `transcript`, `words`, `speakers`, `chapters`, `frames`, `music`, `acoustic`, `runs`, `summary`, `help`) |
 | Models | 10, all SHA-256 pinned: Silero VAD, whisper tiny/base/small, wav2vec2 aligner, Sortformer 4spk, pyannote segmentation, WeSpeaker, PP-OCRv5 det/rec |
 | Schema | 1.4.0 (`Document::validate`, additive 1.0 → 1.4) |
@@ -27,8 +27,8 @@ runtime, no GPL.
 
 | Check | Result |
 |---|---|
-| `cargo test --workspace` | 121 passed, 21 suites, 0 failed |
-| with `full,metal` | 136 passed, 0 failed |
+| `cargo test --workspace` | 131 passed, 0 failed |
+| with `full,metal` | 146 passed, 0 failed |
 | `cargo clippy -D warnings` | clean (default and full) |
 | `cargo fmt --check` | clean |
 | Model-free build | tests pass with no models, no cmake, no ONNX runtime |
@@ -40,14 +40,15 @@ runtime, no GPL.
 |---|---|---|---|
 | ASR | WER | **6.05 %** | LibriSpeech test-clean, 100 utterances, 2048 words, `whisper-base.en` |
 | ASR | CER | 2.25 % | same run; 23 deletions (1.1 %), 0 empty hypotheses |
-| Diarization | DER | **11.81 %** dev / **17.46 %** test (AHC pilots); **11.43 %** weighted / **8.19 %** unweighted with Sortformer on a fresh shard | VoxConverse, collar 0.25 s |
-| Diarization | speaker count | AHC MAE **5.0** → Sortformer **0.33** (5/6 exact) on the fresh 2-4 speaker subset | 6 files, 2140 s |
-| Diarization | failure mode | one 20-min 4-speaker file collapses to 2 voices; noisy single-speaker files show false alarm | Sortformer caps at 4 |
+| Diarization | DER | **11.81 %** dev / **17.46 %** test (AHC pilots); Sortformer **11.08 %** weighted / **7.76 %** unweighted on `test-00002`, **9.95 %** / **7.49 %** on the fresh `test-00003` | VoxConverse, collar 0.25 s, 0.70 VAD gate |
+| Diarization | speaker count | AHC MAE **5.0** → Sortformer **0.33** (5/6 exact) on the fresh 2-4 speaker subset; **0.00** (6/6) on `test-00003` | 6 files each, 2140 s / 2401 s |
+| Diarization | false alarm | **4.27 → 2.47 %** (`gwloo`) and **13.41 → 6.53 %** (`uicid`); **15.61 → 5.71 %** (`xtdcl`) on fresh data | 1-spk and 2-spk real recordings |
+| Diarization | failure mode | one 20-min 4-speaker file collapses to 2 voices; speaker-turn ranges are clamped to VAD-gated turns (raw `query words` stay complete) | Sortformer caps at 4 |
 | OCR | lines | 2/2, 6/6, 7/7 CJK | synthetic slides and a terminal screenshot, PP-OCRv5, 0.987 confidence on the benchmark slide |
 | Video | cut accuracy | ±0.5 s | 3-shot synthetic video, 2 fps signatures; colour-cut bug found and fixed |
 | Alignment | word drift vs Whisper | **median 110 ms** | wav2vec2 CTC, English, two-voice fixture; 88 % within 600 ms |
 | Music | tempo / key / sections | 120.3 vs 120 BPM; C major correct; A–B–A boundaries within 160 ms | synthetic clicks, triads and a 30 s C–G–C track |
-| Throughput | realtime factor | **14.1×** with Sortformer / **21.64×** AHC | 155.6 s and 121.7 s full pipeline, 11.0 s and 8.28 s wall |
+| Throughput | realtime factor | **16.9×** on the 240 s hard fixture (17.9× without the VAD gate pass); 14.1× was the 155.6 s pipeline before the gate | full audio pipeline with Sortformer |
 | Russian | transcript | exact | 12 s, `whisper-small --language ru`, 0 word errors on a clean fixture |
 | Agent | answers | **16/20 vs 20/20** easy; **7/16 vs 16/16** hard | no skill vs skill; the hard fixture is a 4 min, 4-voice meeting with no ASR/OCR tools for the baseline |
 
@@ -86,11 +87,10 @@ frames or OCR, and is overhead for a short clean recording. It makes the agent
 ## Risks
 
 1. **Speaker count is fixed for 2-4 speakers, not for long files.** Sortformer
-   gets five of six counts right on a fresh shard (MAE 0.33 vs 5.0) and splits
-   overlap; a 20-minute four-speaker file still collapses to two voices, and
-   noisy single-speaker audio produces false alarms. A VAD gate did not help —
-   Silero classifies the same noise as speech (see EVAL). The next attempt is
-   the model's native streaming cache.
+   gets six of six counts right on freshly seen `test-00003`, and the 0.70 VAD
+   gate cuts false alarm on noisy recordings (weighted DER 11.02 → 9.95 %).
+   A 20-minute four-speaker file still collapses to two voices. The next
+   attempt is the model's native streaming cache.
 2. **One-fixture benchmark.** Ten questions, synthetic media. Real interviews,
    meetings, music and long videos are untested.
 3. **Music is shallow**: tempo, key, triads, sections and loudness. No notes,
@@ -107,7 +107,8 @@ frames or OCR, and is overhead for a short clean recording. It makes the agent
 - **Speech-heavy structured media (interviews, lectures, meetings with up to
   four speakers): strong.** Exact quotes, speaker turns, chapters, keyframes,
   OCR, citations, honest gaps — with a known caveat on 5+ speakers and very
-  long meetings.
+  long meetings; speaker-turn ranges are clipped to the diarized turn, while
+  raw words remain complete.
 - **Slides / screencasts: strong.** Cuts, keyframes and exact on-screen text.
 - **General video understanding: partial.** Navigation and text, no semantics.
 - **Music: measured but shallow.** Tempo, key and technical sections are

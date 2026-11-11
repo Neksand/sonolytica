@@ -5,6 +5,8 @@
 | Message / symptom | Meaning | Action |
 |---|---|---|
 | `warnings[code=provider_unavailable]` | a capability had no model or provider | `sonolytica models fetch <ids>`, then re-run |
+| `warnings[code=diarization_vad_gated]` | the VAD gate removed diarizer turns that did not overlap speech | not an error; the removed time was music/noise |
+| `warnings[code=diarization_vad_gate_unavailable]` | the stricter gate pass failed | speaker turns are ungated; read the message |
 | `run.status = partial` | it ran but produced less than asked | read `reason`; re-run with the model installed |
 | `run.status = failed` | it ran and errored | read `warnings` for the same `run` id |
 | `doctor` shows ffmpeg NOT AVAILABLE | nothing can be decoded | install FFmpeg (7+) |
@@ -45,8 +47,10 @@ that was a provider bug fixed for new runs. In an existing document, say the
 language metadata is unreliable and do not use it as evidence. Re-run to fix.
 
 **Numbers add up differently.** `speech_duration` is VAD-measured speech for the
-whole file; the sum of `speaker_turn` durations is diarization. Different
-measurements, not an error. For "who spoke most" use `query speakers`.
+whole file; the sum of `speaker_turn` durations is diarization. Speaker turns
+are also clipped to the diarized turn (plus 300 ms), so a word outside it stays
+in `query words` but not in the dialogue. Different measurements, not an error.
+For "who spoke most" use `query speakers`.
 
 ## Query problems
 

@@ -4,8 +4,12 @@
 //! conservative:
 //!
 //! * a word belongs to the diarization turn with the largest temporal overlap;
-//! * a word with no overlapping turn is left out of the dialogue (it stays in
-//!   the raw speech segment, so nothing is lost);
+//! * the utterance range is clamped to the assigned turn envelope plus a small
+//!   boundary tolerance, so a speaker turn never claims time the diarizer did
+//!   not attribute to the speaker — the text stays complete even when its first
+//!   word starts slightly before the turn;
+//! * a word with no turn inside the tolerance is left out of the dialogue (it
+//!   stays in the raw speech segment, so nothing is lost);
 //! * consecutive words of one speaker become one utterance, split on speaker
 //!   change or a gap longer than [`MAX_WORD_GAP`];
 //! * diarization turns that no word covers are still emitted, with empty text,
@@ -20,6 +24,9 @@ const MAX_WORD_GAP: MediaTime = MediaTime::from_micros(800_000);
 /// nearest turn if it lies this close: diarization boundaries lag real speech
 /// onsets by a few hundred milliseconds.
 const MAX_TURN_GAP: MediaTime = MediaTime::from_micros(750_000);
+/// Attribute up to this much of the utterance range outside its turn; anything
+/// further is the diarizer's silence, not the speaker's time.
+const TURN_TOLERANCE: MediaTime = MediaTime::from_millis(300);
 
 #[derive(Debug, Clone)]
 pub struct Utterance {
@@ -68,11 +75,24 @@ fn best_turn(range: TimeRange, turns: &[DiarTurn]) -> Option<&DiarTurn> {
     nearest.map(|(turn, _)| turn)
 }
 
+/// Clamp an utterance span to the assigned turn envelope plus
+/// [`TURN_TOLERANCE`]. Falls back to the span when they are disjoint (a word
+/// attributed by proximity), so text is never dropped for a range reason.
+fn clamp_to_turn(range: TimeRange, turn_start: MediaTime, turn_end: MediaTime) -> TimeRange {
+    let allowed = TimeRange::new(
+        turn_start.saturating_sub(TURN_TOLERANCE),
+        turn_end.saturating_add(TURN_TOLERANCE),
+    );
+    range.intersection(&allowed).unwrap_or(range)
+}
+
 struct Builder {
     speaker: SpeakerId,
     text: String,
     start: MediaTime,
     end: MediaTime,
+    turn_start: MediaTime,
+    turn_end: MediaTime,
     confidence: Option<Confidence>,
     parent: Option<usize>,
 }
@@ -84,7 +104,11 @@ impl Builder {
             return None;
         }
         Some(Utterance {
-            range: TimeRange::new(self.start, self.end),
+            range: clamp_to_turn(
+                TimeRange::new(self.start, self.end),
+                self.turn_start,
+                self.turn_end,
+            ),
             speaker: self.speaker,
             text,
             parent_asr: self.parent,
@@ -106,10 +130,7 @@ pub fn build_speaker_turns(asr: &[AsrSegment], turns: &[DiarTurn]) -> Vec<Uttera
             if let Some(turn) = best_turn(segment.range, turns) {
                 if !segment.text.trim().is_empty() {
                     utterances.push(Utterance {
-                        range: segment
-                            .range
-                            .intersection(&turn.range)
-                            .unwrap_or(segment.range),
+                        range: clamp_to_turn(segment.range, turn.range.start, turn.range.end),
                         speaker: turn.speaker.clone(),
                         text: segment.text.trim().to_string(),
                         parent_asr: Some(asr_index),
@@ -149,6 +170,8 @@ pub fn build_speaker_turns(asr: &[AsrSegment], turns: &[DiarTurn]) -> Vec<Uttera
                     text: String::new(),
                     start: word.range.start,
                     end: word.range.end,
+                    turn_start: turn.range.start,
+                    turn_end: turn.range.end,
                     confidence: turn.confidence,
                     parent: Some(asr_index),
                 });
@@ -159,6 +182,8 @@ pub fn build_speaker_turns(asr: &[AsrSegment], turns: &[DiarTurn]) -> Vec<Uttera
                 }
                 builder.text.push_str(&word.text);
                 builder.end = builder.end.max(word.range.end);
+                builder.turn_start = builder.turn_start.min(turn.range.start);
+                builder.turn_end = builder.turn_end.max(turn.range.end);
             }
         }
         if let Some(builder) = current.take() {
@@ -270,5 +295,46 @@ mod tests {
         let utterances = build_speaker_turns(&asr, &turns);
         assert_eq!(utterances.len(), 1);
         assert_eq!(utterances[0].text, "a whole sentence");
+    }
+
+    #[test]
+    fn word_is_clipped_to_its_turn_with_boundary_tolerance() {
+        // Word runs 0.5 s past the turn; 300 ms of that is boundary lag, the
+        // rest is the diarizer's silence and must not be claimed.
+        let asr = vec![segment("hello", 1.0, 2.5, vec![word("hello", 1.0, 2.5)])];
+        let turns = vec![turn("S1", 2.0, 3.0)];
+        let utterances = build_speaker_turns(&asr, &turns);
+        assert_eq!(utterances.len(), 1);
+        assert_eq!(utterances[0].range, TimeRange::from_secs(1.7, 2.5));
+    }
+
+    #[test]
+    fn boundary_words_keep_their_text_but_not_their_time() {
+        // Mirrors the easy fixture: Whisper hears "am the" before Silero's
+        // strict region starts, and the diarizer puts the turn at 6.16.
+        let asr = vec![segment(
+            "am the second speaker",
+            5.66,
+            7.66,
+            vec![
+                word("am", 5.66, 5.67),
+                word("the", 5.67, 5.70),
+                word("second", 6.11, 6.58),
+                word("speaker", 6.58, 7.66),
+            ],
+        )];
+        let turns = vec![turn("S2", 6.16, 8.16)];
+        let utterances = build_speaker_turns(&asr, &turns);
+        assert_eq!(utterances.len(), 1, "{utterances:?}");
+        assert_eq!(utterances[0].text, "am the second speaker");
+        assert_eq!(utterances[0].range, TimeRange::from_secs(5.86, 7.66));
+    }
+
+    #[test]
+    fn word_within_boundary_lag_keeps_its_original_range() {
+        let asr = vec![segment("hi", 0.9, 1.3, vec![word("hi", 0.9, 1.3)])];
+        let turns = vec![turn("S1", 1.0, 2.0)];
+        let utterances = build_speaker_turns(&asr, &turns);
+        assert_eq!(utterances[0].range, TimeRange::from_secs(0.9, 1.3));
     }
 }

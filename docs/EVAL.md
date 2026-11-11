@@ -164,8 +164,8 @@ Reading it:
   unweighted mean improves. The next step for files like this is the model's
   native streaming cache, not a longer forward pass.
 - **Single-speaker files keep the right count** (`gwloo` 1→1, `uicid` 1→1) but
-  show false alarm on in-the-wild noise: 4.27 % and 13.41 %. A VAD gate was
-  tried and did not help — see below.
+  show false alarm on in-the-wild noise: 4.27 % and 13.41 %. A dedicated VAD
+  gate cuts them to 2.47 % and 6.53 % — see below.
 - **Overlap is split, not just flagged.** On the hard 4-minute meeting the known
   simultaneous turn around 130 s comes back as two turns (S2 and S3) whose
   ranges intersect.
@@ -176,34 +176,62 @@ Reading it:
 Caveat: one fresh shard, six files, one machine. The numbers are a pilot for
 direction, not a leaderboard entry.
 
-### Tried and rejected: VAD gate for diarization
+### VAD-gated diarization
 
-Hypothesis: the false alarm on `gwloo` and `uicid` is the diarizer labelling
-non-speech; Silero VAD regions are an independent check, so drop turns whose
-coverage is below 0.5, keep turns shorter than 0.5 s, keep any turn containing
-a whole VAD region (quiet speech), and trim edges that overhang speech by more
-than 0.5 s. VAD was also made a prerequisite of `Diarize`, so the gate works
-without `--modules vad`.
+Hypothesis: the false alarm on `gwloo`, `uicid` and later `test-00003` is the
+diarizer labelling non-speech; Silero VAD regions are an independent check.
+The first attempt used the configured VAD (`threshold 0.45`): on `uicid` all
+271 turns had at least 78.9 % coverage (median 100 %), so the gate removed
+nothing — the configured VAD calls the noise speech. On `ltgmz` its single
+dropped turn was real (missed speech 6.46 % → 7.04 %). That version was
+rejected.
 
-Result on `test-00002`, same pipeline and collar:
+The accepted version runs a **dedicated gate pass at 0.70**; the ASR pass keeps
+the configured threshold, so transcript regions and WER are untouched. The gate
+drops a turn only when coverage is below 0.5, the turn is at least 0.5 s long,
+and it contains no whole VAD region; edges overhanging speech by more than
+0.5 s are trimmed. The utterance range is then clamped to the assigned turn
+plus 300 ms, while the text stays complete: a word cut from the range is still
+in `query words` and in the dialogue.
 
-| file | dropped | DER before | DER after | FA before | FA after |
-|---|---|---|---|---|---|
-| gwloo (1 spk) | 0 | 7.34 % | 7.34 % | 4.27 % | 4.27 % |
-| uicid (1 spk) | 0 | 16.23 % | 16.23 % | 13.41 % | 13.41 % |
-| ltgmz (2 spk) | 1 | 11.47 % | 12.11 % | 4.36 % | 4.36 % |
-| wcxfk, rmvsh, fvhrk, ledhe, gylzn | 0 | unchanged | unchanged | | |
-| weighted 2-4 spk | | 11.43 % | 11.47 % | | |
-| unweighted 2-4 spk | | 8.19 % | 8.29 % | | |
+Threshold 0.70 was chosen on `test-00002`. `test-00003` was untouched until the
+comparison below; that is the final number for this change.
 
-On `uicid` all 271 turns had at least 78.9 % coverage (median 100 %, 22
-protected by a contained region), so the gate removed nothing. Silero itself
-calls that noise speech: the false alarm is inside VAD regions, not outside
-them. On `ltgmz` the single dropped turn held real speech (missed speech
-6.46 % → 7.04 %), which is the only measured effect. On `bench-hard` the
-overlap at ~130 s survived (S2 130.0–131.3 s, S3 128.0–133.7 s; S3's start
-was trimmed by 1 s), with no turns dropped. Reverted. A better signal than the
-VAD is needed before gating again; no energy heuristic was added.
+`test-00002`, same pipeline and collar:
+
+| file | DER before | DER after | FA before | FA after |
+|---|---|---|---|---|
+| gwloo (1 spk) | 7.34 % | **5.56 %** | 4.27 % | **2.47 %** |
+| uicid (1 spk) | 16.23 % | **9.45 %** | 13.41 % | **6.53 %** |
+| weighted, 1 spk | 11.97 % | **7.58 %** | | |
+| weighted, 2-4 spk | 11.43 % | **11.08 %** | | |
+| unweighted, 2-4 spk | 8.19 % | **7.76 %** | | |
+
+On the six 2-4 speaker files no DER rose (the largest gain is `rmvsh`,
+5.41 → 4.80 %) and speaker-count MAE stayed 0.33 (5/6 exact).
+
+`test-00003` (fresh shard, 6 files, 2401 s scored):
+
+| file | DER before | DER after | FA before | FA after |
+|---|---|---|---|---|
+| lubpm | 12.17 % | **4.27 %** | 9.90 % | **2.00 %** |
+| xtdcl | 19.87 % | **10.99 %** | 15.61 % | **5.71 %** |
+| dxbbt | 11.12 % | 10.89 % | 1.12 % | 0.89 % |
+| zfzlc | 13.12 % | 12.79 % | 1.03 % | 0.58 % |
+| kmunk | 5.87 % | 4.33 % | 2.01 % | 0.46 % |
+| bxcfq | 1.66 % | 1.66 % | 0.00 % | 0.00 % |
+| **weighted** | **11.02 %** | **9.95 %** | | |
+| **unweighted** | **10.63 %** | **7.49 %** | | |
+
+Speaker-count MAE stays 0.00 with 6/6 exact. Missed speech rises slightly on
+`xtdcl` (3.76 % → 5.18 %) because the turn no longer claims words outside it;
+the false-alarm drop dominates. ASR and dialogue text are unchanged: LibriSpeech
+WER stays 6.05 % (same 23 deletions), bench-hard words stay 102 and every turn
+keeps its text (e.g. "We have 20 % more…" at the overlap), and the overlap at
+~130 s is still two turns (S2 130.0–131.3 s, S3 127.7–133.6 s). The gate costs
+about 0.8 s on the 240 s hard fixture (13.4 → 14.2 s, 17.9× → 16.9× realtime).
+When it removes turns it warns `diarization_vad_gated`; a failed strict pass
+warns `diarization_vad_gate_unavailable` and leaves turns ungated.
 
 ### Tried and rejected: silhouette-based splitting
 
@@ -326,19 +354,19 @@ The planned order was forced alignment, then diarization. The measurements
 argue for swapping that:
 
 1. **Diarization: the count is solved for 2-4 speakers, not for long files.**
-   Sortformer gets five of six counts right on a fresh shard, and its errors
-   are now under-segmentation on a 20-minute four-speaker file and false alarm
-   on noisy single-speaker audio. The next change is the model's native
-   streaming cache, not another similarity cut; a VAD gate was tried and
-   rejected (above) because the VAD also hears the noise as speech.
+   Sortformer gets five of six counts right on a freshly seen shard and, with
+   the 0.70 VAD gate, false alarm on noisy real recordings is down to 0.5–5.7 %
+   (test-00003 weighted DER 11.02 → 9.95 %). The remaining error is
+   under-segmentation on a 20-minute four-speaker file, so the next change is
+   the model's native streaming cache, not another similarity cut.
 2. **Alignment second.** WER 6.05 % is near the model ceiling and deletions are
    1.1 %; alignment improves *when* a word was said (citations, cutting), not
    *what* was said. Still worth doing, but it does not move the headline.
 3. **Do not touch the ASR model yet.** `base.en` on clean speech is not the
    bottleneck. A larger model is a cost decision, not a quality fix.
-4. **Fresh data before the next claim.** Both pilot shards have been seen now;
-   the next diarization number needs a subset that has not been used for any
-   decision.
+4. **Fresh data before the next claim.** `test-00002` was used for the gate
+   threshold and `test-00003` for its final number; both have been seen. The
+   next diarization number needs `test-00004`.
 
 ## Reproduce
 

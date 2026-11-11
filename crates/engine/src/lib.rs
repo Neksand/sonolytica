@@ -12,6 +12,7 @@
 #![allow(clippy::missing_panics_doc)]
 #![allow(clippy::missing_errors_doc)]
 
+mod diar_gate;
 pub mod error;
 pub mod merge;
 
@@ -40,6 +41,10 @@ pub use merge::{Utterance, build_speaker_turns};
 
 const SPEECH_RATE: u32 = 16_000;
 const MUSIC_RATE: u32 = 32_000;
+/// Silero speech probability used for the diarization gate. The configured
+/// 0.45 is tuned for ASR recall and calls music and room noise speech; at 0.70
+/// the same regions reject non-speech while clean-speech WER is unchanged.
+const DIAR_GATE_VAD_THRESHOLD: f32 = 0.70;
 
 /// The analysis engine. One instance holds immutable provider state and can be
 /// reused across many analyses.
@@ -290,10 +295,10 @@ impl Engine {
         }
 
         // --- VAD -----------------------------------------------------------
-        // VAD runs whenever it was requested, and also as a prerequisite for
-        // ASR when a detector is available: decoding speech regions instead of
-        // the whole file avoids Whisper's long-form early end-of-text failure
-        // and skips silence.
+        // VAD runs when requested and as a prerequisite for ASR: decoding
+        // speech regions instead of the whole file avoids Whisper's long-form
+        // early end-of-text failure and skips silence. Diarization runs its own
+        // stricter pass below (see DIAR_GATE_VAD_THRESHOLD).
         let mut vad_regions: Vec<SpeechRegion> = Vec::new();
         if self.registry.vad().is_some()
             && (config.wants(Capability::Vad) || config.wants(Capability::Transcribe))
@@ -437,16 +442,26 @@ impl Engine {
                 let registry = Arc::clone(&self.registry);
                 let diar_config = config.diarization.clone();
                 let started = (now_unix_ms(), Instant::now());
+                // Gating needs a stricter VAD than ASR: at the default
+                // threshold Silero labels music and room noise as speech, so
+                // those regions cannot reject anything. This second pass never
+                // changes what ASR sees, and it honours a stricter user value.
+                let mut gate_config = config.vad.clone();
+                let gate_threshold = gate_config.threshold.max(DIAR_GATE_VAD_THRESHOLD);
+                gate_config.threshold = gate_threshold;
                 // Diarization is the last consumer of the speech-rate buffer,
                 // so the owned audio can be dropped inside the task. Providers
                 // are tried in registry order: Sortformer first, then the
                 // pyannote fallback if a model fails at inference time.
-                let (outcome, provider_info) = blocking(move || {
+                let (outcome, provider_info, gate_outcome) = blocking(move || {
+                    let gate = registry
+                        .vad()
+                        .map(|provider| provider.detect(&audio, &gate_config));
                     let mut last: Option<(ProviderError, ProviderInfo)> = None;
                     for provider in &registry.diarizers {
                         let info = provider.info();
                         match provider.diarize(&audio, &diar_config) {
-                            Ok(output) => return (Ok(output), Some(info)),
+                            Ok(output) => return (Ok(output), Some(info), gate),
                             Err(error) => {
                                 tracing::warn!(
                                     provider = info.name,
@@ -457,7 +472,7 @@ impl Engine {
                             }
                         }
                     }
-                    match last {
+                    let (outcome, info) = match last {
                         Some((error, info)) => (Err(error), Some(info)),
                         None => (
                             Err(ProviderError::Unsupported(
@@ -465,11 +480,43 @@ impl Engine {
                             )),
                             None,
                         ),
-                    }
+                    };
+                    (outcome, info, gate)
                 })
                 .await?;
 
+                let mut gate_regions: Vec<SpeechRegion> = Vec::new();
+                match gate_outcome {
+                    Some(Ok(regions)) => gate_regions = regions,
+                    Some(Err(error)) => builder.warn(Warning::new(
+                        "diarization_vad_gate_unavailable",
+                        format!("VAD gate pass failed; speaker turns are ungated: {error}"),
+                    )),
+                    None => {}
+                }
+
+                // Gate before any turn reaches the document: the diarizer
+                // labels noise and music as a speaker, the VAD knows where
+                // speech is. No regions means no gate, never an empty result.
+                let mut outcome = outcome;
+                let mut gated_out = 0_usize;
+                if !gate_regions.is_empty() {
+                    if let Ok(output) = &mut outcome {
+                        let before = output.turns.len();
+                        output.turns = diar_gate::gate_turns(&output.turns, &gate_regions);
+                        gated_out = before.saturating_sub(output.turns.len());
+                    }
+                }
+                // With no ASR there is no 0.45 pass; the gate's regions are
+                // still the best speech estimate for the summary.
+                if vad_regions.is_empty() {
+                    vad_regions = gate_regions;
+                }
+
                 let status = match &outcome {
+                    Ok(output) if output.turns.is_empty() && gated_out > 0 => RunStatus::Partial {
+                        reason: "VAD gate removed all speaker turns".into(),
+                    },
                     Ok(output) if output.turns.is_empty() => RunStatus::Partial {
                         reason: "no speaker turns found".into(),
                     },
@@ -489,6 +536,18 @@ impl Engine {
                     started,
                     status,
                 ));
+                if gated_out > 0 {
+                    builder.warn(
+                        Warning::new(
+                            "diarization_vad_gated",
+                            format!(
+                                "VAD gate (threshold {gate_threshold:.2}) removed \
+                                 {gated_out} diarization turn(s) that did not overlap speech"
+                            ),
+                        )
+                        .with_run(run),
+                    );
+                }
                 match outcome {
                     Ok(output) => diarization = Some(output),
                     Err(error) => {

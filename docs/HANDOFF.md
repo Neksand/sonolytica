@@ -19,14 +19,14 @@ OCR text, and provenance on every segment. Agents read it via
 
 | | |
 |---|---|
-| Rust | 15 045 lines, 7 crates: `providers` (4.3k), `cli` (3.1k), `engine` (2.3k), `core` (2.1k), `dsp` (1.4k), `media` (1.2k), `eval` (0.6k) |
+| Rust | 15 349 lines, 7 crates: `providers` (4.3k), `cli` (3.1k), `engine` (2.6k), `core` (2.1k), `dsp` (1.4k), `media` (1.2k), `eval` (0.6k) |
 | Binary | `sonolytica` (`sonolytica-cli`) |
 | SDK | `sonolytica-engine` (`Engine::analyze`) |
 | Schema | **1.4.0**, additive 1.0 → 1.4 |
 | Models | 10, SHA-256 pinned, in `~/.cache/sonolytica/models` |
 | Query commands | 13: timeline, at, search, transcript, words, speakers, chapters, frames, music, acoustic, runs, summary, help |
 | Skill | `skills/sonolytica/` (SKILL.md + 9 references + install README) |
-| Tests | **121** model-free / **136** all-features |
+| Tests | **131** model-free / **146** all-features |
 
 Features: `sonolytica-cli --features full-metal` = whisper + silero + diarize +
 ocr + align + metal. `cargo test --workspace` runs without models/cmake/ORT.
@@ -36,12 +36,12 @@ ocr + align + metal. `cargo test --workspace` runs without models/cmake/ORT.
 | Area | Result | Where |
 |---|---|---|
 | ASR | WER **6.05 %**, CER 2.25 % — LibriSpeech test-clean, 100 utts, `whisper-base.en` | EVAL |
-| Diarization | AHC pilots: DER **11.81 % dev / 17.46 % test**; Sortformer 4spk on a fresh shard: **11.43 % weighted / 8.19 % unweighted**, speaker-count MAE **0.33** (5/6 exact) | EVAL |
+| Diarization | AHC pilots: DER **11.81 % dev / 17.46 % test**; Sortformer 4spk with the 0.70 VAD gate: **11.08 % weighted / 7.76 % unweighted** on `test-00002`, **9.95 % / 7.49 %** on fresh `test-00003`; counts **6/6 exact** there | EVAL |
 | Alignment | wav2vec2 CTC, 20 ms frames, English; **median 110 ms** vs Whisper, 88 % ≤600 ms; Whisper itself is 300–950 ms early on JFK | EVAL |
 | OCR | PP-OCRv5 det+rec; 12/12 lines exact on the 6-slide fixture; 7/7 CJK terminal | OCR |
 | Music | 120.3 BPM for a 120 BPM click; C major triad correct; A–B–A section boundaries within 80/160 ms | EVAL |
 | Video | 2 fps chromaticity signatures, cuts ±0.5 s; 6/6 scenes, 6 keyframes on the hard fixture | EVAL/BENCHMARK |
-| Throughput | **14.1× realtime** on 155.6 s, full audio pipeline with Sortformer (AHC-era: 21.64× on 121.7 s) | EVAL |
+| Throughput | **16.9×** on the 240 s hard fixture with the VAD gate (17.9× without; +0.8 s); 14.1× on the 155.6 s full audio pipeline before the gate | EVAL |
 | Russian | exact 12 s transcript with `whisper-small --language ru` | DOGFOOD |
 
 ### Agent benchmarks (details and prompts in BENCHMARK)
@@ -81,6 +81,9 @@ must not claim sight.
 - Every model is SHA-pinned + license-documented; unpinned refused.
 - Diarization prefers Sortformer when its pinned model is present; pyannote is
   the fallback. The 4-speaker cap is documented, never silently exceeded.
+- Diarization runs a **dedicated VAD gate pass at threshold 0.70**; the
+  configured 0.45 pass belongs to ASR and must not be tightened to gate. A gate
+  failure warns `diarization_vad_gate_unavailable` and leaves turns ungated.
 - `ort` pinned `=2.0.0-rc.15`; one environment per process; **shared session
   builder uses `AutoDevicePolicy::PreferCPU`** (CoreML silently mis-executes
   dynamic-shape graphs: PP-OCRv5 detection collapsed, recognition blank; VAD
@@ -112,10 +115,16 @@ must not claim sight.
   silhouette split, tiny-cluster pruning, NME eigengap (collapsed real files to
   1 speaker, DER 63.46 %), widest dendrogram gap (4→2 on the first file).
   Synthetic block tests pass while real embeddings fail — synthetic-only
-  validation is not evidence. **VAD gate for diarization** (2026-11-11):
-  Silero calls the same noise speech (every turn on `uicid` had ≥79 %
-  coverage), so it removed nothing, and the one turn it dropped on `ltgmz` was
-  real (DER 11.47 → 12.11 %). Reverted; see EVAL.
+  validation is not evidence.
+- **VAD gate threshold**: at the configured 0.45 the gate removed nothing —
+  Silero calls music and room noise speech (all 271 turns on `uicid` had ≥79 %
+  coverage) — and it dropped one real turn on `ltgmz`. At 0.70 in a dedicated
+  pass it works: `test-00003` weighted DER 11.02 → 9.95 %. Do not gate with the
+  ASR threshold, and do not add energy heuristics on top.
+- **Speaker-turn ranges are clamped to diarization turns** (+300 ms boundary
+  tolerance) while the text stays complete. A word outside the range is still
+  in `query words` and in the dialogue; only the turn's time is clamped. This
+  clamping is what turns the VAD gate's trims into measured DER.
 - **Keyframes**: one per scene by default; OCR runs on those keyframes and adds
   `text_overlay` with a **point range** (the frame instant, not the shot).
   Artifacts use paths relative to the document; `query frames` resolves them.
@@ -191,10 +200,10 @@ Token accounting: OpenCode stores per-session totals in
    the default; on a fresh VoxConverse shard it gets 5/6 counts exact (MAE 0.33
    vs 5.0), 6.40 % vs 8.99 % DER on files ≤7 min, and splits overlap into two
    simultaneous turns. One 20-minute 4-speaker file still collapses to two
-   voices; noisy single-speaker files show false alarm. A VAD gate was tried
-   and rejected (EVAL): the VAD itself calls the noise speech. Next: the
-   model's native streaming cache for long files, and an AMI subset. pyannote
-   remains the fallback.
+   voices; noisy single-speaker files show false alarm. The 0.70 VAD gate now
+   cuts that (fresh `test-00003`: weighted DER 9.95 %, 6/6 counts exact); next
+   is the model's native streaming cache for long files and an AMI subset.
+   pyannote remains the fallback.
 2. **Overlap text attribution.** Sortformer returns two simultaneous turns, but
    Whisper still emits one merged line for overlapped speech. Measure JER and
    split words by speaker with a speaker-attributed pass; a missing line is an
