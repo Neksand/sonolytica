@@ -83,14 +83,21 @@ The number-normalisation rule was added to the skill as a result. This is one
 short clean recording, not a WER measurement; it shows the path works, not how
 accurate it is on real Russian audio.
 
+## Benchmark (2026-11-11)
+
+`docs/BENCHMARK.md` compares three sessions on one video with speech, slides and
+a cut: no skill (5/8, no diarization, no OCR), LongCat + skill v1 (8/8 but on a
+garbled document), Nemotron + skill v3 with OCR (8/8, exact citations, zero
+invented facts). The run exposed two real defects — colour-blind cut detection
+and a missing language rule — and both were fixed before the final session.
+
 ## Not covered yet
 
 - **Music**: no licensed musical fixture was dogfooded; the music workflow is
   documented but unverified against real material. Do not cite it as tested.
-- **Video**: shot detection and keyframe extraction work (synthetic fixtures in
-  `crates/engine/tests/scenes.rs` and `crates/cli/tests/frames.rs`), but no
-  dogfood run has used a real video with keyframes; the skill's "look at the
-  frame" workflow is documented and untested.
+- **Video**: shot detection, keyframes and OCR are exercised by the benchmark in
+  `docs/BENCHMARK.md` (one synthetic video, one model). Not yet tested on real
+  footage with motion, subtitles or long static slides.
 - A longer recording was not tested; chapter quality on multi-hour material is
   unknown.
 

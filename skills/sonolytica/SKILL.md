@@ -66,6 +66,12 @@ never the whole run.
 another language and turn the transcript into garbage; if the document's
 `language` contradicts the text, re-run with an explicit language.
 
+Do **not** take the language from the user's message: a Russian question about
+an English recording is normal. Judge by the audio, the on-screen text or the
+file metadata. When unsure, start with the default `whisper-base.en` for
+English-looking content, or let `whisper-small` auto-detect and check
+`query summary` and the first transcript lines before trusting them.
+
 If a document already exists (the user points you at a `.json`), skip `doctor`
 and `analyze` and start at `query runs`.
 
