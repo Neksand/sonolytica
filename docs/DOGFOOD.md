@@ -87,9 +87,10 @@ accurate it is on real Russian audio.
 
 - **Music**: no licensed musical fixture was dogfooded; the music workflow is
   documented but unverified against real material. Do not cite it as tested.
-- **Video**: shot detection now exists, but no dogfood run has used a real video
-  with scenes; the only tested behaviour is the refusal to describe frames and
-  the synthetic cut fixture in `crates/engine/tests/scenes.rs`.
+- **Video**: shot detection and keyframe extraction work (synthetic fixtures in
+  `crates/engine/tests/scenes.rs` and `crates/cli/tests/frames.rs`), but no
+  dogfood run has used a real video with keyframes; the skill's "look at the
+  frame" workflow is documented and untested.
 - A longer recording was not tested; chapter quality on multi-hour material is
   unknown.
 

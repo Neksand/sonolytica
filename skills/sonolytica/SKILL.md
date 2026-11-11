@@ -80,6 +80,7 @@ Do not silently answer from half a document.
 | what is active at 00:12.450 | `query at doc 00:00:12.450` |
 | the whole transcript, untruncated | `query transcript doc` |
 | every word of one utterance | `query words doc 4` |
+| keyframe images for a window | `query frames doc --from 00:12:00 --to 00:13:00 --max 8` |
 | find a word, with its timestamp | `query search doc pricing` |
 | who spoke most, how long | `query speakers doc` |
 | what are the chapters | `query chapters doc` |
@@ -211,16 +212,19 @@ model (`--model whisper-small`).
   top-level command, not a `query` subcommand.
 - The standard profile runs **shot detection** when the file has a video stream.
   `query timeline DOC --type scene` returns scene segments: `index` is the shot
-  number, `cut` is true when the scene starts at a detected cut, and the range
-  is the shot on the media timeline.
-- A scene is a technical cut from 2 fps frame signatures. It is **not** a topic,
-  a chapter, or a description of what is in the frame. Never turn a scene index
-  into content ("scene 3 shows the product").
-- If there are no scene segments, the visual layer did not run (audio-only file,
-  or the stage was not requested). Say so; do not describe the picture.
-- Objects, faces, keyframes and on-screen text are **not** analysed in this
-  release. Do not claim them; a question about what is visible is answered with
-  "видео не анализировалось" plus the available metadata.
+  number, `cut` is true when the scene starts at a detected cut.
+- `analyze --out doc.json` also writes **keyframe images** next to the document
+  (`doc.json.artifacts/frames/`) and registers them in `artifacts`.
+  `query frames DOC --from T --to T --max 8` returns absolute paths. If
+  `--no-frames` was used or `--out` was missing, there are no images.
+- **Open the images yourself** and answer visual questions from what you see.
+  A visual statement is an observation, not a document fact: label it as such
+  and cite the frame's `start_display`. Never attach a transcript range to it.
+- A scene is a technical cut, a frame is a still at one instant. Neither is a
+  topic, and a keyframe is not a summary of the shot.
+- Objects, faces and on-screen text (OCR) are **not** analysed. Do not claim
+  them from metadata alone; if the frames exist, you may describe what you see
+  in them as an observation.
 
 ## 13. Failures and gaps
 

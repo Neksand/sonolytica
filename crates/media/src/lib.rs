@@ -19,7 +19,9 @@ pub mod tools;
 
 pub use decode::{DecodeOptions, decode_mono};
 pub use error::MediaError;
-pub use frames::{FrameOptions, FrameSignature, Shot, detect_shots, sample_video};
+pub use frames::{
+    FrameOptions, FrameSignature, Keyframe, Shot, detect_shots, extract_keyframes, sample_video,
+};
 pub use hash::sha256_file;
 pub use probe::probe;
 pub use tools::{MediaTools, ValidatedInput, validate_input};

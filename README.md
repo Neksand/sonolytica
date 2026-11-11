@@ -35,14 +35,14 @@ This is the first development cycle. What is real today:
 - **CLI** with `inspect`, `analyze`, `query`, `models`, `doctor`, `schema`.
   `query` answers timeline, search, speaker, music, acoustic, scene and
   run-status questions without `jq`.
-- **Video shots, no model**: FFmpeg samples 2 fps grayscale signatures, an
-  adaptive hash/histogram spike marks a cut, and `scene` segments land on the
-  same timeline as speech.
+- **Video shots and keyframes, no vision model**: FFmpeg samples 2 fps
+  grayscale signatures, an adaptive hash/histogram spike marks a cut, `scene`
+  segments land on the same timeline as speech, and `analyze --out` writes
+  keyframe JPEGs the agent can open with its own vision.
 - **Evaluation harness**: WER/CER, diarization error rate, per-run timings.
 
-Not implemented yet (roadmap): video vision (objects, faces, keyframes, OCR),
-MCP server, HTTP server, Python bridge, forced alignment, sound-event
-classification.
+Not implemented yet (roadmap): video vision (objects, faces, OCR), MCP server,
+HTTP server, Python bridge, forced alignment, sound-event classification.
 
 No accuracy numbers are claimed in this repository. The eval harness exists so
 numbers can be produced honestly against licensed datasets.
@@ -88,6 +88,7 @@ sonolytica query transcript interview.json        # full text, untruncated
 sonolytica query search interview.json pricing
 sonolytica query speakers interview.json
 sonolytica query timeline interview.json --type scene   # video shots, if any
+sonolytica query frames interview.json --max 8          # keyframe JPEG paths
 sonolytica query runs interview.json          # which stages failed, and why
 ```
 
@@ -106,8 +107,8 @@ no language model, no invented titles.
 | `ultra` | standard + exit 2 if a requested capability failed or never ran | automation that must not silently degrade |
 
 `--profile` and `--modules` are mutually exclusive. `ultra` does not add detail
-yet — forced alignment, note transcription, OCR and keyframes are separate
-milestones; until then it means "nothing silently skipped".
+yet — forced alignment, note transcription and OCR are separate milestones;
+until then it means "nothing silently skipped".
 
 `analyze` emits one versioned JSON document (`schema_version: 1.0.0`). A
 compact excerpt:

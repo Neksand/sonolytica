@@ -246,6 +246,24 @@ impl Default for Generator {
     }
 }
 
+/// A file produced alongside the document, such as a keyframe image.
+///
+/// Paths are relative to the document file so a document and its artifacts can
+/// be moved together; an absolute path is accepted when the artifact lives
+/// elsewhere.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Artifact {
+    /// `keyframe`, `contact_sheet`, ...
+    pub kind: String,
+    pub path: String,
+    /// Where on the timeline the artifact belongs. A still image uses a point
+    /// range (`start == end`).
+    pub range: TimeRange,
+    pub sha256: Option<String>,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+}
+
 /// The complete, versioned analysis result for one media file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Document {
@@ -262,6 +280,10 @@ pub struct Document {
     pub analyses: Vec<AnalysisBlock>,
     #[serde(default)]
     pub warnings: Vec<Warning>,
+    /// Files that belong to this analysis (keyframes, contact sheets). They
+    /// are not part of the timeline; `range` ties each one to an instant.
+    #[serde(default)]
+    pub artifacts: Vec<Artifact>,
 }
 
 /// A violated document invariant.
@@ -294,6 +316,7 @@ impl Document {
             relations: Vec::new(),
             analyses: Vec::new(),
             warnings: Vec::new(),
+            artifacts: Vec::new(),
         }
     }
 
@@ -580,6 +603,29 @@ impl Document {
             }
         }
 
+        for artifact in &self.artifacts {
+            if artifact.path.is_empty() {
+                out.push(Violation::new("artifact_path", "artifact path is empty"));
+            }
+            if artifact.range.end < artifact.range.start {
+                out.push(Violation::new(
+                    "artifact_range",
+                    format!("artifact {} ends before it starts", artifact.path),
+                ));
+            }
+            if let Some(end) = media_end {
+                if artifact.range.end > end {
+                    out.push(Violation::new(
+                        "artifact_bounds",
+                        format!(
+                            "artifact {} at {} is past the media duration {end}",
+                            artifact.path, artifact.range.end
+                        ),
+                    ));
+                }
+            }
+        }
+
         out
     }
 
@@ -680,6 +726,10 @@ impl DocumentBuilder {
 
     pub fn add_analysis(&mut self, block: AnalysisBlock) {
         self.doc.analyses.push(block);
+    }
+
+    pub fn add_artifact(&mut self, artifact: Artifact) {
+        self.doc.artifacts.push(artifact);
     }
 
     pub fn warn(&mut self, warning: Warning) {
@@ -826,6 +876,42 @@ mod tests {
 
         let future = json.replace(SCHEMA_VERSION, "2.0.0");
         assert!(Document::from_json(&future).is_err());
+    }
+
+    #[test]
+    fn artifacts_must_have_a_path_and_fit_the_media() {
+        let mut document = fixture();
+        document.artifacts.push(Artifact {
+            kind: "keyframe".into(),
+            path: String::new(),
+            range: TimeRange::from_secs(0.0, 0.0),
+            sha256: None,
+            width: Some(1280),
+            height: None,
+        });
+        let violations = document.validate();
+        assert!(
+            violations.iter().any(|v| v.code == "artifact_path"),
+            "empty path must be rejected: {violations:?}"
+        );
+
+        // The fixture has no media duration, so add one and place the frame
+        // past it.
+        let mut document = fixture();
+        document.media.duration = Some(MediaTime::from_secs_f64(6.0));
+        document.artifacts.push(Artifact {
+            kind: "keyframe".into(),
+            path: "doc.artifacts/frames/frame_0000.jpg".into(),
+            range: TimeRange::from_secs(9.0, 9.0),
+            sha256: None,
+            width: Some(1280),
+            height: None,
+        });
+        let violations = document.validate();
+        assert!(
+            violations.iter().any(|v| v.code == "artifact_bounds"),
+            "a frame past the media must be rejected: {violations:?}"
+        );
     }
 
     #[test]

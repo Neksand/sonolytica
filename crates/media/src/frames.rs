@@ -206,6 +206,80 @@ fn signatures(bytes: &[u8], fps: f32) -> Vec<FrameSignature> {
         .collect()
 }
 
+/// One extracted still image.
+#[derive(Debug, Clone)]
+pub struct Keyframe {
+    pub time_s: f32,
+    pub path: std::path::PathBuf,
+    pub sha256: String,
+}
+
+/// Extract one JPEG per requested instant into `out_dir`.
+///
+/// Each frame is a separate FFmpeg invocation with `-ss` before the input, so
+/// seeking is fast; `-accurate_seek` (the default) still lands on the requested
+/// time. A frame that fails to extract is skipped rather than failing the whole
+/// batch; an empty result means nothing was decodable.
+pub async fn extract_keyframes(
+    tools: &MediaTools,
+    media: &Path,
+    times: &[f32],
+    out_dir: &Path,
+    width: u32,
+) -> Result<Vec<Keyframe>, MediaError> {
+    std::fs::create_dir_all(out_dir)?;
+    let width = width.clamp(160, 3840);
+    let mut frames = Vec::new();
+    for (index, time) in times.iter().enumerate() {
+        if !time.is_finite() || *time < 0.0 {
+            continue;
+        }
+        let path = out_dir.join(format!("frame_{index:04}.jpg"));
+        let filter = format!("scale={width}:-2");
+        let mut child = tokio::process::Command::new(&tools.ffmpeg)
+            .args([
+                "-nostdin",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-protocol_whitelist",
+                "file,pipe",
+                "-ss",
+                &format!("{time:.3}"),
+                "-i",
+            ])
+            .arg(media)
+            .args(["-frames:v", "1", "-vf", &filter, "-q:v", "3", "-y"])
+            .arg(&path)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .kill_on_drop(true)
+            .spawn()
+            .map_err(|e| match e.kind() {
+                std::io::ErrorKind::NotFound => MediaError::ToolsNotFound,
+                _ => MediaError::Io(e),
+            })?;
+        let status = match tokio::time::timeout(Duration::from_secs(30), child.wait()).await {
+            Ok(status) => status?,
+            Err(_) => {
+                let _ = child.start_kill();
+                continue;
+            }
+        };
+        if !status.success() {
+            continue;
+        }
+        let sha256 = crate::hash::sha256_file(&path)?;
+        frames.push(Keyframe {
+            time_s: *time,
+            path,
+            sha256,
+        });
+    }
+    Ok(frames)
+}
+
 /// Detect cuts: a combined hash/histogram distance above `median + 3·MAD`,
 /// never below [`MIN_CUT_SCORE`], never closer than [`MIN_SCENE_S`].
 pub fn detect_shots(frames: &[FrameSignature]) -> Vec<Shot> {

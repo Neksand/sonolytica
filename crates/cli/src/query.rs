@@ -147,6 +147,23 @@ pub enum QueryCommand {
         #[arg(long)]
         json: bool,
     },
+    /// Keyframe images registered in the document
+    Frames {
+        /// Document produced by `sonolytica analyze`
+        doc: PathBuf,
+        /// Only frames at or after this instant
+        #[arg(long)]
+        from: Option<String>,
+        /// Only frames before this instant
+        #[arg(long)]
+        to: Option<String>,
+        /// Return at most this many frames
+        #[arg(long)]
+        max: Option<usize>,
+        /// Emit typed JSON on stdout instead of a table
+        #[arg(long)]
+        json: bool,
+    },
     /// Media, counts, analyses, runs and warnings
     Summary {
         /// Document produced by `sonolytica analyze`
@@ -186,6 +203,20 @@ pub fn run(command: QueryCommand) -> Result<()> {
         QueryCommand::Acoustic { doc, json } => acoustic(&load(&doc)?, json),
         QueryCommand::Runs { doc, json } => runs(&load(&doc)?, json),
         QueryCommand::Chapters { doc, min_gap, json } => chapters(&load(&doc)?, &min_gap, json),
+        QueryCommand::Frames {
+            doc,
+            from,
+            to,
+            max,
+            json,
+        } => frames(
+            &load(&doc)?,
+            &doc,
+            from.as_deref(),
+            to.as_deref(),
+            max,
+            json,
+        ),
         QueryCommand::Summary { doc, json } => summary(&load(&doc)?, json),
     }
 }
@@ -712,8 +743,81 @@ fn title_hint(segments: &[&Segment]) -> Option<String> {
     })
 }
 
-// --------------------------------------------------------------------- music
+// -------------------------------------------------------------------- frames
 
+fn frames(
+    doc: &Document,
+    doc_path: &Path,
+    from: Option<&str>,
+    to: Option<&str>,
+    max: Option<usize>,
+    json: bool,
+) -> Result<()> {
+    let start = from.map(parse_time).transpose()?.unwrap_or(MediaTime::ZERO);
+    let end = match to {
+        Some(value) => parse_time(value)?,
+        None => {
+            let duration = doc.duration();
+            if duration == MediaTime::ZERO {
+                MediaTime::MAX
+            } else {
+                duration
+            }
+        }
+    };
+    if end < start {
+        bail!("`--to` ({}) is before `--from` ({})", end, start);
+    }
+
+    let base = doc_path.parent().unwrap_or_else(|| Path::new(""));
+    let mut items: Vec<FrameView> = doc
+        .artifacts
+        .iter()
+        .filter(|artifact| artifact.kind == "keyframe")
+        .filter(|artifact| {
+            // A still image is a point range; half-open intersection is empty
+            // for it, so test containment explicitly.
+            if artifact.range.start == artifact.range.end {
+                artifact.range.start >= start && artifact.range.start < end
+            } else {
+                artifact.range.intersects(&TimeRange::new(start, end))
+            }
+        })
+        .map(|artifact| FrameView {
+            start: artifact.range.start.micros(),
+            start_display: artifact.range.start.to_string(),
+            path: base.join(&artifact.path).display().to_string(),
+            sha256: artifact.sha256.clone(),
+            width: artifact.width,
+            height: artifact.height,
+        })
+        .collect();
+    items.sort_by(|a, b| (a.start, &a.path).cmp(&(b.start, &b.path)));
+    if let Some(max) = max {
+        items.truncate(max);
+    }
+
+    if json {
+        emit(&FramesOutput {
+            count: items.len(),
+            frames: items,
+        })
+    } else {
+        if items.is_empty() {
+            println!("(none)");
+            return Ok(());
+        }
+        for frame in &items {
+            let hash = frame.sha256.as_deref().map_or_else(String::new, |hash| {
+                format!("  {}", &hash[..12.min(hash.len())])
+            });
+            println!("{}  {}{hash}", frame.start_display, frame.path);
+        }
+        Ok(())
+    }
+}
+
+// --------------------------------------------------------------------- music
 fn music(doc: &Document, json: bool) -> Result<()> {
     let found = doc.analyses.iter().find_map(|block| match block {
         AnalysisBlock::Music(summary) => Some(summary),
@@ -1139,6 +1243,24 @@ struct ChapterView<'a> {
     title_hint: Option<String>,
     speakers: Vec<&'a str>,
     segment_count: usize,
+}
+
+#[derive(Debug, Serialize)]
+struct FramesOutput {
+    count: usize,
+    frames: Vec<FrameView>,
+}
+
+#[derive(Debug, Serialize)]
+struct FrameView {
+    start: i64,
+    start_display: String,
+    /// Absolute path on this machine: the artifact path resolved relative to
+    /// the document.
+    path: String,
+    sha256: Option<String>,
+    width: Option<u32>,
+    height: Option<u32>,
 }
 
 #[derive(Debug, Serialize)]

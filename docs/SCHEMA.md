@@ -1,4 +1,4 @@
-# Document schema (v1.0.0)
+# Document schema (v1.1.0)
 
 One analysis produces one `Document`. It is designed for machine consumption:
 typed fields, stable names, explicit units, and no placeholders standing in for
@@ -16,6 +16,7 @@ unknown values.
 | Cross-modal facts | `relations[]` with typed `kind` |
 | Confidence | `0.0..=1.0`, finite, optional. Absent means "not estimated" |
 | Provenance | every segment points at a `RunRecord` |
+| Attachments | `artifacts[]` are files beside the document; a still uses a point range |
 
 `MediaInfo.audio_duration()` (audio stream) and `MediaInfo.duration`
 (container) are the authority for clamping. No timestamp may exceed them; the
@@ -135,9 +136,19 @@ validator enforces this (`segment_bounds`, `word_bounds`).
     { "code": "provider_unavailable",
       "message": "pyannote-3.0 (diarize) is unavailable: …",
       "run": null }
+  ],
+
+  "artifacts": [
+    { "kind": "keyframe",
+      "path": "interview.json.artifacts/frames/frame_0000.jpg",
+      "range": { "start": 1000000, "end": 1000000 },
+      "sha256": "85c031…", "width": 1280, "height": null }
   ]
 }
 ```
+
+Artifact paths are relative to the document file, so the JSON and the images
+can be moved together. A still image carries a point range (`start == end`).
 
 ## Segment kinds
 
@@ -192,6 +203,7 @@ A capability with no provider does **not** create a failed run: it appears in
 | `confidence_range` | confidence is finite and within `[0,1]` |
 | `segment_bounds`, `word_bounds` | timestamps never exceed the media duration |
 | `range_order`, `word_order` | end is not before start |
+| `artifact_path`, `artifact_bounds` | an artifact has a path and lies within the media |
 | `params_hash` | every run has a 64-hex parameter digest |
 
 `sonolytica analyze` refuses to emit a document that violates any of these.
@@ -203,6 +215,7 @@ A capability with no provider does **not** create a failed run: it appears in
   migration in `Document::from_json`.
 - `serde` defaults are used where a missing field has an unambiguous meaning;
   there are no silent reinterpretations.
+- `1.1.0` adds `artifacts[]` and keeps every `1.0.0` document readable.
 
 ## Query commands
 

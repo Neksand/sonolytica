@@ -15,9 +15,8 @@ Ordered next, each gated on a measured number:
    recorded in `docs/EVAL.md` with dataset, model, parameters and date.
 2. **Speech quality** — forced alignment (wav2vec2 CTC), VAD-boundary word loss,
    overlap-aware diarization.
-3. **Video** — shot boundaries ✅ (2 fps signatures, adaptive cut threshold,
-   `scene` segments). Next: keyframe deduplication and `artifacts`, then OCR,
-   then object/face models.
+3. **Video** — shot boundaries ✅, one keyframe per scene with `artifacts[]` ✅
+   (`query frames`). Next: OCR for on-screen text, then object/face models.
 4. **Music depth** — section segmentation, note transcription, stems/bass.
 5. **MCP** — only for a shell-less client.
 

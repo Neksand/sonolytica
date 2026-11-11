@@ -5,7 +5,9 @@ use std::process::ExitCode;
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use sonolytica_core::{AnalysisBlock, AnalysisConfig, Capability, Document, MediaTime, RunStatus};
+use sonolytica_core::{
+    AnalysisBlock, AnalysisConfig, Capability, Document, MediaTime, RunStatus, SegmentKind,
+};
 use sonolytica_engine::Engine;
 use sonolytica_providers::{ModelStore, default_model_dir, models::MODELS};
 use tracing_subscriber::EnvFilter;
@@ -91,6 +93,12 @@ struct AnalyzeArgs {
     /// Print a human summary to stderr as well as JSON
     #[arg(long)]
     summary: bool,
+    /// Skip keyframe extraction (no image files next to the document)
+    #[arg(long)]
+    no_frames: bool,
+    /// Maximum number of keyframes to extract
+    #[arg(long, default_value_t = 40)]
+    max_frames: usize,
     /// Exit with status 2 if any stage failed or a requested capability did not run
     #[arg(long)]
     strict: bool,
@@ -197,10 +205,31 @@ async fn run(cli: Cli) -> Result<ExitCode> {
         Command::Analyze(args) => {
             let config = build_config(&args)?;
             let engine = Engine::discover(store.clone());
-            let document = engine
+            let mut document = engine
                 .analyze(&args.file, &config)
                 .await
                 .with_context(|| format!("analysis of {} failed", args.file.display()))?;
+
+            if !args.no_frames {
+                match args.out.as_deref() {
+                    Some(path) if path != Path::new("-") => {
+                        extract_document_keyframes(
+                            &mut document,
+                            path,
+                            &args.file,
+                            args.max_frames,
+                        )
+                        .await;
+                    }
+                    _ if has_scenes(&document) => {
+                        eprintln!(
+                            "note: keyframes not extracted; pass --out <file> so images have a \
+                             directory to live in"
+                        );
+                    }
+                    _ => {}
+                }
+            }
 
             match args.out.as_deref() {
                 Some(path) if path != Path::new("-") => {
@@ -500,6 +529,104 @@ fn summarize(document: &Document) -> String {
         ));
     }
     out
+}
+
+/// One keyframe per scene: a second after the cut, or the midpoint of a short
+/// scene. Evenly capped at `max` across the whole recording.
+fn keyframe_times(document: &Document, max: usize) -> Vec<f32> {
+    let mut scenes: Vec<_> = document
+        .segments
+        .iter()
+        .filter(|segment| matches!(segment.kind, SegmentKind::Scene { .. }))
+        .collect();
+    scenes.sort_by_key(|segment| segment.range.start);
+
+    let mut times: Vec<f32> = scenes
+        .iter()
+        .filter_map(|segment| {
+            let start = segment.range.start.as_secs_f64();
+            let end = segment.range.end.as_secs_f64();
+            if end <= start {
+                return None;
+            }
+            Some((start + 1.0).min((start + end) / 2.0) as f32)
+        })
+        .collect();
+    times.dedup_by(|a, b| (*a - *b).abs() < 0.2);
+
+    if max > 0 && times.len() > max {
+        let step = times.len() as f64 / max as f64;
+        times = (0..max)
+            .map(|index| times[(index as f64 * step) as usize])
+            .collect();
+    }
+    times
+}
+
+fn has_scenes(document: &Document) -> bool {
+    document
+        .segments
+        .iter()
+        .any(|segment| matches!(segment.kind, SegmentKind::Scene { .. }))
+}
+
+/// Extract keyframes next to the document and register them as artifacts.
+///
+/// Paths are stored relative to the document, so the JSON and the images can be
+/// moved together. A failure is a warning, never a failed analysis: the
+/// document is valid without images.
+async fn extract_document_keyframes(document: &mut Document, out: &Path, media: &Path, max: usize) {
+    let times = keyframe_times(document, max);
+    if times.is_empty() {
+        return;
+    }
+    let parent = out.parent().unwrap_or_else(|| Path::new(""));
+    let file_name = out.file_name().map_or_else(
+        || "document.json".to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    );
+    let relative_dir = format!("{file_name}.artifacts/frames");
+    let directory = parent.join(&relative_dir);
+    let tools = sonolytica_media::MediaTools::detect();
+
+    match sonolytica_media::extract_keyframes(&tools, media, &times, &directory, 1280).await {
+        Ok(frames) => {
+            let added = frames.len();
+            for frame in frames {
+                let relative = frame
+                    .path
+                    .strip_prefix(parent)
+                    .unwrap_or(&frame.path)
+                    .to_path_buf();
+                let instant = MediaTime::from_secs_f64(f64::from(frame.time_s));
+                document.artifacts.push(sonolytica_core::Artifact {
+                    kind: "keyframe".into(),
+                    path: relative.to_string_lossy().into_owned(),
+                    range: sonolytica_core::TimeRange::new(instant, instant),
+                    sha256: Some(frame.sha256),
+                    width: Some(1280),
+                    height: None,
+                });
+            }
+            let violations = document.validate();
+            if !violations.is_empty() {
+                document
+                    .artifacts
+                    .truncate(document.artifacts.len().saturating_sub(added));
+                eprintln!(
+                    "warning: keyframes discarded, the document would be invalid: {}",
+                    violations
+                        .iter()
+                        .map(|violation| violation.code.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+                return;
+            }
+            eprintln!("keyframes: {added} image(s) under {}", directory.display());
+        }
+        Err(error) => eprintln!("warning: keyframe extraction failed: {error}"),
+    }
 }
 
 fn schema_example() -> Result<String> {

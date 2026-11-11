@@ -204,6 +204,7 @@ milliseconds and the realtime factor for a given machine.
   implemented. They are listed in the roadmap as analysis blocks, not added as
   empty fields.
 - Video analysis: shot boundaries are detected without a model (2 fps gray
-  signatures, adaptive cut threshold) and emitted as `scene` segments. Objects,
-  faces, keyframes and OCR are not implemented; the schema already reserves
-  `object`/`face` kinds for them.
+  signatures, adaptive cut threshold) and emitted as `scene` segments; one
+  keyframe JPEG per scene is written next to the document and registered in
+  `artifacts[]`, so an agent can look at the picture with its own vision.
+  Objects, faces and OCR are not implemented.

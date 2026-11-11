@@ -159,7 +159,6 @@ than their speaking time. For individual turns use `query timeline --type
 speaker_turn`.
 
 ## chapters
-
 ```bash
 sonolytica query chapters "$DOC" --min-gap 1.2s
 ```
@@ -185,6 +184,27 @@ not a generated title; never present it as one.
 `segment_count` counts every segment intersecting the chapter, including a
 speech segment and its speaker turn — so it is larger than the number of
 utterances. Chapters follow structure (silence/speaker/cut), not topics.
+
+## frames
+
+```bash
+sonolytica query frames "$DOC" --from 00:12:00 --to 00:13:00 --max 8
+```
+
+Keyframe images registered by `analyze --out`. Paths are absolute (resolved
+relative to the document) so you can open them directly.
+
+```json
+{ "count": 2, "frames": [ {
+  "start": 1000000, "start_display": "00:00:01.000",
+  "path": "/abs/doc.json.artifacts/frames/frame_0000.jpg",
+  "sha256": "85c031…", "width": 1280, "height": null
+} ] }
+```
+
+Half-open window: a frame exactly at `--from` is included, one exactly at
+`--to` is not. No frames means `analyze` ran with `--no-frames`, without
+`--out`, or the file had no scene segments.
 
 ## music
 
