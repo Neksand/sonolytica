@@ -6,9 +6,8 @@ Goal: a navigable outline with quotes, not a full retelling.
 
 ```bash
 sonolytica analyze lecture.mp4 --out lecture.json --profile standard --summary
-sonolytica query runs lecture.json
-sonolytica query chapters lecture.json --min-gap 3s
-sonolytica query speakers lecture.json
+sonolytica query brief lecture.json          # status, speakers, chapters, counts
+sonolytica query chapters lecture.json --min-gap 3s   # longer pause = new chapter
 ```
 
 Then, per question:

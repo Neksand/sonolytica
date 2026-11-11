@@ -1,17 +1,19 @@
 # Workflow: video
 
 Three layers on one timeline: **audio** (speech, speakers), **shots** (technical
-cuts) and **keyframes** (still images). There is no OCR, object or face
-analysis; what you can say about the picture comes from the images you open.
+cuts) and **keyframes** (still images). OCR is available with `--ocr`; object and
+face analysis are not. What you can say about the picture comes from the images
+you open or from `text_overlay` segments.
 
 ## Commands
 
 ```bash
 sonolytica inspect video.mp4 --json                 # streams, resolution, fps
-sonolytica analyze video.mp4 --out video.json --profile standard --summary
-sonolytica query runs video.json                    # is there a `scene` run?
+sonolytica analyze video.mp4 --out video.json --profile standard --ocr --summary
+sonolytica query brief video.json                   # status, scene/keyframe/OCR counts
 sonolytica query timeline video.json --type scene   # cuts as scene segments
 sonolytica query frames video.json --from 00:05:00 --to 00:06:00 --max 8
+sonolytica query timeline video.json --type text_overlay   # OCR lines, if --ocr
 ```
 
 `query frames` returns absolute paths. Open those files with your own vision;

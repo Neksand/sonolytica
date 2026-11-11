@@ -14,7 +14,8 @@
 | `doctor` shows `build: minimal (DSP only)` | this build has no speech providers | install a build with `--features full` / `full-metal` |
 
 A missing capability is **not** a failed run: it produces no run and a warning.
-Check both `query runs` and `query summary`.
+Start with `query brief` (it summarizes runs and warnings), then use
+`query runs` or `query summary` when you need the full detail.
 
 Models live in `~/.cache/sonolytica/models` (override with `--models-dir` or
 `SONOLYTICA_MODEL_DIR`). `sonolytica models list` shows which are verified; a

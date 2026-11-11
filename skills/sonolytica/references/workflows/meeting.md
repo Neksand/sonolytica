@@ -8,9 +8,10 @@ decision.
 
 ```bash
 sonolytica analyze meeting.m4a --out meeting.json --profile standard --summary
-sonolytica query runs meeting.json
-sonolytica query speakers meeting.json
+sonolytica query brief meeting.json          # status, speakers, chapters, counts
+# only if the brief is not enough:
 sonolytica query chapters meeting.json --min-gap 2s
+sonolytica query speakers meeting.json
 ```
 
 For each item the user wants:

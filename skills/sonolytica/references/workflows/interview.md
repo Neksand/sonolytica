@@ -7,7 +7,8 @@ Goal: who said what, where, and what the episode is about — with quotes.
 ```bash
 sonolytica doctor
 sonolytica analyze interview.mp3 --out interview.json --profile standard --summary
-sonolytica query runs interview.json
+sonolytica query brief interview.json        # status, speakers, chapters, counts
+# only if you need the full lists:
 sonolytica query speakers interview.json
 sonolytica query chapters interview.json
 ```

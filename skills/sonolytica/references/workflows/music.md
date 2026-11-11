@@ -6,9 +6,9 @@ Goal: describe the track from measurements, not from genre intuition.
 
 ```bash
 sonolytica analyze track.wav --out track.json --profile standard --summary
-sonolytica query music track.json --json
+sonolytica query brief track.json                    # BPM, key, sections, peak, LRA
+sonolytica query music track.json --json             # chords and beats
 sonolytica query acoustic track.json --json
-sonolytica query runs track.json
 ```
 
 `structure` is enough when there is no speech and no lyrics question: it skips
