@@ -126,6 +126,6 @@ makes the agent **honest and citable**, not more perceptive.
   replaceable.
 
 Next, in order of payoff: make the skill cheaper and better at the same time
-(`brief` v2, slimmer SKILL.md, reproducible benchmark), then overlap text
-attribution, streaming cache for long files, music notes/stems, non-English
-alignment, object/face models, MCP.
+(`brief` v2, slimmer SKILL.md, reproducible benchmark); then AOSC streaming for
+long files (license check first), multitalker ASR for overlap, `--effort` modes,
+music notes/stems, caching, MCP, non-English alignment, objects/faces.

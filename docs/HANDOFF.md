@@ -262,39 +262,43 @@ Baseline: hard **16/16 at 22 410 fresh in 15 commands**, easy **8/8 at 9 521 in
 Do **not**: preload references (cost 4 588 fresh in the first run), retry the
 merge tie-break or the 0.45 VAD gate, or add models for this cycle.
 
-### Capability gaps (after the skill cycle)
+### Capability roadmap after the skill cycle (by payoff)
 
-1. **Speaker count + overlap — first pass done.** Sortformer 4spk v2 ONNX is
-   the default; on a fresh VoxConverse shard it gets 5/6 counts exact (MAE 0.33
-   vs 5.0), 6.40 % vs 8.99 % DER on files ≤7 min, and splits overlap into two
-   simultaneous turns. One 20-minute 4-speaker file still collapses to two
-   voices; noisy single-speaker files show false alarm. The 0.70 VAD gate now
-   cuts that (fresh `test-00003`: weighted DER 9.95 %, 6/6 counts exact). Files
-   longer than 10 minutes carry a `diarization_speaker_cap` warning; the next
-   step is the model's native streaming cache and an AMI subset. pyannote
-   remains the fallback.
-2. **Overlap text attribution — JER shipped, tie-break rejected.** `sonolytica-eval
-   der` now prints JER (test-00003 **9.85 % weighted / 7.34 % unweighted**) and
-   `scripts/eval/der_voxconverse.py` aggregates it. A merge tie-break changed
-   nothing useful (DER 11.08 → 11.11 %) and was reverted. Overlapped words are
-   still one merged ASR line; splitting them needs speaker-attributed ASR
-   (multitalker), a separate cycle. A missing overlapped line is an ASR
-   limitation, not a diarization one.
-3. **`query brief` — done (2026-11-12).** One compact read (media, runs,
-   speech, speakers, chapters, video/OCR, music/acoustic) shipped with a
-   "minimum commands per question" table and a context budget in the skill.
-   Measured: hard fixture **16/16 at 22 410 fresh** in 15 commands (≤25k gate),
-   easy **8/8 at 9 521 fresh** versus 41 399. Do not regress those numbers; the
-   easy win is the one to quote.
-4. **Modes** `--effort low|normal|max` + `--vision agent|local`, with the RAM
-   table in the skill: low ≈40 MB (no ASR), normal +200–500 MB, max +400 MB
-   (OCR/align), local VLM +2–4 GB opt-in. Store the chosen mode in config.
-5. **Music notes/stems**: basic-pitch (Apache-2.0, ~20 MB) for notes, Demucs
-   (MIT) for stems/bass only if the ONNX export works and F1 ≥0.6.
-6. **Non-English alignment**: MMS/XLSR CTC; FLEURS WER table (ru/es/de/fr/zh).
-7. **Caching**: key = media SHA-256 + config hash + model digests; re-runs ≤5 %
-   of the first.
-8. **MCP** (`rmcp`): only for a shell-less client; tools mirror `query`.
+Do these only after the skill-cost cycle, unless the user explicitly reprioritises.
+Each needs its own measurement and one local commit; when a gate fails, revert
+and record it in `docs/EVAL.md`.
+
+1. **AOSC streaming for long files.** The current 300 s windows collapse
+   `fvhrk` (18 min, 4 speakers) into 2 voices; files >10 min already warn
+   `diarization_speaker_cap`. The fix is the model's native streaming cache:
+   `soniqo/Sortformer-Diarization-4spk-ONNX` v2.1 / NeMo AOSC (score/top-k,
+   silence embed, FIFO→cache, eviction; 30.4 s chunks, 80 ms frames).
+   **Check the license first** — NVIDIA Open Model License, not CC-BY. If the
+   project policy does not allow it, do not add it; keep the warning and the
+   documented cap. Gate: `fvhrk` hypothesis ≥3 speakers and DER ≤11.8 %, no
+   regression on 2–4 speaker files; otherwise revert.
+2. **Multitalker ASR for overlap.** Sortformer returns two simultaneous turns,
+   but Whisper still emits one merged line; a missing overlapped line is an ASR
+   limitation. Add a speaker-attributed pass and measure JER plus word
+   attribution. Do not invent a word split the ASR never produced. Separate
+   cycle; the rejected merge tie-break is not the solution.
+3. **Modes `--effort low|normal|max` + `--vision agent|local`.** RAM table in
+   the skill: low ≈40 MB (no ASR), normal +200–500 MB, max +400 MB (OCR/align),
+   local VLM +2–4 GB opt-in. Store the chosen mode in `config.profile/effort`;
+   auto 5/5 on the fixtures; quick ≤1 min on a 2-hour video. Big refactor — do
+   not mix it with diarization.
+4. **Music notes/stems.** basic-pitch (Apache-2.0, ~20 MB) for notes; Demucs
+   (MIT) for stems/bass only if the ONNX export works and F1 ≥0.6. No claim
+   before that number exists.
+5. **Caching.** Key = media SHA-256 + config hash + model digests; re-runs ≤5 %
+   of the first. Artifacts (keyframes) must travel with the cached document;
+   never serve a document with stale paths or provenance.
+6. **MCP (`rmcp`).** Only for a shell-less client; tools mirror `query`. Do not
+   duplicate engine logic in the server.
+7. **Non-English alignment.** MMS/XLSR CTC with a FLEURS WER table
+   (ru/es/de/fr/zh). Later; English stays wav2vec2 for now.
+8. **Objects/faces.** Opt-in vision model with a RAM warning; later, and never
+   silently enabled.
 
 ## 8. Lessons from this cycle
 
