@@ -112,7 +112,10 @@ must not claim sight.
   silhouette split, tiny-cluster pruning, NME eigengap (collapsed real files to
   1 speaker, DER 63.46 %), widest dendrogram gap (4→2 on the first file).
   Synthetic block tests pass while real embeddings fail — synthetic-only
-  validation is not evidence.
+  validation is not evidence. **VAD gate for diarization** (2026-11-11):
+  Silero calls the same noise speech (every turn on `uicid` had ≥79 %
+  coverage), so it removed nothing, and the one turn it dropped on `ltgmz` was
+  real (DER 11.47 → 12.11 %). Reverted; see EVAL.
 - **Keyframes**: one per scene by default; OCR runs on those keyframes and adds
   `text_overlay` with a **point range** (the frame instant, not the shot).
   Artifacts use paths relative to the document; `query frames` resolves them.
@@ -188,7 +191,8 @@ Token accounting: OpenCode stores per-session totals in
    the default; on a fresh VoxConverse shard it gets 5/6 counts exact (MAE 0.33
    vs 5.0), 6.40 % vs 8.99 % DER on files ≤7 min, and splits overlap into two
    simultaneous turns. One 20-minute 4-speaker file still collapses to two
-   voices; noisy single-speaker files show false alarm. Next: a VAD gate, the
+   voices; noisy single-speaker files show false alarm. A VAD gate was tried
+   and rejected (EVAL): the VAD itself calls the noise speech. Next: the
    model's native streaming cache for long files, and an AMI subset. pyannote
    remains the fallback.
 2. **Overlap text attribution.** Sortformer returns two simultaneous turns, but

@@ -88,8 +88,9 @@ frames or OCR, and is overhead for a short clean recording. It makes the agent
 1. **Speaker count is fixed for 2-4 speakers, not for long files.** Sortformer
    gets five of six counts right on a fresh shard (MAE 0.33 vs 5.0) and splits
    overlap; a 20-minute four-speaker file still collapses to two voices, and
-   noisy single-speaker audio produces false alarms. The next attempts are a
-   VAD gate and the model's native streaming cache.
+   noisy single-speaker audio produces false alarms. A VAD gate did not help —
+   Silero classifies the same noise as speech (see EVAL). The next attempt is
+   the model's native streaming cache.
 2. **One-fixture benchmark.** Ten questions, synthetic media. Real interviews,
    meetings, music and long videos are untested.
 3. **Music is shallow**: tempo, key, triads, sections and loudness. No notes,
@@ -115,6 +116,5 @@ frames or OCR, and is overhead for a short clean recording. It makes the agent
   benchmark are the differentiator; perception is deliberately local and
   replaceable.
 
-Next, in order of payoff: overlap text attribution, VAD-gated diarization and
-streaming cache for long files, music notes/stems, non-English alignment,
-object/face models, MCP.
+Next, in order of payoff: overlap text attribution, streaming cache for long
+files, music notes/stems, non-English alignment, object/face models, MCP.
