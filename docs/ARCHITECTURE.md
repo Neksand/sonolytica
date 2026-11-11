@@ -191,8 +191,10 @@ milliseconds and the realtime factor for a given machine.
 
 ## 7. Known limits
 
-- Diarization uses 10 s non-overlapping windows and single-linkage cosine
-  clustering. Overlap is detected but **not** split between two speakers.
+- Diarization uses 10 s segmentation windows, 1.5 s embeddings (0.75 s hop)
+  clustered by average linkage. Overlap is detected but **not** split between
+  two speakers, and the speaker count is not estimated: `max_speakers` is a cap,
+  not a prediction.
 - Region-driven ASR can lose words at a region boundary; the first phoneme of
   an utterance is the most common casualty. This is measurable with the WER
   harness and will drive forced alignment later.

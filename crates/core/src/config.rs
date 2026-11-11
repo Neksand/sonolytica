@@ -88,7 +88,7 @@ pub struct VadConfig {
 impl Default for VadConfig {
     fn default() -> Self {
         Self {
-            threshold: 0.5,
+            threshold: 0.45,
             min_speech_ms: 250,
             min_silence_ms: 500,
             pad_ms: 100,
@@ -99,7 +99,9 @@ impl Default for VadConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DiarizationConfig {
-    /// Cosine similarity above which two regions are considered the same voice.
+    /// Average-linkage cosine similarity at which two speaker clusters merge.
+    /// Calibrated for 1.5 s embedding chunks: same-speaker chunks sit around
+    /// 0.5–0.8, different speakers below 0.3.
     pub threshold: f32,
     pub max_speakers: u32,
     /// Regions shorter than this are not used to create a speaker identity.
@@ -109,7 +111,7 @@ pub struct DiarizationConfig {
 impl Default for DiarizationConfig {
     fn default() -> Self {
         Self {
-            threshold: 0.60,
+            threshold: 0.45,
             max_speakers: 8,
             min_region_ms: 500,
         }

@@ -52,7 +52,7 @@ validator enforces this (`segment_bounds`, `word_bounds`).
     "translate_to_english": false,
     "asr_model": "whisper-base.en",
     "vad": { "threshold": 0.5, "min_speech_ms": 250, "min_silence_ms": 500, "pad_ms": 100 },
-    "diarization": { "threshold": 0.6, "max_speakers": 8, "min_region_ms": 500 },
+    "diarization": { "threshold": 0.45, "max_speakers": 8, "min_region_ms": 500 },
     "dsp": { "fft_size": 2048, "hop_size": 512, "silence_dbfs": -45.0,
              "min_silence_ms": 500, "detect_tempo": true },
     "limits": { "max_duration_secs": 7200, "max_file_bytes": 8589934592, "timeout_secs": 600 },

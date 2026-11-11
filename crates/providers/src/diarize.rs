@@ -10,10 +10,15 @@
 //! 2. Overlap frames are counted and reported, but not split into two
 //!    speakers, because doing so without a proper overlap model would invent
 //!    boundaries.
-//! 3. Single-speaker regions long enough to embed get a WeSpeaker embedding.
-//! 4. Embeddings are clustered by cosine similarity with single linkage; if
-//!    the result exceeds `max_speakers`, the closest clusters are merged.
-//! 5. Adjacent regions of the same speaker are stitched.
+//! 3. Single-speaker regions long enough to embed are split into 1.5 s chunks
+//!    with a 0.75 s hop. More windows per speaker give the clustering real
+//!    statistics instead of one vector per 10 s class run.
+//! 4. Chunk embeddings are clustered by average-linkage agglomerative
+//!    clustering on cosine similarity; merges continue while the best pair is
+//!    above `threshold`, or regardless of similarity while the cluster count
+//!    exceeds `max_speakers`.
+//! 5. A region's speaker is the majority label of its chunks, and adjacent
+//!    regions of the same speaker are stitched.
 
 use std::path::Path;
 use std::sync::Mutex;
@@ -37,12 +42,17 @@ const FRAME_START: usize = 721; // first frame offset reported by pyannote
 const OVERLAP_CLASS_MIN: usize = 4;
 const NUM_CLASSES: usize = 7;
 
+/// Embedding windows inside one speech region. Short chunks mean more vectors,
+/// but too short and the speaker embedding stops being reliable.
+const EMBED_WINDOW_S: f32 = 1.5;
+const EMBED_HOP_S: f32 = 0.75;
+const EMBED_MIN_S: f32 = 1.0;
+
 #[derive(Debug, Clone)]
 struct LocalRegion {
     start_s: f32,
     end_s: f32,
     probability: f32,
-    embedding: Vec<f32>,
 }
 
 pub struct PyannoteDiarizer {
@@ -67,8 +77,9 @@ impl PyannoteDiarizer {
                 capability: Capability::Diarize,
                 device: "cpu",
                 models: vec![segmentation_spec.reference(), embedding_spec.reference()],
-                notes: "10 s non-overlapping windows; overlap is detected and reported but \
-                        not attributed to two speakers.",
+                notes: "10 s non-overlapping segmentation windows; 1.5 s embeddings clustered \
+                        by average linkage. Overlap is detected and reported but not attributed \
+                        to two speakers.",
             },
         })
     }
@@ -191,7 +202,6 @@ impl PyannoteDiarizer {
                             start_s,
                             end_s,
                             probability: prob_sum / count as f32,
-                            embedding: Vec::new(),
                         });
                     }
                 }
@@ -218,87 +228,124 @@ impl PyannoteDiarizer {
     }
 }
 
-/// Single-linkage clustering by cosine similarity, then reduce to `max_speakers`
-/// by merging the most similar clusters. Deterministic for a given input.
+/// Chunk boundaries for embedding one speech region: `EMBED_WINDOW_S` windows
+/// with `EMBED_HOP_S` hop, never shorter than `EMBED_MIN_S`, never past the
+/// region end. A region shorter than the minimum is one chunk.
+fn chunk_bounds(start_s: f32, end_s: f32) -> Vec<(f32, f32)> {
+    let duration = end_s - start_s;
+    if duration <= EMBED_MIN_S {
+        return vec![(start_s, end_s)];
+    }
+
+    let mut bounds = Vec::new();
+    let mut offset = 0.0_f32;
+    while offset < duration {
+        let begin = start_s + offset;
+        let end = (begin + EMBED_WINDOW_S).min(end_s);
+        if end - begin >= EMBED_MIN_S {
+            bounds.push((begin, end));
+        } else if let Some(last) = bounds.last_mut() {
+            // Absorb a sliver at the end instead of embedding 0.2 s of audio.
+            last.1 = end_s;
+        }
+        offset += EMBED_HOP_S;
+    }
+    bounds
+}
+
+/// Majority label of one region's chunks; ties go to the earliest cluster.
+fn majority_label(labels: &[usize]) -> usize {
+    let mut counts: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
+    for label in labels {
+        *counts.entry(*label).or_default() += 1;
+    }
+    counts
+        .into_iter()
+        .max_by(|a, b| a.1.cmp(&b.1).then(b.0.cmp(&a.0)))
+        .map_or(0, |(label, _)| label)
+}
+
+/// Average-linkage agglomerative clustering on cosine similarity.
+///
+/// Merges while the best pair is at least `threshold`, or regardless of
+/// similarity while the cluster count exceeds `max_speakers`. Deterministic for
+/// a given input.
 fn cluster_embeddings(embeddings: &[Vec<f32>], threshold: f32, max_speakers: usize) -> Vec<usize> {
     let n = embeddings.len();
     if n == 0 {
         return Vec::new();
     }
-    let mut parent: Vec<usize> = (0..n).collect();
-    fn find(parent: &mut [usize], mut i: usize) -> usize {
-        while parent[i] != i {
-            parent[i] = parent[parent[i]];
-            i = parent[i];
-        }
-        i
+    if n == 1 {
+        return vec![0];
     }
+
+    // Average-linkage agglomerative clustering. The pairwise matrix is built
+    // once and updated with the Lance-Williams rule, which is cheaper and much
+    // less prone to chaining than recomputing centroids or single linkage.
+    //
+    // ponytail: O(n^2) memory, O(n^3) worst case in the max search. Fine for a
+    // few thousand 1.5 s chunks; move to a k-NN graph or VB-HMM if multi-hour
+    // recordings become the norm.
+    let mut similarity = vec![vec![0.0_f32; n]; n];
     for i in 0..n {
         for j in (i + 1)..n {
-            if cosine(&embeddings[i], &embeddings[j]) >= threshold {
-                let (a, b) = (find(&mut parent, i), find(&mut parent, j));
-                if a != b {
-                    parent[b] = a;
+            let value = cosine(&embeddings[i], &embeddings[j]);
+            similarity[i][j] = value;
+            similarity[j][i] = value;
+        }
+    }
+
+    let mut active = vec![true; n];
+    let mut size = vec![1.0_f32; n];
+    let mut label: Vec<usize> = (0..n).collect();
+    let mut count = n;
+
+    while count > 1 {
+        let mut best = (f32::NEG_INFINITY, 0usize, 1usize);
+        for i in 0..n {
+            if !active[i] {
+                continue;
+            }
+            for j in (i + 1)..n {
+                if active[j] && similarity[i][j] > best.0 {
+                    best = (similarity[i][j], i, j);
                 }
             }
         }
-    }
-
-    let roots: Vec<usize> = (0..n).map(|i| find(&mut parent, i)).collect();
-    let mut labels: Vec<usize> = {
-        let mut map: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
-        roots
-            .iter()
-            .map(|root| {
-                let next = map.len();
-                *map.entry(*root).or_insert(next)
-            })
-            .collect()
-    };
-
-    // Merge the closest clusters until the speaker budget is respected.
-    // Labels are compacted every round: merging a non-maximal label would
-    // otherwise leave a gap and spin forever.
-    loop {
-        let mut compact: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
-        for label in &mut labels {
-            let next = compact.len();
-            *label = *compact.entry(*label).or_insert(next);
-        }
-        let count = compact.len();
-        if count <= max_speakers.max(1) || count <= 1 {
+        let (pair_similarity, a, b) = best;
+        if pair_similarity < threshold && count <= max_speakers.max(1) {
             break;
         }
 
-        let dims = embeddings[0].len();
-        let mut centroids = vec![vec![0.0_f32; dims]; count];
-        for (embedding, &label) in embeddings.iter().zip(labels.iter()) {
-            for (c, v) in centroids[label].iter_mut().zip(embedding.iter()) {
-                *c += *v;
+        let (size_a, size_b) = (size[a], size[b]);
+        for k in 0..n {
+            if !active[k] || k == a || k == b {
+                continue;
+            }
+            let merged =
+                (size_a * similarity[a][k] + size_b * similarity[b][k]) / (size_a + size_b);
+            similarity[a][k] = merged;
+            similarity[k][a] = merged;
+        }
+        size[a] += size[b];
+        active[b] = false;
+        for value in &mut label {
+            if *value == b {
+                *value = a;
             }
         }
-        for centroid in &mut centroids {
-            l2_normalize(centroid);
-        }
-
-        let mut best = (f32::MIN, 0usize, 1usize);
-        for a in 0..count {
-            for b in (a + 1)..count {
-                let similarity = cosine(&centroids[a], &centroids[b]);
-                if similarity > best.0 {
-                    best = (similarity, a, b);
-                }
-            }
-        }
-        let (_, a, b) = best;
-        for label in &mut labels {
-            if *label == b {
-                *label = a;
-            }
-        }
+        count -= 1;
     }
 
-    labels
+    // Compact in order of first appearance: the earliest region becomes S1.
+    let mut remap: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
+    label
+        .iter()
+        .map(|root| {
+            let next = remap.len();
+            *remap.entry(*root).or_insert(next)
+        })
+        .collect()
 }
 
 impl DiarizationProvider for PyannoteDiarizer {
@@ -318,7 +365,7 @@ impl DiarizationProvider for PyannoteDiarizer {
         }
 
         let min_region_s = cfg.min_region_ms as f32 / 1_000.0;
-        let (mut regions, overlap_detected) = self.local_regions(audio, min_region_s)?;
+        let (regions, overlap_detected) = self.local_regions(audio, min_region_s)?;
         if regions.is_empty() {
             return Ok(DiarizationOutput {
                 turns: Vec::new(),
@@ -326,17 +373,38 @@ impl DiarizationProvider for PyannoteDiarizer {
             });
         }
 
-        for region in &mut regions {
-            let start = (region.start_s * RATE as f32) as usize;
-            let end = ((region.end_s * RATE as f32) as usize).min(audio.samples.len());
-            region.embedding = self.embed(&audio.samples[start..end])?;
+        // Several short embeddings per region beat one long one: a 10 s class
+        // run can straddle a turn, and a single vector then represents two
+        // people. The region keeps the majority label of its chunks.
+        let mut region_embeddings: Vec<Vec<Vec<f32>>> = Vec::with_capacity(regions.len());
+        for region in &regions {
+            let mut chunks = Vec::new();
+            for (begin, end) in chunk_bounds(region.start_s, region.end_s) {
+                let start = (begin * RATE as f32) as usize;
+                let end = ((end * RATE as f32) as usize).min(audio.samples.len());
+                if end > start {
+                    chunks.push(self.embed(&audio.samples[start..end])?);
+                }
+            }
+            region_embeddings.push(chunks);
         }
 
-        let embeddings: Vec<Vec<f32>> = regions.iter().map(|r| r.embedding.clone()).collect();
-        let labels = cluster_embeddings(&embeddings, cfg.threshold, cfg.max_speakers as usize);
+        let mut flat: Vec<Vec<f32>> = Vec::new();
+        for chunks in &region_embeddings {
+            flat.extend(chunks.iter().cloned());
+        }
+        let labels = cluster_embeddings(&flat, cfg.threshold, cfg.max_speakers as usize);
+
+        let mut region_labels = Vec::with_capacity(regions.len());
+        let mut cursor = 0;
+        for chunks in &region_embeddings {
+            let slice = &labels[cursor..cursor + chunks.len()];
+            cursor += chunks.len();
+            region_labels.push(majority_label(slice));
+        }
 
         let mut turns: Vec<DiarTurn> = Vec::with_capacity(regions.len());
-        for (region, label) in regions.iter().zip(labels.iter()) {
+        for (region, label) in regions.iter().zip(region_labels.iter()) {
             let turn = DiarTurn {
                 range: TimeRange::new(
                     MediaTime::from_secs_f64(f64::from(region.start_s)),
@@ -400,5 +468,36 @@ mod tests {
         let embeddings = vec![unit(&[1.0, 0.0]), unit(&[0.0, 1.0]), unit(&[-1.0, 0.0])];
         let labels = cluster_embeddings(&embeddings, 0.99, 2);
         assert!(labels.iter().max().copied().unwrap_or(0) < 2);
+    }
+
+    #[test]
+    fn average_linkage_does_not_chain() {
+        // 0°, 45°, 90°. Single linkage at 0.6 would merge all three through the
+        // middle point; average linkage must keep the two ends apart.
+        let embeddings = vec![unit(&[1.0, 0.0]), unit(&[1.0, 1.0]), unit(&[0.0, 1.0])];
+        let labels = cluster_embeddings(&embeddings, 0.6, 8);
+        assert_ne!(labels[0], labels[2], "opposite ends must not chain");
+    }
+
+    #[test]
+    fn chunks_cover_a_region_without_slivers() {
+        let bounds = chunk_bounds(0.0, 10.0);
+        assert!(bounds.len() > 1);
+        assert_eq!(bounds.first().unwrap().0, 0.0);
+        assert_eq!(bounds.last().unwrap().1, 10.0);
+        for (start, end) in &bounds {
+            assert!(end > start);
+            assert!(*end - *start >= EMBED_MIN_S, "sliver {start}..{end}");
+        }
+        // A short region is one chunk; a tiny one is not sliced at all.
+        assert_eq!(chunk_bounds(5.0, 6.0), vec![(5.0, 6.0)]);
+        assert_eq!(chunk_bounds(5.0, 5.4), vec![(5.0, 5.4)]);
+    }
+
+    #[test]
+    fn majority_label_prefers_the_earliest_on_a_tie() {
+        assert_eq!(majority_label(&[2, 2, 1]), 2);
+        assert_eq!(majority_label(&[1, 0]), 0);
+        assert_eq!(majority_label(&[]), 0);
     }
 }

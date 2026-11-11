@@ -49,27 +49,41 @@ In-the-wild audio will be worse; do not generalise this number to meetings.
 | Model | `whisper-base.en` + pyannote-3.0 + WeSpeaker |
 | Pipeline | `--modules vad,transcribe,diarize --language en` |
 | Collar / frame | 0.25 s / 10 ms |
-| **DER** | **18.60 %** (duration-weighted) |
-| Unweighted mean over files | 15.28 % |
+| **DER** | **15.46 %** (duration-weighted) |
+| Unweighted mean over files | 11.69 % |
 
 | file | DER | missed | false alarm | confusion | speakers ref → hyp |
 |---|---|---|---|---|---|
-| rcxzg | 24.74 % | 6.00 % | 0.13 % | **18.61 %** | 4 → 8 |
+| rcxzg | 10.57 % | 6.00 % | 0.13 % | 4.43 % | 4 → 8 |
 | fsaal | 23.37 % | 5.42 % | 1.87 % | **16.08 %** | 7 → 8 |
-| vmaiq | 16.81 % | 5.38 % | 0.90 % | **10.52 %** | 17 → 8 |
+| vmaiq | 15.39 % | 5.54 % | 0.90 % | 8.95 % | 17 → 8 |
 | tfvyr | 1.14 % | 1.14 % | 0.00 % | 0.00 % | 1 → 1 |
-| qpylu | 10.36 % | 2.71 % | 7.64 % | 0.00 % | 2 → 2 |
+| qpylu | 8.00 % | 2.61 % | 5.39 % | 0.00 % | 2 → 2 |
 
 Reading it:
 
-- **Confusion dominates**, not missed speech: the diarizer hears the speech
-  (missed ≤ 6 %) but assigns the wrong speaker 10–19 % of the time on files with
-  4+ speakers. That is the 10 s non-overlapping window and single-linkage
-  cosine clustering, as documented in `docs/ARCHITECTURE.md` §7.
-- The 17-speaker file is capped at `max_speakers = 8` (default). It is scored as
-  it ran, not re-tuned for the benchmark.
-- Single-speaker material is nearly perfect (1.14 %, all missed), which is the
-  expected behaviour of a clustering step that found one cluster.
+- **Confusion still dominates** on files with many speakers: the diarizer hears
+  the speech (missed ≤ 6 %) but assigns the wrong speaker. The remaining causes
+  are visible: `fsaal` invents one speaker too many (7 → 8), and `vmaiq` is
+  capped at `max_speakers = 8` against 17 reference speakers.
+- Single-speaker material is nearly perfect (1.14 %, all missed).
+- `qpylu` shows 5.39 % false alarm: diarization emits turns slightly beyond the
+  reference speech boundaries.
+
+### Change measured on this baseline
+
+First measurement (10 s non-overlapping regions, single-linkage clustering,
+threshold 0.60): **18.60 %**. After switching to 1.5 s embedding chunks with a
+0.75 s hop, average-linkage agglomerative clustering and threshold 0.45:
+**15.46 %** (−3.1 pp). Per file: `rcxzg` 24.74 → 10.57, `qpylu` 10.36 → 8.00,
+`vmaiq` 16.81 → 15.39, `fsaal` unchanged, `tfvyr` unchanged.
+
+The first attempt with 1.5 s chunks but the old threshold 0.60 made `qpylu`
+much worse (10.36 → 38.46 %) by splitting two speakers into five. A threshold
+sweep on these same five files gave 0.35 → 15.40 %, 0.45 → 15.46 %, 0.55 →
+16.10 %, 0.60 → 16.26 %; 0.45 was chosen as the knee. **This calibration used
+the same five pilot files that the table reports**, so the number is a pilot,
+not a held-out result. The next honest step is a held-out `test` subset.
 
 Caveats: 5 recordings only; in-the-wild YouTube audio (music, noise, overlap);
 greedy speaker mapping in `sonolytica-eval` (an optimal assignment would lower
@@ -81,14 +95,17 @@ that uses a different collar.
 The planned order was forced alignment, then diarization. The measurements
 argue for swapping that:
 
-1. **Diarization first.** DER 18.60 % with confusion at 10–19 % is the largest
-   user-visible error ("who said what"). The fix is known: overlapping windows,
-   better clustering, overlap handling.
+1. **Diarization first.** Done in this cycle: 18.60 → 15.46 % DER. The
+   remaining error is still confusion on crowded files, which needs overlap
+   handling and a proper speaker-count estimate, not another threshold.
 2. **Alignment second.** WER 6.05 % is near the model ceiling and deletions are
    1.1 %; alignment improves *when* a word was said (citations, cutting), not
    *what* was said. Still worth doing, but it does not move the headline.
 3. **Do not touch the ASR model yet.** `base.en` on clean speech is not the
    bottleneck. A larger model is a cost decision, not a quality fix.
+4. **Held-out DER before the next claim.** The threshold was calibrated on the
+   same pilot files; the next diarization number must come from the `test`
+   split, or it is not a result.
 
 ## Reproduce
 
