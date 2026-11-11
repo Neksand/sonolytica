@@ -7,7 +7,10 @@ phase has an acceptance gate that must be demonstrated, not asserted.
 
 Delivered: the typed `query` interface (no `jq`), `--profile
 structure|standard|ultra`, derived chapters, and the agent skill rewritten as a
-citation protocol with references and workflows.
+citation protocol with references and workflows. The skill-cost cycle is closed
+(reproducible benchmark, `brief` v2, 200-line core): hard 16/16 at 14 145 fresh
+tokens, easy 8/8 at 8 626, long 20 min 15/16 at 17 741. Open: overlap mapping
+(the long run lost one point on a range), easy fixed cost.
 
 Ordered next, each gated on a measured number:
 

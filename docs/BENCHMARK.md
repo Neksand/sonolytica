@@ -1,9 +1,9 @@
 # Benchmark: does the skill make an agent better at media?
 
-Date: 2026-11-11; the `query brief` section was added 2026-11-12. Three
-fixtures (a 14 s clip, Russian speech, a 4 min meeting),
-18 tasks, eleven scored sessions across three models, and two contaminated
-attempts that are recorded as failures rather than hidden.
+Date: 2026-11-11; the `query brief` sections and the reproducible cycle were
+added 2026-11-12. Four fixtures (a 14 s clip, Russian speech, a 4 min meeting, a
+20 min real meeting), 26 tasks, fifteen scored sessions across three models, and
+two contaminated attempts that are recorded as failures rather than hidden.
 
 The benchmark measures the **agent + skill + CLI** as a system, not a model on a
 leaderboard. The question is whether an agent with the skill answers media
@@ -256,10 +256,63 @@ Caveat: two hard runs and one easy run, single sessions, one model. The
 comparison with earlier sessions is within the same OpenCode token store but
 not the same harness version.
 
+## Reproducible cycle: `brief` v2 and a slim core (2026-11-12)
+
+This cycle made the measurement itself repeatable, then changed the skill.
+
+Method — `scripts/bench/prepare_agent_fixture.sh` builds a directory with only
+the media, a copy of `skills/sonolytica/`, the full-metal binary and
+`PROMPT.md`; `scripts/bench/prompts/*.md` are the exact questions, identical for
+every configuration; `scripts/bench/session_tokens.sh <session-id>` prints
+`fresh = input + output` from `session_v2`. Sessions: DeepSeek V4.1 Flash
+(OpenCode `general` subagent), no `whisper`, `tesseract`, `ffmpeg` or Python;
+`jq` was allowed and used. Every answer was scored against the reference
+document (0/2 per task), and every quote was checked character-for-character.
+
+| Fixture | Skill | Commands | Score | Fresh (run 1 / run 2) | Median |
+|---|---|---|---|---|---|
+| hard 4 min | v3, `brief` v1 | — | 16/16 | — | 22 410 |
+| hard 4 min | v4, `brief` v2 | 13 | **16/16** | **14 773 / 13 517** | **14 145** |
+| easy 14.4 s | v3, `brief` v1 | — | 8/8 | — | 9 521 |
+| easy 14.4 s | v4, `brief` v2 | 9 / 10 | **8/8** | **8 434 / 8 818** | **8 626** |
+| long 20 min | v3 (341-line core) | 15 | **16/16** | 17 633 | 17 633 |
+| long 20 min | v4 (200-line core) | 22 | **15/16** | 17 741 | 17 741 |
+
+Reading it:
+
+- **Hard: cost gate met.** 14 145 fresh against the 18 000 gate and 22 410
+  baseline, same 16/16, no invented facts. Two runs spread 9.3 %, inside ±10 %.
+- **Easy: cost gate missed by 7.8 %.** 8 626 against 8 000, still 9.4 % below
+  the 9 521 baseline and 8/8 both runs (4.6 % spread). The remaining cost is the
+  fixed read: harness prompt plus a 200-line `SKILL.md`; the agent's own
+  commands are cheap.
+- **Long: quality did not improve.** The old core scored 16/16; the new one
+  scored 15/16: it answered the overlap question with the span
+  00:19:18.470–00:19:27.120, while overlapping turns run to 00:19:31.790. That is
+  the rubric's "correct content, wrong range" = 1. Cost was 0.6 % higher
+  (22 commands spent on `jq` exploration of the raw JSON). A truncated range is
+  a wrong range.
+- **`brief` v2** adds `video.scene_cuts` and one OCR line per keyframe. On the
+  4-minute OCR document the compact brief is **3 003 B** (27 text lines), inside
+  the 4 KB gate; on the older over-segmented `ref.json` (7 speakers, 16 chapters,
+  `ultra`) it is 4 691 B — above the gate, and it was ~3.8 KB before this
+  change. The gate is met on the document the benchmark actually produces.
+- **Slimming the core cost no quality on the 4-minute fixture** and one point on
+  the long one. The overlap rule survived the move to `references/modalities.md`
+  but the routing did not: the old core had a "minimum commands" table that the
+  new core delegates to the cheatsheet.
+
+Caveat: one long session per skill version, manual scoring, one model. The
+20-minute fixture is VoxConverse `fvhrk` (CC BY 4.0): a real 4-speaker debate
+(RTTM), 4 annotated speakers, one participant speaking 18.5 s, no overlap
+annotation. The document reports 2 speaker labels with a
+`diarization_speaker_cap` warning — the known long-file failure, not an agent
+error.
+
 ## Limits
 
-- Three fixtures, 18 questions, eleven sessions. This is a smoke benchmark, not
-  a statistical claim; all fixtures are synthetic.
+- Four fixtures, 26 questions, fifteen sessions. This is a smoke benchmark, not
+  a statistical claim; all fixtures except the VoxConverse meeting are synthetic.
 - Sessions use different models: Nemotron VL and DeepSeek on the video fixture,
   Nemotron VL on Russian, LongCat once. Only comparisons within one model are
   controlled.
@@ -276,6 +329,11 @@ not the same harness version.
 ## Reproduce
 
 ```bash
+# clean fixture with only media + skill + full-metal binary + prompt
+scripts/bench/prepare_agent_fixture.sh --name hard \
+  --media /private/tmp/bench-hard/meeting.mp4
+scripts/bench/session_tokens.sh ses_…      # fresh = input + output
+
 # Build and copy the binary so the sessions cannot rebuild the repo
 cargo build --release -p sonolytica-cli --features full-metal
 cp target/release/sonolytica /private/tmp/sonolytica-bench

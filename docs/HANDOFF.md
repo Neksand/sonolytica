@@ -1,7 +1,8 @@
 # Handoff — SONOLYTICA after the diarization/agent cycle
 
-Last updated: 2026-11-12. Branch `main`, base commit `1960e26` plus this
-handoff commit, working tree clean, **no remote configured** (the user pushes).
+Last updated: 2026-11-12, after the skill-cost cycle. Branch `main`, working tree
+clean, **no remote configured** (the user pushes). The cycle's commits are on top
+of `1960e26`: reproducible bench, `brief` v2, the 200-line skill core.
 
 Read this first, then `docs/STATUS.md` (numbers), `docs/EVAL.md` (methods),
 `docs/BENCHMARK.md` (agent tests), `docs/MODELS.md` (cap/gate notes),
@@ -21,14 +22,14 @@ OCR text, and provenance on every segment. Agents read it via
 
 | | |
 |---|---|
-| Rust | 15 933 lines, 7 crates: `providers` (4.3k), `cli` (3.6k), `engine` (2.6k), `core` (2.1k), `dsp` (1.4k), `media` (1.2k), `eval` (0.7k) |
+| Rust | 16 088 lines, 7 crates: `providers` (4.3k), `cli` (3.8k), `engine` (2.6k), `core` (2.1k), `dsp` (1.4k), `media` (1.2k), `eval` (0.7k) |
 | Binary | `sonolytica` (`sonolytica-cli`) |
 | SDK | `sonolytica-engine` (`Engine::analyze`) |
 | Schema | **1.4.0**, additive 1.0 → 1.4 |
 | Models | 10, SHA-256 pinned, in `~/.cache/sonolytica/models` |
 | Query commands | 14: brief, timeline, at, search, transcript, words, speakers, chapters, frames, music, acoustic, runs, summary, help |
-| Skill | `skills/sonolytica/` (SKILL.md + 9 references + install README) |
-| Tests | **136** model-free / **151** all-features |
+| Skill | `skills/sonolytica/` (SKILL.md 200 lines + 5 references + 5 workflows) |
+| Tests | **137** model-free / **152** all-features |
 
 Features: `sonolytica-cli --features full-metal` = whisper + silero + diarize +
 ocr + align + metal. `cargo test --workspace` runs without models/cmake/ORT.
@@ -74,10 +75,12 @@ whisper/tesseract/sonolytica (8 tasks, max 16):
 `*` one false "visually confirmed" claim, fixed in the skill: text-only models
 must not claim sight.
 
-`query brief` (2026-11-12): the hard fixture scores **16/16 at 22 410 fresh**
-tokens in 15 commands (the first run, with three reference files preloaded, used
-26 998); the easy fixture scores **8/8 at 9 521 fresh** versus 41 399 for the
-previous skill. Details and caveats: BENCHMARK.
+`query brief` v2 (2026-11-12, reproducible prompts): the hard fixture scores
+**16/16 at 14 145 fresh in 13 commands** (median of 14 773 and 13 517; v1 used
+22 410); the easy fixture scores **8/8 at 8 626 fresh** (8 434 / 8 818; v1 used
+9 521). A new 20-minute real meeting (VoxConverse `fvhrk`) scores 15/16 at
+17 741 with the slim core versus 16/16 at 17 633 with the old one — the lost
+point is a truncated overlap range. Details and caveats: BENCHMARK.
 
 ## 3. Things that must not regress
 
@@ -93,9 +96,10 @@ previous skill. Details and caveats: BENCHMARK.
   failure warns `diarization_vad_gate_unavailable` and leaves turns ungated.
 - Sortformer files longer than 10 minutes carry `diarization_speaker_cap`; an
   agent must say "at least N" there, never an exact count.
-- Skill cost/quality baseline: hard **16/16 / 22 410 fresh / 15 commands**,
-  easy **8/8 / 9 521 fresh / 9 commands**. Re-run the paired benchmark before
-  claiming an improvement; do not preload reference files.
+- Skill cost/quality baseline: hard **16/16 / 14 145 fresh / 13 commands**,
+  easy **8/8 / 8 626 fresh / 9 commands**, long 20 min **15/16 / 17 741**.
+  Re-run the paired benchmark (`scripts/bench/prepare_agent_fixture.sh`, same
+  prompt file) before claiming an improvement; do not preload reference files.
 - `ort` pinned `=2.0.0-rc.15`; one environment per process; **shared session
   builder uses `AutoDevicePolicy::PreferCPU`** (CoreML silently mis-executes
   dynamic-shape graphs: PP-OCRv5 detection collapsed, recognition blank; VAD
@@ -188,8 +192,8 @@ cd /Users/neksand/orca/projects/SONOLYTICA
 git status                       # must be clean
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace           # 136, no models
-cargo test --workspace --all-features   # 151
+cargo test --workspace           # 137, no models
+cargo test --workspace --all-features   # 152
 
 # real models (macOS fixtures, ~10 s)
 SONOLYTICA_E2E=1 cargo test -p sonolytica-engine --features "full,metal" --test e2e_speech
@@ -213,9 +217,16 @@ python3 scripts/eval/der_voxconverse.py \
   --workdir /private/tmp/sono-eval/der-test3-env \
   --json-out /private/tmp/sono-eval/der-test3-env.json
 
-# query brief smoke: expect 1.7-3.1 KB, key sections present
+# query brief smoke: compact JSON 2-5 KB, key sections present
 cargo build -p sonolytica-cli --features full-metal
-./target/debug/sonolytica query brief /private/tmp/bench-hard/meeting-gate2.json --json | wc -c
+./target/debug/sonolytica query brief /private/tmp/bench-brief2/doc.json --json | jq -c . | wc -c
+./target/debug/sonolytica query brief /private/tmp/bench-brief2/doc.json | head -30
+
+# agent benchmark: clean fixture, exact prompt, tokens from OpenCode's store
+scripts/bench/prepare_agent_fixture.sh --name hard \
+  --media /private/tmp/bench-hard/meeting.mp4
+scripts/bench/session_tokens.sh ses_…      # or --last
+# long fixture (20 min, VoxConverse fvhrk): scripts/bench/README.md
 
 # JER is printed by the eval binary; the script aggregates weighted/unweighted
 ./target/debug/sonolytica-eval der --rttm REF.rttm --document DOC.json --file-id NAME
@@ -241,26 +252,32 @@ Token accounting: OpenCode stores per-session totals in
 
 ## 7. Known gaps and next steps (priority)
 
-### Next cycle: skill cheaper + better (start here)
+### Skill cycle (2026-11-12): done, two gates missed
 
 Full plan: `/Users/neksand/.opencode/plan/sonolytica-skill-cost-2026-11-12.md`.
-Baseline: hard **16/16 at 22 410 fresh in 15 commands**, easy **8/8 at 9 521 in
-9 commands**. Targets: hard **≤18 000** at 16/16, easy **≤8 000** at 8/8.
+Delivered: reproducible fixture + token scripts, `brief` v2 (scene cuts, one OCR
+line per keyframe), a 200-line `SKILL.md` with modality detail moved to
+`references/modalities.md`, and a 20-minute real-meeting fixture.
 
-1. **Make the measurement reproducible** before touching the skill: clean dir,
-   same prompt, record every command and `session_v2` fresh tokens; two runs of
-   the same config within ±10 %.
-2. **`brief` v2**: add scene-cut timestamps and one OCR line per scene (capped),
-   not more prose. Gate: hard ≤10 commands, ≤20k fresh, 16/16; JSON ≤4 KB.
-3. **Slim `SKILL.md` to ≤200 lines**: keep the iron rules, brief-first,
-   question routing and citation rules; move detail to references. Gate: score
-   unchanged, hard ≤18k.
-4. **A harder fixture**: 15–20 min real licensed meeting with 3–4 speakers,
-   overlap and a quiet speaker. Score 0/1/2 with and without the new skill; zero
-   invented facts.
+Results (medians, DeepSeek V4.1 Flash, one clean directory per run):
 
-Do **not**: preload references (cost 4 588 fresh in the first run), retry the
-merge tie-break or the 0.45 VAD gate, or add models for this cycle.
+| Fixture | Before | After | Gate | Verdict |
+|---|---|---|---|---|
+| hard 4 min | 16/16, 22 410 | **16/16, 14 145** | ≤18 000 | met |
+| easy 14.4 s | 8/8, 9 521 | **8/8, 8 626** | ≤8 000 | missed by 7.8 % |
+| long 20 min | 16/16, 17 633 | **15/16, 17 741** | score ≥, cost ≤+10 % | score −1 |
+
+Open, in priority order:
+
+1. **Overlap mapping.** The long run lost a point on a truncated overlap range
+   and spent ~7 commands grepping the raw JSON for `overlap: true`. Add the
+   overlap spans to `brief` (or a `query overlaps`) only if a paired run shows
+   fewer commands and no score loss — `brief` must stay ≤4 KB compact.
+2. **Easy fixed cost.** 8 626 vs the 8 000 gate; the remainder is the harness
+   prompt plus the 200-line core. Cutting more prose risks the score, so the
+   next attempt needs a measurement, not a guess.
+3. **The long fixture needs a second session per skill version** before treating
+   the one-point loss as systematic.
 
 ### Capability roadmap after the skill cycle (by payoff)
 
@@ -328,13 +345,26 @@ and record it in `docs/EVAL.md`.
 - **Synthetic fixtures exposed real bugs** three times: colour-blind cuts
   (red/blue), dark-slide collapse (chromaticity), ASR padding vs onset. Keep
   making fixtures uncomfortable.
+- **A truncated range is a wrong range.** The slim skill's only scoring loss on
+  the 20-minute fixture was an overlap span cut four seconds short: content
+  right, timestamp wrong. Score it 1, and fix the routing rather than the
+  answer.
+- **The benchmark harness must be code.** Hand-built directories and remembered
+  prompts made the first `brief` numbers incomparable; one script that copies
+  media + skill + binary and one verbatim prompt per fixture made repeat runs
+  spread 4.6–9.3 %, inside the ±10 % gate.
+- **Slimming prose moves routing knowledge, not just words.** Moving the
+  "minimum commands" table to the cheatsheet saved lines; on the long fixture
+  the agent then explored the raw JSON with `jq` and spent extra commands.
 
 ## 9. For the next agent
 
 Start with `git status`, `docs/HANDOFF.md` (this file), `docs/STATUS.md`, then
-the skill-cost plan above. First objective: make the skill cheaper and better
-**with the same model and fixtures** — the current baseline is hard 16/16 at
-22 410 fresh, easy 8/8 at 9 521. Do not re-litigate the rejected experiments
-(VAD gate at 0.45, merge tie-break, count heuristics) and do not preload
-reference files. Keep the model-free build and the docs-as-tests green. If a
-change is not measured on a licensed or reproducible fixture, it is not done.
+§7 above. The skill cycle is closed: hard 16/16 at 14 145 fresh, easy 8/8 at
+8 626 (gate 8 000 missed), long 20 min 15/16 at 17 741. First objective is the
+lost overlap mapping on the long fixture — add overlap spans to `brief` (or a
+`query overlaps`) and prove it on a paired run. Do not re-litigate the rejected
+experiments (VAD gate at 0.45, merge tie-break, count heuristics) and do not
+preload reference files. Keep the model-free build and the docs-as-tests green.
+If a change is not measured on a licensed or reproducible fixture, it is not
+done.
