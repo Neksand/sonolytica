@@ -178,6 +178,10 @@ keep the same shape and start by acknowledging the gap:
 а не цитата.
 ```
 
+Numbers are normalised by the model: «двадцать процентов» can appear as
+`20%`, «ten dollars» as `$10`. Before saying a number is absent, search the
+digits and the stem (`процент`, `20`), and quote the form the document uses.
+
 Do not argue about what the user heard. Report what the document contains and
 offer the two honest routes: listen to the source, or re-run with a better ASR
 model (`--model whisper-small`).

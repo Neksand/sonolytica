@@ -75,7 +75,7 @@ pub const MODELS: &[ModelSpec] = &[
         capability: Capability::Transcribe,
         filename: "ggml-small.bin",
         url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
-        sha256: "",
+        sha256: "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
         license: "MIT",
         approx_bytes: 488_000_000,
         notes: "Multilingual; the default for non-English audio.",

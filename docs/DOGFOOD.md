@@ -67,14 +67,29 @@ Each friction report became a rule or a command, not a paragraph of advice:
 | `inspect` mistaken for `query inspect` | §12 corrected |
 | "chapters" read as topics | §5: structural, not topical |
 
+## Non-English audio (tested 2026-11-11)
+
+A 12 s Russian recording (macOS `say -v Milena`), `whisper-small`,
+`--language ru`, all stages complete:
+
+| Check | Result |
+|---|---|
+| Transcript | exact, three sentences, correct punctuation |
+| Amounts | «двадцать процентов» normalised to `20%` |
+| Word search | «подписку» found at 00:00:03.600–00:00:06.760 |
+| Caveat | searching «процентов» misses because the text says `20%` |
+
+The number-normalisation rule was added to the skill as a result. This is one
+short clean recording, not a WER measurement; it shows the path works, not how
+accurate it is on real Russian audio.
+
 ## Not covered yet
 
 - **Music**: no licensed musical fixture was dogfooded; the music workflow is
   documented but unverified against real material. Do not cite it as tested.
-- **Video**: no visual layer exists, so the only testable behaviour was the
-  refusal to describe frames — which passed (task 3).
-- **Non-English audio**: not dogfooded. The language rule is written but the
-  pipeline path for non-English has no fixture.
+- **Video**: shot detection now exists, but no dogfood run has used a real video
+  with scenes; the only tested behaviour is the refusal to describe frames and
+  the synthetic cut fixture in `crates/engine/tests/scenes.rs`.
 - A longer recording was not tested; chapter quality on multi-hour material is
   unknown.
 
