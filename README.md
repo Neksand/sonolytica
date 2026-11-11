@@ -32,7 +32,9 @@ This is the first development cycle. What is real today:
   Rust), speaker-attributed dialogue, overlap/interruption relations.
 - **Failure isolation**: a missing model produces a warning and a `Partial`
   document, never a fabricated result.
-- **CLI** with `inspect`, `analyze`, `models`, `doctor`, `schema`.
+- **CLI** with `inspect`, `analyze`, `query`, `models`, `doctor`, `schema`.
+  `query` answers timeline, search, speaker, music, acoustic and run-status
+  questions without `jq`.
 - **Evaluation harness**: WER/CER, diarization error rate, per-run timings.
 
 Not implemented yet (roadmap): video scene/vision analysis, MCP server, HTTP
@@ -75,10 +77,16 @@ sonolytica models fetch \
 # 3. Analyse
 sonolytica analyze interview.mp3 --out interview.json --summary
 
-# 4. Ask the document questions (JSON is the API)
-jq -r '.segments[] | select(.kind.type=="speaker_turn" and .kind.text!="")
-       | "\(.range.start/1000000)s  \(.kind.speaker)  \(.kind.text)"' interview.json
+# 4. Ask the document questions — typed output, no jq required
+sonolytica query summary interview.json
+sonolytica query timeline interview.json --from 00:00:10 --to 00:00:20
+sonolytica query search interview.json pricing
+sonolytica query speakers interview.json
+sonolytica query runs interview.json          # which stages failed, and why
 ```
+
+Times accept `HH:MM:SS.mmm`, `MM:SS`, `12.5s`, `950ms` or raw microseconds.
+Every subcommand takes `--json` for a typed object on stdout.
 
 `analyze` emits one versioned JSON document (`schema_version: 1.0.0`). A
 compact excerpt:

@@ -1,0 +1,930 @@
+//! Read-only queries over an analysed document.
+//!
+//! These commands exist so an agent can answer questions about a document
+//! without `jq`: every result is either a stable plain-text table or a typed
+//! JSON object. Nothing here mutates the document or touches a model.
+
+use std::collections::BTreeMap;
+use std::fmt::Write as _;
+use std::path::{Path, PathBuf};
+
+use anyhow::{Context, Result, anyhow, bail};
+use clap::{Args, Subcommand};
+use serde::Serialize;
+use sonolytica_core::{
+    AcousticSummary, AnalysisBlock, AnalysisConfig, Bpm, Capability, Chord, Document, KeyEstimate,
+    Loudness, MediaInfo, MediaTime, MusicSummary, RunRecord, RunStatus, Segment, SegmentKind,
+    SpeakerId, TimeRange, Warning, Word,
+};
+
+/// Segment kinds a document can contain. Kept explicit so `--type` rejects a
+/// typo instead of silently returning nothing.
+const SEGMENT_KINDS: [&str; 6] = [
+    "speech",
+    "speaker_turn",
+    "music_label",
+    "acoustic_event",
+    "scene",
+    "object",
+];
+
+/// Text is truncated by characters, not bytes: transcripts are UTF-8 and a
+/// byte slice would panic on the first non-ASCII character.
+const TEXT_WIDTH: usize = 80;
+
+#[derive(Debug, Args)]
+pub struct QueryArgs {
+    #[command(subcommand)]
+    pub command: QueryCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum QueryCommand {
+    /// Segments in a time window, ordered by start
+    Timeline {
+        /// Document produced by `sonolytica analyze`
+        doc: PathBuf,
+        /// Window start: `HH:MM:SS.mmm`, `MM:SS`, `12.5s`, `950ms` or µs
+        /// (default 0)
+        #[arg(long)]
+        from: Option<String>,
+        /// Window end: `HH:MM:SS.mmm`, `MM:SS`, `12.5s`, `950ms` or µs
+        /// (default media duration)
+        #[arg(long)]
+        to: Option<String>,
+        /// Restrict to one segment type (speech, speaker_turn, music_label,
+        /// acoustic_event, scene, object)
+        #[arg(long = "type")]
+        kind: Option<String>,
+        /// Emit typed JSON on stdout instead of a table
+        #[arg(long)]
+        json: bool,
+    },
+    /// What is active at one instant
+    At {
+        /// Document produced by `sonolytica analyze`
+        doc: PathBuf,
+        /// Instant: `HH:MM:SS.mmm`, `MM:SS`, `12.5s`, `950ms` or µs
+        time: String,
+        /// Emit typed JSON on stdout instead of a table
+        #[arg(long)]
+        json: bool,
+    },
+    /// Case-insensitive search over transcript text
+    Search {
+        /// Document produced by `sonolytica analyze`
+        doc: PathBuf,
+        /// Substring to find in text and word timings
+        needle: String,
+        /// Emit typed JSON on stdout instead of a table
+        #[arg(long)]
+        json: bool,
+    },
+    /// Speaking time per speaker, longest first
+    Speakers {
+        /// Document produced by `sonolytica analyze`
+        doc: PathBuf,
+        /// Emit typed JSON on stdout instead of a table
+        #[arg(long)]
+        json: bool,
+    },
+    /// Tempo, key, chords and loudness
+    Music {
+        /// Document produced by `sonolytica analyze`
+        doc: PathBuf,
+        /// Emit typed JSON on stdout instead of a table
+        #[arg(long)]
+        json: bool,
+    },
+    /// Silence and level summary
+    Acoustic {
+        /// Document produced by `sonolytica analyze`
+        doc: PathBuf,
+        /// Emit typed JSON on stdout instead of a table
+        #[arg(long)]
+        json: bool,
+    },
+    /// Stage status and warnings
+    Runs {
+        /// Document produced by `sonolytica analyze`
+        doc: PathBuf,
+        /// Emit typed JSON on stdout instead of a table
+        #[arg(long)]
+        json: bool,
+    },
+    /// Media, counts, analyses, runs and warnings
+    Summary {
+        /// Document produced by `sonolytica analyze`
+        doc: PathBuf,
+        /// Emit typed JSON on stdout instead of a table
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+pub fn run(command: QueryCommand) -> Result<()> {
+    match command {
+        QueryCommand::Timeline {
+            doc,
+            from,
+            to,
+            kind,
+            json,
+        } => timeline(
+            &load(&doc)?,
+            from.as_deref(),
+            to.as_deref(),
+            kind.as_deref(),
+            json,
+        ),
+        QueryCommand::At { doc, time, json } => at(&load(&doc)?, &time, json),
+        QueryCommand::Search { doc, needle, json } => search(&load(&doc)?, &needle, json),
+        QueryCommand::Speakers { doc, json } => speakers(&load(&doc)?, json),
+        QueryCommand::Music { doc, json } => music(&load(&doc)?, json),
+        QueryCommand::Acoustic { doc, json } => acoustic(&load(&doc)?, json),
+        QueryCommand::Runs { doc, json } => runs(&load(&doc)?, json),
+        QueryCommand::Summary { doc, json } => summary(&load(&doc)?, json),
+    }
+}
+
+fn load(path: &Path) -> Result<Document> {
+    let text = std::fs::read_to_string(path)
+        .with_context(|| format!("could not read {}", path.display()))?;
+    Document::from_json(&text).with_context(|| format!("could not parse {}", path.display()))
+}
+
+// ---------------------------------------------------------------- time input
+
+/// Parse a point on the media timeline.
+///
+/// Accepted forms: `HH:MM:SS.mmm`, `HH:MM:SS`, `MM:SS[.mmm]`, `12.5s`, `950ms`,
+/// `12.5` (seconds) and a bare integer (microseconds — the document's unit).
+fn parse_time(input: &str) -> Result<MediaTime> {
+    let text = input.trim();
+    let invalid = || {
+        anyhow!(
+            "invalid time `{input}`: expected HH:MM:SS.mmm, MM:SS, 12.5s, 950ms or microseconds"
+        )
+    };
+    if text.is_empty() {
+        bail!("empty time value");
+    }
+    if text.starts_with('-') {
+        bail!("time `{input}` is negative");
+    }
+    if text.contains('e') || text.contains('E') {
+        return Err(invalid());
+    }
+
+    let parts: Vec<&str> = text.split(':').collect();
+    let micros = match parts.as_slice() {
+        [hours, minutes, seconds] => {
+            parse_whole(hours, input)? as f64 * 3_600_000_000.0
+                + parse_whole(minutes, input)? as f64 * 60_000_000.0
+                + parse_number(seconds, input)? * 1.0e6
+        }
+        [minutes, seconds] => {
+            parse_whole(minutes, input)? as f64 * 60_000_000.0
+                + parse_number(seconds, input)? * 1.0e6
+        }
+        [bare] => {
+            if let Some(value) = bare.strip_suffix("ms") {
+                parse_number(value, input)? * 1_000.0
+            } else if let Some(value) = bare.strip_suffix("us") {
+                parse_number(value, input)?
+            } else if let Some(value) = bare.strip_suffix('s') {
+                parse_number(value, input)? * 1.0e6
+            } else if bare.contains('.') {
+                parse_number(bare, input)? * 1.0e6
+            } else {
+                parse_whole(bare, input)? as f64
+            }
+        }
+        _ => return Err(invalid()),
+    };
+
+    let micros = micros.round();
+    if !micros.is_finite() || micros < 0.0 || micros > i64::MAX as f64 {
+        bail!("time `{input}` is out of range");
+    }
+    Ok(MediaTime::from_micros(micros as i64))
+}
+
+fn parse_whole(value: &str, whole: &str) -> Result<u64> {
+    value
+        .trim()
+        .parse::<u64>()
+        .map_err(|_| anyhow!("invalid time `{whole}`"))
+}
+
+fn parse_number(value: &str, whole: &str) -> Result<f64> {
+    let value: f64 = value
+        .trim()
+        .parse()
+        .map_err(|_| anyhow!("invalid time `{whole}`"))?;
+    if !value.is_finite() || value < 0.0 {
+        bail!("invalid time `{whole}`");
+    }
+    Ok(value)
+}
+
+// ------------------------------------------------------------------ timeline
+
+fn timeline(
+    doc: &Document,
+    from: Option<&str>,
+    to: Option<&str>,
+    kind: Option<&str>,
+    json: bool,
+) -> Result<()> {
+    let start = from.map(parse_time).transpose()?.unwrap_or(MediaTime::ZERO);
+    let end = match to {
+        Some(value) => parse_time(value)?,
+        None => {
+            let duration = doc.duration();
+            if duration == MediaTime::ZERO {
+                MediaTime::MAX
+            } else {
+                duration
+            }
+        }
+    };
+    if end < start {
+        bail!("`--to` ({}) is before `--from` ({})", end, start);
+    }
+    let kind = kind.map(validate_kind).transpose()?;
+
+    let segments: Vec<&Segment> = doc
+        .segments_in(TimeRange::new(start, end))
+        .into_iter()
+        .filter(|segment| kind.is_none_or(|kind| segment.kind.kind_name() == kind))
+        .collect();
+
+    if json {
+        emit(&SegmentsOutput {
+            count: segments.len(),
+            segments: segments.iter().map(|s| SegmentView::new(s)).collect(),
+        })
+    } else {
+        print_segments(&segments);
+        Ok(())
+    }
+}
+
+fn validate_kind(kind: &str) -> Result<&str> {
+    SEGMENT_KINDS
+        .iter()
+        .copied()
+        .find(|known| *known == kind)
+        .ok_or_else(|| {
+            anyhow!(
+                "unknown segment type `{kind}`; expected one of: {}",
+                SEGMENT_KINDS.join(", ")
+            )
+        })
+}
+
+fn at(doc: &Document, time: &str, json: bool) -> Result<()> {
+    let instant = parse_time(time)?;
+    let mut segments = doc.at(instant);
+    segments.sort_by_key(|segment| (segment.range.start, segment.range.end, segment.id));
+
+    if json {
+        emit(&SegmentsOutput {
+            count: segments.len(),
+            segments: segments.iter().map(|s| SegmentView::new(s)).collect(),
+        })
+    } else {
+        print_segments(&segments);
+        Ok(())
+    }
+}
+
+// -------------------------------------------------------------------- search
+
+fn search(doc: &Document, needle: &str, json: bool) -> Result<()> {
+    let needle_lower = needle.to_lowercase();
+    let mut matches: Vec<MatchView<'_>> = Vec::new();
+
+    for segment in doc.segments_of_kind("speech") {
+        let SegmentKind::Speech { text, words, .. } = &segment.kind else {
+            continue;
+        };
+        let text_hit = text.to_lowercase().contains(&needle_lower);
+        let word_hits: Vec<&Word> = words
+            .iter()
+            .filter(|word| word.text.to_lowercase().contains(&needle_lower))
+            .collect();
+        if !text_hit && word_hits.is_empty() {
+            continue;
+        }
+
+        // A turn is a refinement of its utterance (`parent`), so the speaker
+        // for an ASR segment comes from the turn that points at it. Reporting
+        // both rows would duplicate every match.
+        let speaker = doc
+            .segments
+            .iter()
+            .find(|candidate| {
+                candidate.parent == Some(segment.id)
+                    && matches!(candidate.kind, SegmentKind::SpeakerTurn { .. })
+            })
+            .and_then(|turn| turn.kind.speaker())
+            .map(SpeakerId::as_str);
+
+        matches.push(MatchView {
+            segment: SegmentView::with_speaker(segment, speaker),
+            words: word_hits.iter().map(|word| WordView::new(word)).collect(),
+        });
+    }
+
+    if json {
+        emit(&SearchOutput {
+            needle,
+            count: matches.len(),
+            matches,
+        })
+    } else {
+        if matches.is_empty() {
+            println!("(none)");
+            return Ok(());
+        }
+        for hit in &matches {
+            let mut line = view_line(&hit.segment);
+            for word in &hit.words {
+                let _ = write!(line, "  | {} {}", word.text, word.range_display);
+            }
+            println!("{line}");
+        }
+        Ok(())
+    }
+}
+
+// ------------------------------------------------------------------ speakers
+
+fn speakers(doc: &Document, json: bool) -> Result<()> {
+    #[derive(Default)]
+    struct Acc {
+        duration: MediaTime,
+        turns: u32,
+        first: Option<MediaTime>,
+        last: Option<MediaTime>,
+    }
+
+    let mut acc: BTreeMap<&SpeakerId, Acc> = BTreeMap::new();
+    for segment in doc.segments_of_kind("speaker_turn") {
+        let SegmentKind::SpeakerTurn { speaker, .. } = &segment.kind else {
+            continue;
+        };
+        let entry = acc.entry(speaker).or_default();
+        entry.duration = entry.duration + segment.range.duration();
+        entry.turns += 1;
+        entry.first = Some(
+            entry
+                .first
+                .map_or(segment.range.start, |t| t.min(segment.range.start)),
+        );
+        entry.last = Some(
+            entry
+                .last
+                .map_or(segment.range.end, |t| t.max(segment.range.end)),
+        );
+    }
+
+    let mut speakers: Vec<SpeakerView<'_>> = acc
+        .into_iter()
+        .map(|(speaker, acc)| SpeakerView {
+            id: speaker.as_str(),
+            speech_duration_us: acc.duration.micros(),
+            speech_display: acc.duration.to_string(),
+            turn_count: acc.turns,
+            first_start_us: acc.first.unwrap_or(MediaTime::ZERO).micros(),
+            last_end_us: acc.last.unwrap_or(MediaTime::ZERO).micros(),
+        })
+        .collect();
+    speakers.sort_by(|a, b| {
+        b.speech_duration_us
+            .cmp(&a.speech_duration_us)
+            .then_with(|| a.id.cmp(b.id))
+    });
+
+    if json {
+        emit(&SpeakersOutput {
+            speaker_count: speakers.len(),
+            speakers,
+        })
+    } else {
+        if speakers.is_empty() {
+            println!("(none)");
+            return Ok(());
+        }
+        for speaker in &speakers {
+            let turns = if speaker.turn_count == 1 {
+                "turn"
+            } else {
+                "turns"
+            };
+            println!(
+                "{:<6} {:>9.3} s  {:>2} {turns}  {}–{}",
+                speaker.id,
+                speaker.speech_duration_us as f64 / 1e6,
+                speaker.turn_count,
+                MediaTime::from_micros(speaker.first_start_us),
+                MediaTime::from_micros(speaker.last_end_us)
+            );
+        }
+        Ok(())
+    }
+}
+
+// --------------------------------------------------------------------- music
+
+fn music(doc: &Document, json: bool) -> Result<()> {
+    let found = doc.analyses.iter().find_map(|block| match block {
+        AnalysisBlock::Music(summary) => Some(summary),
+        _ => None,
+    });
+
+    match found {
+        Some(summary) if json => emit(&MusicView::new(summary)),
+        Some(summary) => {
+            print_music(summary);
+            Ok(())
+        }
+        None if json => emit(&MusicView::empty()),
+        None => {
+            println!("music     not analysed (no music block in this document)");
+            Ok(())
+        }
+    }
+}
+
+fn print_music(summary: &MusicSummary) {
+    match &summary.bpm {
+        Some(bpm) => println!(
+            "tempo     {:.1} BPM (score {:.3})",
+            bpm.value, bpm.confidence
+        ),
+        None => println!("tempo     not estimated"),
+    }
+    match &summary.key {
+        Some(key) => println!(
+            "key       {} {} (score {:.3})",
+            key.tonic.name(),
+            if key.mode == sonolytica_core::Mode::Major {
+                "major"
+            } else {
+                "minor"
+            },
+            key.confidence
+        ),
+        None => println!("key       not estimated"),
+    }
+    match &summary.loudness {
+        Some(loudness) => {
+            print!("loudness  {:.1} LUFS", loudness.integrated_lufs);
+            if let Some(range) = loudness.loudness_range_lu {
+                print!(" · LRA {range:.1} LU");
+            }
+            if let Some(peak) = loudness.true_peak_dbtp {
+                print!(" · true peak {peak:.1} dBTP");
+            }
+            println!();
+        }
+        None => println!("loudness  not measured"),
+    }
+    println!(
+        "chords    {} · beats {}",
+        summary.chords.len(),
+        summary.beats.len()
+    );
+}
+
+// ------------------------------------------------------------------ acoustic
+
+fn acoustic(doc: &Document, json: bool) -> Result<()> {
+    let found = doc.analyses.iter().find_map(|block| match block {
+        AnalysisBlock::Acoustic(summary) => Some(summary),
+        _ => None,
+    });
+
+    match found {
+        Some(summary) if json => emit(&AcousticView::new(summary)),
+        Some(summary) => {
+            let total: MediaTime = summary
+                .silence
+                .iter()
+                .fold(MediaTime::ZERO, |sum, range| sum + range.duration());
+            println!(
+                "silence   {} region(s), {:.3} s total",
+                summary.silence.len(),
+                total.as_secs_f64()
+            );
+            print!("levels    ");
+            if let Some(mean) = summary.mean_rms_dbfs {
+                print!("mean {mean:.1} dBFS · ");
+            }
+            if let Some(peak) = summary.peak_dbfs {
+                print!("peak {peak:.1} dBFS · ");
+            }
+            match summary.dynamic_range_lu {
+                Some(range) => println!("LRA {range:.1} LU"),
+                None => println!("LRA not measured"),
+            }
+            Ok(())
+        }
+        None if json => emit(&AcousticView::empty()),
+        None => {
+            println!("acoustic  not analysed (no acoustic block in this document)");
+            Ok(())
+        }
+    }
+}
+
+// ---------------------------------------------------------------------- runs
+
+fn runs(doc: &Document, json: bool) -> Result<()> {
+    if json {
+        return emit(&RunsOutput {
+            complete: doc.is_complete(),
+            runs: doc.runs.iter().map(RunView::new).collect(),
+            warnings: &doc.warnings,
+        });
+    }
+
+    if doc.runs.is_empty() {
+        println!("(no runs recorded)");
+    }
+    for run in &doc.runs {
+        let view = RunView::new(run);
+        let mut line = format!(
+            "{:<12} {:<9} {:>6} ms  {:<18} {}",
+            run.capability.as_str(),
+            view.status,
+            view.duration_ms,
+            view.provider,
+            view.device
+        );
+        if let Some(reason) = view.reason {
+            let _ = write!(line, "  {reason}");
+        }
+        println!("{line}");
+    }
+    for warning in &doc.warnings {
+        let mut line = format!("warning      [{}] {}", warning.code, warning.message);
+        if let Some(run) = warning.run {
+            let _ = write!(line, " (run {run})");
+        }
+        println!("{line}");
+    }
+    Ok(())
+}
+
+// ------------------------------------------------------------------- summary
+
+fn summary(doc: &Document, json: bool) -> Result<()> {
+    if json {
+        return emit(&SummaryOutput {
+            media: &doc.media,
+            config: &doc.config,
+            counts: Counts {
+                tracks: doc.tracks.len(),
+                segments: doc.segments.len(),
+                relations: doc.relations.len(),
+            },
+            analyses: &doc.analyses,
+            runs: doc.runs.iter().map(RunView::new).collect(),
+            warnings: &doc.warnings,
+        });
+    }
+    print!("{}", crate::summarize(doc));
+    Ok(())
+}
+
+fn emit<T: Serialize>(value: &T) -> Result<()> {
+    println!("{}", serde_json::to_string_pretty(value)?);
+    Ok(())
+}
+
+// ------------------------------------------------------------- text rendering
+
+fn print_segments(segments: &[&Segment]) {
+    if segments.is_empty() {
+        println!("(none)");
+        return;
+    }
+    for segment in segments {
+        println!("{}", view_line(&SegmentView::new(segment)));
+    }
+}
+
+fn view_line(view: &SegmentView<'_>) -> String {
+    let mut line = format!(
+        "{}–{}  {:<14}",
+        view.start_display, view.end_display, view.kind
+    );
+    match view.speaker {
+        Some(speaker) => {
+            let _ = write!(line, " {speaker:<4}");
+        }
+        None => line.push_str("     "),
+    }
+    let body = match (view.text, &view.label) {
+        (Some(text), _) => truncate(text),
+        (None, Some(label)) => truncate(label),
+        (None, None) => String::new(),
+    };
+    line.push_str(&body);
+    if let Some(confidence) = view.confidence {
+        let _ = write!(line, "  [{confidence:.3}]");
+    }
+    line
+}
+
+fn truncate(text: &str) -> String {
+    let mut out: String = text.chars().take(TEXT_WIDTH + 1).collect();
+    if let Some((cut, _)) = out.char_indices().nth(TEXT_WIDTH) {
+        out.truncate(cut);
+        out.push('…');
+    }
+    out
+}
+
+// ------------------------------------------------------------------------ DTOs
+
+#[derive(Debug, Serialize)]
+struct SegmentsOutput<'a> {
+    count: usize,
+    segments: Vec<SegmentView<'a>>,
+}
+
+#[derive(Debug, Serialize)]
+struct SegmentView<'a> {
+    id: u32,
+    track: u32,
+    kind: &'static str,
+    /// Microseconds, the document's unit.
+    start: i64,
+    end: i64,
+    /// The same instant as `HH:MM:SS.mmm`, so a citation needs no arithmetic.
+    start_display: String,
+    end_display: String,
+    speaker: Option<&'a str>,
+    text: Option<&'a str>,
+    /// Label/class for non-text segments (music, acoustic, scene, object).
+    label: Option<String>,
+    confidence: Option<f32>,
+}
+
+impl<'a> SegmentView<'a> {
+    fn new(segment: &'a Segment) -> Self {
+        Self::with_speaker(segment, segment.kind.speaker().map(SpeakerId::as_str))
+    }
+
+    fn with_speaker(segment: &'a Segment, speaker: Option<&'a str>) -> Self {
+        Self {
+            id: segment.id,
+            track: segment.track,
+            kind: segment.kind.kind_name(),
+            start: segment.range.start.micros(),
+            end: segment.range.end.micros(),
+            start_display: segment.range.start.to_string(),
+            end_display: segment.range.end.to_string(),
+            speaker,
+            text: segment.kind.text(),
+            label: label_of(&segment.kind),
+            confidence: segment.confidence.map(|c| c.get()),
+        }
+    }
+}
+
+fn label_of(kind: &SegmentKind) -> Option<String> {
+    match kind {
+        SegmentKind::MusicLabel { label } => Some(label.clone()),
+        SegmentKind::AcousticEvent { class } => Some(class.clone()),
+        SegmentKind::Scene { index, cut } => {
+            Some(format!("scene {index}{}", if *cut { " (cut)" } else { "" }))
+        }
+        SegmentKind::Object { class, .. } => Some(class.clone()),
+        SegmentKind::Speech { .. } | SegmentKind::SpeakerTurn { .. } => None,
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct SearchOutput<'a> {
+    needle: &'a str,
+    count: usize,
+    matches: Vec<MatchView<'a>>,
+}
+
+#[derive(Debug, Serialize)]
+struct MatchView<'a> {
+    #[serde(flatten)]
+    segment: SegmentView<'a>,
+    /// Only the words that matched, with their own ranges.
+    words: Vec<WordView<'a>>,
+}
+
+#[derive(Debug, Serialize)]
+struct WordView<'a> {
+    text: &'a str,
+    start: i64,
+    end: i64,
+    range_display: String,
+    confidence: Option<f32>,
+}
+
+impl<'a> WordView<'a> {
+    fn new(word: &'a Word) -> Self {
+        Self {
+            text: &word.text,
+            start: word.range.start.micros(),
+            end: word.range.end.micros(),
+            range_display: format!("{}–{}", word.range.start, word.range.end),
+            confidence: word.confidence.map(|c| c.get()),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct SpeakersOutput<'a> {
+    speaker_count: usize,
+    speakers: Vec<SpeakerView<'a>>,
+}
+
+#[derive(Debug, Serialize)]
+struct SpeakerView<'a> {
+    id: &'a str,
+    speech_duration_us: i64,
+    speech_display: String,
+    turn_count: u32,
+    first_start_us: i64,
+    last_end_us: i64,
+}
+
+#[derive(Debug, Serialize)]
+struct MusicView<'a> {
+    available: bool,
+    bpm: Option<&'a Bpm>,
+    key: Option<&'a KeyEstimate>,
+    chords: &'a [Chord],
+    loudness: Option<&'a Loudness>,
+    beat_count: usize,
+}
+
+impl<'a> MusicView<'a> {
+    fn new(summary: &'a MusicSummary) -> Self {
+        Self {
+            available: true,
+            bpm: summary.bpm.as_ref(),
+            key: summary.key.as_ref(),
+            chords: &summary.chords,
+            loudness: summary.loudness.as_ref(),
+            beat_count: summary.beats.len(),
+        }
+    }
+
+    fn empty() -> Self {
+        Self {
+            available: false,
+            bpm: None,
+            key: None,
+            chords: &[],
+            loudness: None,
+            beat_count: 0,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct AcousticView<'a> {
+    available: bool,
+    silence: &'a [TimeRange],
+    dynamic_range_lu: Option<f32>,
+    mean_rms_dbfs: Option<f32>,
+    peak_dbfs: Option<f32>,
+    event_count: usize,
+}
+
+impl<'a> AcousticView<'a> {
+    fn new(summary: &'a AcousticSummary) -> Self {
+        Self {
+            available: true,
+            silence: &summary.silence,
+            dynamic_range_lu: summary.dynamic_range_lu,
+            mean_rms_dbfs: summary.mean_rms_dbfs,
+            peak_dbfs: summary.peak_dbfs,
+            event_count: summary.events.len(),
+        }
+    }
+
+    fn empty() -> Self {
+        Self {
+            available: false,
+            silence: &[],
+            dynamic_range_lu: None,
+            mean_rms_dbfs: None,
+            peak_dbfs: None,
+            event_count: 0,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct RunsOutput<'a> {
+    complete: bool,
+    runs: Vec<RunView<'a>>,
+    warnings: &'a [Warning],
+}
+
+#[derive(Debug, Serialize)]
+struct RunView<'a> {
+    id: u32,
+    capability: Capability,
+    provider: &'a str,
+    model_id: Option<&'a str>,
+    device: &'a str,
+    duration_ms: u64,
+    status: &'static str,
+    reason: Option<&'a str>,
+}
+
+impl<'a> RunView<'a> {
+    fn new(run: &'a RunRecord) -> Self {
+        let (status, reason) = match &run.status {
+            RunStatus::Complete => ("complete", None),
+            RunStatus::Partial { reason } => ("partial", Some(reason.as_str())),
+            RunStatus::Failed { reason } => ("failed", Some(reason.as_str())),
+        };
+        Self {
+            id: run.id,
+            capability: run.capability,
+            provider: &run.provider,
+            model_id: run.model.as_ref().map(|model| model.id.as_str()),
+            device: &run.device,
+            duration_ms: run.duration_ms,
+            status,
+            reason,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct SummaryOutput<'a> {
+    media: &'a MediaInfo,
+    config: &'a AnalysisConfig,
+    counts: Counts,
+    analyses: &'a [AnalysisBlock],
+    runs: Vec<RunView<'a>>,
+    warnings: &'a [Warning],
+}
+
+#[derive(Debug, Serialize)]
+struct Counts {
+    tracks: usize,
+    segments: usize,
+    relations: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_every_documented_form() {
+        let cases = [
+            ("00:00:12.450", 12_450_000),
+            ("01:02:03", 3_723_000_000),
+            ("02:03.500", 123_500_000),
+            ("12.5s", 12_500_000),
+            ("950ms", 950_000),
+            ("1500us", 1_500),
+            ("12.5", 12_500_000),
+            ("12450000", 12_450_000),
+            ("0", 0),
+        ];
+        for (input, expected) in cases {
+            assert_eq!(
+                parse_time(input).unwrap().micros(),
+                expected,
+                "parsing `{input}`"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_garbage() {
+        for input in ["", " ", "abc", "-1s", "1:2:3:4", "1e3", "12..5", "1:2:x"] {
+            assert!(parse_time(input).is_err(), "`{input}` must not parse");
+        }
+    }
+
+    #[test]
+    fn truncation_is_character_safe() {
+        let cyrillic = "я".repeat(TEXT_WIDTH + 5);
+        let out = truncate(&cyrillic);
+        assert_eq!(out.chars().count(), TEXT_WIDTH + 1);
+        assert!(out.ends_with('…'));
+        assert_eq!(truncate("short"), "short");
+    }
+}

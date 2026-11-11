@@ -199,28 +199,52 @@ A capability with no provider does **not** create a failed run: it appears in
 - `serde` defaults are used where a missing field has an unambiguous meaning;
   there are no silent reinterpretations.
 
-## Query recipes
+## Query commands
 
-With `jq` over a document:
+`sonolytica query` reads a document and answers one question per invocation.
+Nothing is mutated and no model is loaded.
 
 ```bash
-# Everything that happens between 00:12 and 00:30
-jq '.segments[] | select(.range.start < 30000000 and .range.end > 12000000)' doc.json
+# Everything that happens between 00:12 and 00:30 (half-open window)
+sonolytica query timeline doc.json --from 00:00:12 --to 00:00:30
 
-# Dialogue only
-jq '.segments[] | select(.kind.type=="speaker_turn" and .kind.text!="")' doc.json
+# One modality only
+sonolytica query timeline doc.json --type speaker_turn
 
-# Speakers and their speaking time
-jq '[.segments[] | select(.kind.type=="speaker_turn")
-     | {speaker: .kind.speaker, ms: ((.range.end-.range.start)/1000)}]
-    | group_by(.speaker) | map({speaker: .[0].speaker, ms: (map(.ms)|add)})' doc.json
+# What is active at an instant
+sonolytica query at doc.json 00:00:12.450
+
+# Find a word, with its range and speaker
+sonolytica query search doc.json pricing
+
+# Speaking time per speaker, longest first
+sonolytica query speakers doc.json --json
+
+# Tempo, key, chords, loudness; silence and levels
+sonolytica query music doc.json --json
+sonolytica query acoustic doc.json --json
 
 # Which stages failed, and why
-jq '.warnings[]' doc.json
-
-# Confidence of a word
-jq '.segments[] | select(.kind.type=="speech") | .kind.words[]
-    | select(.text=="fox") | .confidence' doc.json
+sonolytica query runs doc.json
 ```
 
-Timestamps in shell output are microseconds; divide by 1e6 for seconds.
+`--type` accepts `speech`, `speaker_turn`, `music_label`, `acoustic_event`,
+`scene`, `object`.
+
+### Time input
+
+| Form | Meaning |
+|---|---|
+| `00:00:12.450`, `00:00:12` | clock time |
+| `02:03.500` | `MM:SS.mmm`, minutes may exceed 59 |
+| `12.5s`, `950ms` | suffixed, fractional allowed |
+| `12.5` | seconds |
+| `12450000` | **microseconds** — the document's unit |
+
+In JSON output every range is present twice: `start`/`end` in microseconds and
+`start_display`/`end_display` as `HH:MM:SS.mmm`, so a citation needs no
+arithmetic.
+
+The same data is still available as raw JSON with `jq`; `query` exists because
+an agent should not have to reconstruct the document's structure to answer a
+question.

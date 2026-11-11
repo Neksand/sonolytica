@@ -10,6 +10,8 @@ use sonolytica_engine::Engine;
 use sonolytica_providers::{ModelStore, default_model_dir, models::MODELS};
 use tracing_subscriber::EnvFilter;
 
+mod query;
+
 #[derive(Debug, Parser)]
 #[command(
     name = "sonolytica",
@@ -38,6 +40,8 @@ enum Command {
     Inspect(InspectArgs),
     /// Analyse media and emit a SONOLYTICA document
     Analyze(AnalyzeArgs),
+    /// Query an analysed document without jq
+    Query(query::QueryArgs),
     /// List or fetch pinned models
     Models {
         #[command(subcommand)]
@@ -170,6 +174,10 @@ async fn run(cli: Cli) -> Result<ExitCode> {
             if args.strict && !document.is_complete() {
                 return Ok(ExitCode::from(2));
             }
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Query(args) => {
+            query::run(args.command)?;
             Ok(ExitCode::SUCCESS)
         }
         Command::Models { command } => {
