@@ -129,6 +129,10 @@ Rules of use:
   alignment (English, 20 ms frames, median drift ~110 ms); without it, the
   times are Whisper token timestamps. Both are document facts; do not mix them
   in one citation without saying which run produced them.
+- A `speech` segment's start can include ASR/VAD padding (up to ~300 ms of
+  digital lead-in plus the VAD pad), so it is not necessarily the first audible
+  syllable. For "when exactly did it start", use `words[].range` or `--align`;
+  for "which minute", the segment range is fine.
 - Which range supports which claim:
 
 | Claim | Cite |
@@ -241,6 +245,9 @@ model (`--model whisper-small`).
 - **Open the images yourself** and answer visual questions from what you see.
   A visual statement is an observation, not a document fact: label it as such
   and cite the frame's `start_display`. Never attach a transcript range to it.
+- **If you cannot see images** (a text-only model), say so. Never claim to have
+  looked at a frame or "visually confirmed" OCR text. Cite `text_overlay` as
+  OCR, not as sight.
 - **On-screen text**: `analyze --ocr --out doc.json` runs OCR (PP-OCRv5) on the
   keyframes and adds `text_overlay` segments with exact text, bbox and
   confidence. `query timeline DOC --type text_overlay` lists them. That text is

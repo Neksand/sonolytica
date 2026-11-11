@@ -1,8 +1,8 @@
 # Benchmark: does the skill make an agent better at media?
 
 Date: 2026-11-11. Two fixtures (video with slides, Russian speech), ten tasks,
-five scored sessions and two contaminated attempts that are recorded as failures
-rather than hidden.
+seven scored sessions across three models, and two contaminated attempts that
+are recorded as failures rather than hidden.
 
 The benchmark measures the **agent + skill + CLI** as a system, not a model on a
 leaderboard. The question is whether an agent with the skill answers media
@@ -139,13 +139,53 @@ fixture the same skill was *cheaper* than exploring with ffmpeg.
 Combined across both fixtures: **A 16/20 (80 %), C 20/20 (100 %)**, zero
 invented facts in both.
 
+## Cross-model: native multimodal vs text-only
+
+Same video fixture, four questions. "Native media" means the model itself can
+see frames; DeepSeek V4.1 Flash cannot.
+
+| Model | Native media | Skill | Q1 | Q2 | Q3 | Q4 | Score | Fresh tokens | Total |
+|---|---|---|---|---|---|---|---|---|---|
+| Nemotron 3.5 Super VL | yes | no | 2 | 1 | 0 | 2 | **5/8** | 61 280 | 235 908 |
+| Nemotron 3.5 Super VL | yes | yes | 2 | 2 | 2 | 2 | **8/8** | 35 013 | 223 737 |
+| DeepSeek V4.1 Flash | no | no | 2 | 2 | 2 | 2 | **8/8** | 9 752 | 249 097 |
+| DeepSeek V4.1 Flash | no | yes | 2 | 2 | 2 | 2 | **8/8*** | 41 399 | 327 621 |
+
+`*` one unverifiable claim: the text-only model said the OCR text was
+"confirmed visually", which it cannot do. Fixed in the skill afterwards.
+
+Reading it, honestly:
+
+- **The skill's biggest effect is on the multimodal model**: 5/8 → 8/8, and
+  43 % fewer fresh tokens, because it stopped exploring and queried the
+  document.
+- **A text-only model without the skill scored 8/8 on this fixture** because
+  the machine has `whisper large-v3` and `tesseract` on PATH: it extracted
+  audio, transcribed, OCR'd the frame and estimated voices with f0 + LTAS, in
+  11 commands. A rich shell is a strong baseline.
+- **With the skill, the text-only model paid 4× the fresh tokens** (41 399 vs
+  9 752) for the same answers — the full seven-stage document plus the skill is
+  overhead on a 14 s file. It gained a reproducible document, exact ranges and
+  provenance the baseline cannot offer.
+- **Q2 exposed a real timestamp subtlety**: the document says the second phrase
+  starts at 00:07.992, but that is the ASR region with its 300 ms digital
+  lead-in; the DSP silence is 08.060–08.960, and the baseline's silence
+  detection was closer to the audible onset. `--align` fixes this; the skill
+  now warns that a `speech` segment start includes padding.
+- The 7–9 s answer from the no-skill baseline was *more accurate* than the
+  padded segment time. That is why alignment exists, and why the skill says to
+  use `words[].range` or `--align` for "when exactly".
+
 ## Limits
 
-- Two fixtures, ten questions, six sessions. This is a smoke benchmark, not a
-  statistical claim; one fixture is synthetic slides, the other a synthetic
+- Two fixtures, ten questions, seven sessions. This is a smoke benchmark, not
+  a statistical claim; one fixture is synthetic slides, the other a synthetic
   single voice.
-- Sessions are not all the same model: A/C are Nemotron VL on both fixtures, B
-  is LongCat on the video fixture. The skill's effect is visible in A vs C.
+- Sessions use different models: Nemotron VL and DeepSeek on the video fixture,
+  Nemotron VL on Russian, LongCat once. Only comparisons within one model are
+  controlled.
+- The no-skill baselines had `whisper` and `tesseract` on PATH. That makes them
+  strong; in a bare shell they would score lower.
 - Scoring is manual, by comparing each answer with the reference document.
 - The baseline had a `whisper` CLI available; in a shell without it, A would
   score lower. That is a fair part of "what an agent can do with a shell".
