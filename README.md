@@ -192,5 +192,7 @@ all; that is an architectural requirement, not a convenience.
 ## Agent skill
 
 [`skills/sonolytica/SKILL.md`](skills/sonolytica/SKILL.md) documents how an
-agent should invoke the CLI, read the document and cite timestamps. An MCP
-server is the next interface deliverable.
+agent should invoke the CLI, read the document and cite timestamps. Install it
+with [`skills/sonolytica/README.md`](skills/sonolytica/README.md) (`cp -R
+skills/sonolytica ~/.agents/skills/`). An MCP server is the next interface
+deliverable.
