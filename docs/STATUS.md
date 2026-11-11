@@ -16,7 +16,7 @@ runtime, no GPL.
 
 | | |
 |---|---|
-| Rust | 14 156 lines across 7 crates (`providers` 3 704, `cli` 3 060, `engine` 2 281, `core` 2 068, `media` 1 210, `dsp` 1 188, `eval` 645) |
+| Rust | 14 382 lines across 7 crates (`providers` 3 704, `cli` 3 089, `engine` 2 294, `core` 2 080, `dsp` 1 360, `media` 1 210, `eval` 645) |
 | Query commands | 13 (`timeline`, `at`, `search`, `transcript`, `words`, `speakers`, `chapters`, `frames`, `music`, `acoustic`, `runs`, `summary`, `help`) |
 | Models | 9, all SHA-256 pinned: Silero VAD, whisper tiny/base/small, wav2vec2 aligner, pyannote segmentation, WeSpeaker, PP-OCRv5 det/rec |
 | Schema | 1.4.0 (`Document::validate`, additive 1.0 → 1.4) |
