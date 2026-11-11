@@ -110,6 +110,8 @@ pub enum TrackKind {
     Scene,
     Object,
     Face,
+    /// Text read from the picture (OCR), one segment per line.
+    Text,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -153,6 +155,13 @@ pub enum SegmentKind {
         class: String,
         bbox: Option<BBox>,
     },
+    /// Text visible in the picture at one instant, as produced by OCR. The
+    /// range is the keyframe's instant, not a claim about how long the text
+    /// was on screen.
+    TextOverlay {
+        text: String,
+        bbox: BBox,
+    },
 }
 
 impl SegmentKind {
@@ -164,12 +173,15 @@ impl SegmentKind {
             Self::AcousticEvent { .. } => "acoustic_event",
             Self::Scene { .. } => "scene",
             Self::Object { .. } => "object",
+            Self::TextOverlay { .. } => "text_overlay",
         }
     }
 
     pub fn text(&self) -> Option<&str> {
         match self {
-            Self::Speech { text, .. } | Self::SpeakerTurn { text, .. } => Some(text),
+            Self::Speech { text, .. }
+            | Self::SpeakerTurn { text, .. }
+            | Self::TextOverlay { text, .. } => Some(text),
             _ => None,
         }
     }
@@ -451,10 +463,10 @@ impl Document {
             out.push(Violation::new("media_path", "media path is empty"));
         }
 
-        let media_end = self.media.audio_duration().or(self.media.duration);
-        // A keyframe belongs to the picture, not to the audio: a video track can
-        // outlast its audio, and those frames are still inside the container.
-        let artifact_end = self.media.duration.or_else(|| self.media.audio_duration());
+        // The container is the timeline; an audio stream can end before the
+        // picture (or be missing entirely), and scene/text segments still belong
+        // to the media. Audio duration is only a fallback.
+        let media_end = self.media.duration.or_else(|| self.media.audio_duration());
 
         for (idx, segment) in self.segments.iter().enumerate() {
             if segment.id as usize != idx {
@@ -616,7 +628,7 @@ impl Document {
                     format!("artifact {} ends before it starts", artifact.path),
                 ));
             }
-            if let Some(end) = artifact_end {
+            if let Some(end) = media_end {
                 if artifact.range.end > end {
                     out.push(Violation::new(
                         "artifact_bounds",
@@ -948,6 +960,98 @@ mod tests {
         assert!(
             violations.is_empty(),
             "a frame after the audio end is inside the container: {violations:?}"
+        );
+    }
+
+    #[test]
+    fn text_overlay_carries_a_box_and_is_searchable() {
+        let mut document = fixture();
+        document.media.duration = Some(MediaTime::from_secs_f64(10.0));
+        let run = 0;
+        let track = document.tracks.len() as TrackId;
+        document.tracks.push(Track {
+            id: track,
+            kind: TrackKind::Text,
+            label: "ocr".into(),
+            run,
+        });
+        let instant = MediaTime::from_secs_f64(2.0);
+        document.segments.push(Segment {
+            id: document.segments.len() as SegmentId,
+            track,
+            range: TimeRange::empty(instant),
+            parent: None,
+            kind: SegmentKind::TextOverlay {
+                text: "Quarterly revenue".into(),
+                bbox: BBox {
+                    x: 12.0,
+                    y: 34.0,
+                    width: 300.0,
+                    height: 40.0,
+                },
+            },
+            confidence: Confidence::new(0.95),
+            run,
+        });
+
+        assert!(document.validate().is_empty(), "{:?}", document.validate());
+        let overlay = document.segments.last().unwrap();
+        assert_eq!(overlay.kind.kind_name(), "text_overlay");
+        assert_eq!(overlay.kind.text(), Some("Quarterly revenue"));
+        assert_eq!(document.search("revenue").len(), 1);
+        assert_eq!(document.tracks_of(TrackKind::Text).count(), 1);
+
+        let json = document.to_json_pretty().unwrap();
+        assert!(json.contains("\"type\": \"text_overlay\""));
+        assert!(json.contains("\"height\": 40.0"));
+    }
+
+    #[test]
+    fn video_segments_are_bounded_by_the_container() {
+        // The same rule as artifacts: a picture can outlast its audio, and a
+        // text overlay after the audio end is still inside the media.
+        let mut document = fixture();
+        document.media.duration = Some(MediaTime::from_secs_f64(10.0));
+        document.media.streams.push(crate::media::StreamInfo {
+            index: 0,
+            kind: crate::media::StreamKind::Audio,
+            codec: None,
+            sample_rate: None,
+            channels: None,
+            width: None,
+            height: None,
+            frame_rate: None,
+            language: None,
+            duration: Some(MediaTime::from_secs_f64(5.0)),
+            bit_rate: None,
+        });
+        document.tracks.push(Track {
+            id: 2,
+            kind: TrackKind::Text,
+            label: "ocr".into(),
+            run: 0,
+        });
+        document.segments.push(Segment {
+            id: 2,
+            track: 2,
+            parent: None,
+            range: TimeRange::from_secs(9.0, 9.0),
+            kind: SegmentKind::TextOverlay {
+                text: "hello".into(),
+                bbox: BBox {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 1.0,
+                    height: 1.0,
+                },
+            },
+            confidence: None,
+            run: 0,
+        });
+        let violations = document.validate();
+        assert!(
+            violations.is_empty(),
+            "a text overlay after the audio end is inside the container: {violations:?}"
         );
     }
 

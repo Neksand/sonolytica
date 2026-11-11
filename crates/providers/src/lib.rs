@@ -10,10 +10,12 @@
 #![allow(clippy::missing_errors_doc)]
 
 pub mod models;
+pub mod ocr;
 pub mod registry;
 pub mod traits;
 
-#[cfg(any(feature = "silero", feature = "diarize"))]
+#[cfg(any(feature = "silero", feature = "diarize", feature = "ocr"))]
+#[cfg_attr(not(any(feature = "silero", feature = "diarize")), allow(dead_code))]
 mod onnx;
 
 #[cfg(feature = "silero")]

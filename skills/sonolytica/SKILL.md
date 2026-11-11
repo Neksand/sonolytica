@@ -60,6 +60,12 @@ goes to stderr; `--strict` (or `--profile ultra`) exits 2 when a stage failed or
 a requested capability never ran. A missing model disables one capability,
 never the whole run.
 
+**Language and model:** pass `--language` whenever you know it. English →
+`--model whisper-base.en` (the default). Anything else → `whisper-small` **with**
+`--language xx`. Auto-detection on short or clean audio can label English as
+another language and turn the transcript into garbage; if the document's
+`language` contradicts the text, re-run with an explicit language.
+
 If a document already exists (the user points you at a `.json`), skip `doctor`
 and `analyze` and start at `query runs`.
 
@@ -81,6 +87,7 @@ Do not silently answer from half a document.
 | the whole transcript, untruncated | `query transcript doc` |
 | every word of one utterance | `query words doc 4` |
 | keyframe images for a window | `query frames doc --from 00:12:00 --to 00:13:00 --max 8` |
+| text on screen (after `--ocr`) | `query timeline doc --type text_overlay` |
 | find a word, with its timestamp | `query search doc pricing` |
 | who spoke most, how long | `query speakers doc` |
 | what are the chapters | `query chapters doc` |
@@ -220,11 +227,15 @@ model (`--model whisper-small`).
 - **Open the images yourself** and answer visual questions from what you see.
   A visual statement is an observation, not a document fact: label it as such
   and cite the frame's `start_display`. Never attach a transcript range to it.
+- **On-screen text**: `analyze --ocr --out doc.json` runs OCR (PP-OCRv5) on the
+  keyframes and adds `text_overlay` segments with exact text, bbox and
+  confidence. `query timeline DOC --type text_overlay` lists them. That text is
+  a document fact read at the frame's instant; it does **not** mean the text
+  was on screen for the whole shot. If there are no `text_overlay` segments,
+  OCR did not run — say so instead of guessing.
 - A scene is a technical cut, a frame is a still at one instant. Neither is a
   topic, and a keyframe is not a summary of the shot.
-- Objects, faces and on-screen text (OCR) are **not** analysed. Do not claim
-  them from metadata alone; if the frames exist, you may describe what you see
-  in them as an observation.
+- Objects and faces are **not** analysed. Do not claim them from metadata.
 
 ## 13. Failures and gaps
 
@@ -234,7 +245,9 @@ model (`--model whisper-small`).
 | run `partial` | what is missing, from `reason` | re-run with the model installed |
 | empty transcript | whether silence was measured | check `acoustic.silence`, then VAD/model |
 | `doctor` says ffmpeg missing | nothing can be analysed | install FFmpeg |
+| language metadata contradicts the text | the transcript is unreliable | re-run with `--model whisper-base.en` for English or `--language xx` with `whisper-small` |
 | video has no scene segments | the visual layer did not run | check `query runs` for a `scene` run; the file may have no video stream |
+| no `text_overlay` segments | OCR did not run | add `--ocr --out doc.json`; it needs the keyframes |
 
 Troubleshooting detail: `references/troubleshooting.md`.
 

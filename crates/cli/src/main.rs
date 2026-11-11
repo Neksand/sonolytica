@@ -6,7 +6,8 @@ use std::process::ExitCode;
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use sonolytica_core::{
-    AnalysisBlock, AnalysisConfig, Capability, Document, MediaTime, RunStatus, SegmentKind,
+    AnalysisBlock, AnalysisConfig, Capability, Confidence, Document, MediaTime, RunRecord,
+    RunStatus, Segment, SegmentKind, TimeRange, Track, TrackKind, Warning,
 };
 use sonolytica_engine::Engine;
 use sonolytica_providers::{ModelStore, default_model_dir, models::MODELS};
@@ -99,6 +100,9 @@ struct AnalyzeArgs {
     /// Maximum number of keyframes to extract
     #[arg(long, default_value_t = 40)]
     max_frames: usize,
+    /// Run OCR on the extracted keyframes (needs --out and the pp-ocrv5 models)
+    #[arg(long)]
+    ocr: bool,
     /// Exit with status 2 if any stage failed or a requested capability did not run
     #[arg(long)]
     strict: bool,
@@ -228,6 +232,22 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                         );
                     }
                     _ => {}
+                }
+            }
+
+            if args.ocr {
+                if args.no_frames {
+                    eprintln!("warning: OCR skipped because --no-frames was given");
+                } else {
+                    match args.out.as_deref() {
+                        Some(path) if path != Path::new("-") => {
+                            annotate_with_ocr(&mut document, &store, path).await;
+                        }
+                        _ => eprintln!(
+                            "warning: OCR skipped; pass --out <file> so keyframes have a \
+                             directory to live in"
+                        ),
+                    }
                 }
             }
 
@@ -627,6 +647,175 @@ async fn extract_document_keyframes(document: &mut Document, out: &Path, media: 
         }
         Err(error) => eprintln!("warning: keyframe extraction failed: {error}"),
     }
+}
+
+/// OCR every extracted keyframe and add a text track with one segment per line.
+///
+/// A missing model, a build without the `ocr` feature, or an unreadable frame
+/// is a warning, never a failed analysis: the document stays valid without
+/// text overlays.
+async fn annotate_with_ocr(document: &mut Document, store: &ModelStore, out: &Path) {
+    let parent = out.parent().unwrap_or_else(|| Path::new(""));
+
+    let frames: Vec<(PathBuf, TimeRange)> = document
+        .artifacts
+        .iter()
+        .filter(|artifact| artifact.kind == "keyframe")
+        .map(|artifact| (parent.join(&artifact.path), artifact.range))
+        .collect();
+
+    if frames.is_empty() {
+        eprintln!(
+            "warning: OCR skipped; no keyframes were found (scene detection may have found no cuts)"
+        );
+        return;
+    }
+    let frame_count = frames.len();
+
+    let threads = std::thread::available_parallelism()
+        .map_or(4, std::num::NonZeroUsize::get)
+        .min(8);
+    let store = store.clone();
+    let started_at = sonolytica_core::now_unix_ms();
+    let outcome = tokio::task::spawn_blocking(move || {
+        let provider = sonolytica_providers::ocr::PaddleOcr::load(&store, threads)?;
+        let mut lines: Vec<(TimeRange, sonolytica_providers::ocr::OcrLine)> = Vec::new();
+        let mut failures: Vec<String> = Vec::new();
+        for (path, range) in frames {
+            let result = std::fs::read(&path)
+                .map_err(|error| {
+                    sonolytica_providers::ProviderError::Io(format!(
+                        "cannot read {}: {error}",
+                        path.display()
+                    ))
+                })
+                .and_then(|bytes| provider.recognize_jpeg(&bytes));
+            match result {
+                Ok(output) => lines.extend(output.lines.into_iter().map(|line| (range, line))),
+                Err(error) => failures.push(format!("{}: {error}", path.display())),
+            }
+        }
+        Ok::<_, sonolytica_providers::ProviderError>((provider.info(), lines, failures))
+    })
+    .await;
+
+    let (info, lines, failures) = match outcome {
+        Ok(Ok(result)) => result,
+        Ok(Err(error)) => {
+            eprintln!("warning: OCR skipped: {error}");
+            document
+                .warnings
+                .push(Warning::new("ocr_unavailable", error.to_string()));
+            return;
+        }
+        Err(error) => {
+            let message = format!("OCR task did not finish: {error}");
+            eprintln!("warning: {message}");
+            document.warnings.push(Warning::new("ocr_failed", message));
+            return;
+        }
+    };
+
+    let runs_before = document.runs.len();
+    let tracks_before = document.tracks.len();
+    let segments_before = document.segments.len();
+
+    let failed_all = failures.len() == frame_count;
+    let status = if failed_all {
+        RunStatus::Failed {
+            reason: failures
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "OCR failed on every keyframe".into()),
+        }
+    } else if failures.is_empty() {
+        RunStatus::Complete
+    } else {
+        RunStatus::Partial {
+            reason: format!("{} of {frame_count} keyframe(s) failed OCR", failures.len()),
+        }
+    };
+    let run = document.runs.len() as u32;
+    document.runs.push(RunRecord {
+        id: run,
+        capability: Capability::Vision,
+        provider: info.name.to_string(),
+        model: info.models.last().cloned(),
+        params_sha256: document.config.params_sha256(),
+        device: info.device.to_string(),
+        started_at_unix_ms: started_at,
+        duration_ms: sonolytica_core::now_unix_ms().saturating_sub(started_at),
+        status,
+    });
+
+    if failed_all {
+        let message = format!(
+            "OCR failed on every keyframe: {}",
+            failures.first().map_or("unknown error", String::as_str)
+        );
+        eprintln!("warning: {message}");
+        document
+            .warnings
+            .push(Warning::new("ocr_failed", message).with_run(run));
+        return;
+    }
+
+    let track = document.tracks.len() as u32;
+    document.tracks.push(Track {
+        id: track,
+        kind: TrackKind::Text,
+        label: "ocr".into(),
+        run,
+    });
+    let line_count = lines.len();
+    for (range, line) in lines {
+        document.segments.push(Segment {
+            id: document.segments.len() as u32,
+            track,
+            range,
+            parent: None,
+            kind: SegmentKind::TextOverlay {
+                text: line.text,
+                bbox: line.bbox,
+            },
+            confidence: Some(Confidence::clamped(line.confidence)),
+            run,
+        });
+    }
+
+    // The provider cannot know the document invariants (the audio-end bound in
+    // particular), so verify before handing the document back.
+    let violations = document.validate();
+    if !violations.is_empty() {
+        document.segments.truncate(segments_before);
+        document.tracks.truncate(tracks_before);
+        document.runs.truncate(runs_before);
+        let codes = violations
+            .iter()
+            .map(|violation| violation.code.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        eprintln!("warning: OCR output discarded, the document would be invalid: {codes}");
+        document.warnings.push(Warning::new(
+            "ocr_invalid",
+            format!("OCR output discarded: {codes}"),
+        ));
+        return;
+    }
+
+    if !failures.is_empty() {
+        let message = format!(
+            "{} of {frame_count} keyframe(s) failed OCR; first: {}",
+            failures.len(),
+            failures[0]
+        );
+        eprintln!("warning: {message}");
+        document
+            .warnings
+            .push(Warning::new("ocr_partial", message).with_run(run));
+    }
+
+    eprintln!("ocr: {line_count} line(s) from {frame_count} keyframe(s)");
 }
 
 fn schema_example() -> Result<String> {

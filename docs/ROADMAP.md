@@ -16,7 +16,8 @@ Ordered next, each gated on a measured number:
 2. **Speech quality** — forced alignment (wav2vec2 CTC), VAD-boundary word loss,
    overlap-aware diarization.
 3. **Video** — shot boundaries ✅, one keyframe per scene with `artifacts[]` ✅
-   (`query frames`). Next: OCR for on-screen text, then object/face models.
+   (`query frames`), on-screen text with PP-OCRv5 ✅ (`--ocr`,
+   `text_overlay`). Next: object/face models.
 4. **Music depth** — section segmentation, note transcription, stems/bass.
 5. **MCP** — only for a shell-less client.
 

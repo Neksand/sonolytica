@@ -30,7 +30,7 @@ sonolytica query timeline "$DOC" --from 00:00:10 --to 00:00:20 --type speaker_tu
 - Window is half-open `[from, to)`; default `from=0`, `to=media duration`.
 - Ordered by start, then end, then id.
 - `--type`: `speech`, `speaker_turn`, `music_label`, `acoustic_event`, `scene`,
-  `object`. An unknown value is an error.
+  `text_overlay`, `object`. An unknown value is an error.
 - Includes parent and child segments (an utterance and its speaker turn are two
   rows).
 
@@ -205,6 +205,22 @@ relative to the document) so you can open them directly.
 Half-open window: a frame exactly at `--from` is included, one exactly at
 `--to` is not. No frames means `analyze` ran with `--no-frames`, without
 `--out`, or the file had no scene segments.
+
+## text_overlay
+
+`analyze --ocr --out doc.json` runs PP-OCRv5 on the keyframes. Each recognised
+line becomes a `text_overlay` segment:
+
+```json
+{ "id": 7, "track": 3, "kind": { "type": "text_overlay",
+  "text": "NEXT STEP: HIRE TWO ENGINEERS",
+  "bbox": { "x": 210.0, "y": 330.0, "width": 860.0, "height": 70.0 } },
+  "range": { "start": 8000000, "end": 8000000 }, "confidence": 0.987 }
+```
+
+The range is a point at the frame's instant: the text was read from that frame,
+not observed for the whole scene. Query it with `query timeline DOC --type
+text_overlay`; `query search` covers speech only.
 
 ## music
 

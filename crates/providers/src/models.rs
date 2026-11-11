@@ -100,6 +100,26 @@ pub const MODELS: &[ModelSpec] = &[
         approx_bytes: 28_000_000,
         notes: "Speaker embedding model; clustering is done by SONOLYTICA.",
     },
+    ModelSpec {
+        id: "pp-ocrv5-det",
+        capability: Capability::Vision,
+        filename: "pp_ocrv5_det.onnx",
+        url: "https://huggingface.co/PaddlePaddle/PP-OCRv5_mobile_det_onnx/resolve/e6f4fa85f00e168c862bc462aebca69eef9b3d3d/inference.onnx",
+        sha256: "a431985659dc921974177a95adcfbb90fd9e51989a5e04d70d0b75f597b6e61d",
+        license: "Apache-2.0",
+        approx_bytes: 4_826_518,
+        notes: "PP-OCRv5 mobile text detection (DB), ONNX Runtime, CPU.",
+    },
+    ModelSpec {
+        id: "pp-ocrv5-rec",
+        capability: Capability::Vision,
+        filename: "pp_ocrv5_rec.onnx",
+        url: "https://huggingface.co/PaddlePaddle/PP-OCRv5_mobile_rec_onnx/resolve/ed152b8b495f84de93cda5709d768548a9127622/inference.onnx",
+        sha256: "da72dc72ca4dc220df0dfde68c1dedc31c58d3e76a25871122e5056227d50092",
+        license: "Apache-2.0",
+        approx_bytes: 16_534_782,
+        notes: "PP-OCRv5 mobile CTC recognition; 18383-character dictionary shipped with the crate.",
+    },
 ];
 
 pub fn find_model(id: &str) -> Option<&'static ModelSpec> {

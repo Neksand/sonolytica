@@ -35,14 +35,18 @@ This is the first development cycle. What is real today:
 - **CLI** with `inspect`, `analyze`, `query`, `models`, `doctor`, `schema`.
   `query` answers timeline, search, speaker, music, acoustic, scene and
   run-status questions without `jq`.
-- **Video shots and keyframes, no vision model**: FFmpeg samples 2 fps
-  grayscale signatures, an adaptive hash/histogram spike marks a cut, `scene`
-  segments land on the same timeline as speech, and `analyze --out` writes
-  keyframe JPEGs the agent can open with its own vision.
+- **Video shots and keyframes, no vision model**: FFmpeg samples 2 fps RGB
+  signatures, an adaptive hash/histogram spike marks a cut, `scene` segments
+  land on the same timeline as speech, and `analyze --out` writes keyframe JPEGs
+  the agent can open with its own vision.
+- **On-screen text**: `analyze --ocr` runs PP-OCRv5 (ONNX, Apache-2.0) on the
+  keyframes and emits `text_overlay` segments with exact text, box and
+  confidence.
 - **Evaluation harness**: WER/CER, diarization error rate, per-run timings.
 
-Not implemented yet (roadmap): video vision (objects, faces, OCR), MCP server,
-HTTP server, Python bridge, forced alignment, sound-event classification.
+Not implemented yet (roadmap): object and face detection, MCP server, HTTP
+server, Python bridge, forced alignment, sound-event classification, music
+notes and sections.
 
 No accuracy numbers are claimed in this repository. The eval harness exists so
 numbers can be produced honestly against licensed datasets.
@@ -89,8 +93,11 @@ sonolytica query search interview.json pricing
 sonolytica query speakers interview.json
 sonolytica query timeline interview.json --type scene   # video shots, if any
 sonolytica query frames interview.json --max 8          # keyframe JPEG paths
+sonolytica query timeline interview.json --type text_overlay   # OCR lines
 sonolytica query runs interview.json          # which stages failed, and why
 ```
+
+For video with on-screen text, add `--ocr` to `analyze`.
 
 Times accept `HH:MM:SS.mmm`, `MM:SS`, `12.5s`, `950ms` or raw microseconds.
 Every subcommand takes `--json` for a typed object on stdout.

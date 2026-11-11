@@ -15,8 +15,10 @@ silero = ["dep:ort", "dep:ndarray"]
 whisper = ["dep:whisper-rs", "dep:hound"]
 # pyannote segmentation + WeSpeaker embeddings through ONNX Runtime (requires cmake for fbank).
 diarize = ["dep:ort", "dep:ndarray", "dep:knf-rs", "dep:hound"]
+# PP-OCRv5 text detection and recognition through ONNX Runtime.
+ocr = ["dep:ort", "dep:image"]
 # Everything, for a full local pipeline.
-full = ["silero", "whisper", "diarize"]
+full = ["silero", "whisper", "diarize", "ocr"]
 # Apple Silicon GPU inference for whisper.cpp.
 metal = ["whisper-rs?/metal"]
 
@@ -25,6 +27,7 @@ sonolytica-core = { workspace = true }
 ndarray = { workspace = true, optional = true }
 ort = { workspace = true, optional = true }
 hound = { workspace = true, optional = true }
+image = { version = "0.25", default-features = false, features = ["jpeg"], optional = true }
 knf-rs = { version = "0.3.2", optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

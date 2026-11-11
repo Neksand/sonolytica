@@ -31,7 +31,14 @@ pub(crate) fn environment() -> ProviderResult<&'static ort::environment::Environ
 
 pub(crate) fn build_session(path: &Path, threads: usize) -> ProviderResult<Session> {
     let env = environment()?;
+    use ort::session::builder::AutoDevicePolicy;
     Session::builder(env)
+        .map_err(|e| ProviderError::Inference(e.to_string()))?
+        // `ort` defaults to MaxEfficiency, which auto-registers CoreML on macOS.
+        // CoreML silently mis-executes dynamic-shape graphs (measured on
+        // PP-OCRv5: collapsed detection and blank recognition), and the
+        // providers report `device: "cpu"` — so run on CPU and mean it.
+        .with_auto_device(AutoDevicePolicy::PreferCPU)
         .map_err(|e| ProviderError::Inference(e.to_string()))?
         .with_optimization_level(GraphOptimizationLevel::Level3)
         .map_err(|e| ProviderError::Inference(e.to_string()))?

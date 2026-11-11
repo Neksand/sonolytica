@@ -42,7 +42,7 @@ pub use provenance::{ModelRef, RunId, RunRecord, RunStatus, Warning};
 pub use time::{MediaTime, TimeRange};
 
 /// Version of the serialized document schema. Bump on any breaking change.
-pub const SCHEMA_VERSION: &str = "1.1.0";
+pub const SCHEMA_VERSION: &str = "1.2.0";
 
 /// Name of this implementation, embedded in every document.
 pub const GENERATOR_NAME: &str = "sonolytica";

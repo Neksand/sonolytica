@@ -1,4 +1,4 @@
-# Document schema (v1.1.0)
+# Document schema (v1.2.0)
 
 One analysis produces one `Document`. It is designed for machine consumption:
 typed fields, stable names, explicit units, and no placeholders standing in for
@@ -10,7 +10,7 @@ unknown values.
 |---|---|
 | Timeline | `MediaTime` = integer **microseconds** from the start of the container |
 | Interval | `TimeRange { start, end }`, half-open `[start, end)` |
-| Modality | `Track.kind`: `speech`, `speaker_turn`, `music`, `acoustic`, `scene`, `object`, `face` |
+| Modality | `Track.kind`: `speech`, `speaker_turn`, `music`, `acoustic`, `scene`, `text`, `object`, `face` |
 | Identity | `Track.id` and `Segment.id` equal their index in `tracks` / `segments` |
 | Hierarchy | `Segment.parent` points into another track (refinement, not grouping) |
 | Cross-modal facts | `relations[]` with typed `kind` |
@@ -159,6 +159,7 @@ can be moved together. A still image carries a point range (`start == end`).
 | `music_label` | `label` |
 | `acoustic_event` | `class` |
 | `scene` | `index`, `cut` |
+| `text_overlay` | `text`, `bbox` — an OCR line from one keyframe |
 | `object` | `class`, `bbox?` |
 
 `scene` segments come from shot detection (2 fps frame signatures, adaptive
@@ -215,7 +216,8 @@ A capability with no provider does **not** create a failed run: it appears in
   migration in `Document::from_json`.
 - `serde` defaults are used where a missing field has an unambiguous meaning;
   there are no silent reinterpretations.
-- `1.1.0` adds `artifacts[]` and keeps every `1.0.0` document readable.
+- `1.1.0` adds `artifacts[]`; `1.2.0` adds `text_overlay` segments and the
+  `text` track kind. Every older document stays readable.
 
 ## Query commands
 

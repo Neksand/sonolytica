@@ -203,8 +203,9 @@ milliseconds and the realtime factor for a given machine.
 - Speech emotion, intent, topic segmentation and summarisation are not
   implemented. They are listed in the roadmap as analysis blocks, not added as
   empty fields.
-- Video analysis: shot boundaries are detected without a model (2 fps gray
+- Video analysis: shot boundaries are detected without a model (2 fps RGB
   signatures, adaptive cut threshold) and emitted as `scene` segments; one
   keyframe JPEG per scene is written next to the document and registered in
   `artifacts[]`, so an agent can look at the picture with its own vision.
-  Objects, faces and OCR are not implemented.
+  `--ocr` reads on-screen text with PP-OCRv5 and adds `text_overlay` segments.
+  Objects and faces are not implemented.

@@ -19,13 +19,14 @@ use sonolytica_core::{
 
 /// Segment kinds a document can contain. Kept explicit so `--type` rejects a
 /// typo instead of silently returning nothing.
-const SEGMENT_KINDS: [&str; 6] = [
+const SEGMENT_KINDS: [&str; 7] = [
     "speech",
     "speaker_turn",
     "music_label",
     "acoustic_event",
     "scene",
     "object",
+    "text_overlay",
 ];
 
 /// Text is truncated by characters, not bytes: transcripts are UTF-8 and a
@@ -1085,6 +1086,10 @@ fn label_of(kind: &SegmentKind) -> Option<String> {
             Some(format!("scene {index}{}", if *cut { " (cut)" } else { "" }))
         }
         SegmentKind::Object { class, .. } => Some(class.clone()),
+        SegmentKind::TextOverlay { bbox, .. } => Some(format!(
+            "{:.0}x{:.0} at {:.0},{:.0}",
+            bbox.width, bbox.height, bbox.x, bbox.y
+        )),
         SegmentKind::Speech { .. } | SegmentKind::SpeakerTurn { .. } => None,
     }
 }
