@@ -56,6 +56,7 @@ models/cmake/ORT.
 | Cost | cache hit **0.01 s** vs 7.64 s on the 14.4 s fixture; `query ask` 978 B text vs 3 912 B for three equivalent queries | local test |
 | Captions | Florence-2-base-ft (MIT, 550 MB): portrait caption answered 6/8 visual-boundary questions, 0 unsupported; 16/16 caption-aware; slide captions can invent colours | local test |
 | Agent interface | `sonolytica mcp`: tools-only stdio JSON-RPC, 14 tools, same binary; `setup` fetches core models + installs the skill; completions for bash/zsh/fish | local test |
+| Distribution | release tarballs + checksummed `install.sh`; Dockerfile and GHCR workflow; `setup` one command | local build |
 
 
 | Free agents | easy 8/8 / 18 224, hard 16/16 / 19 396, long 14/16 / 31 570, visual 16/16 refusal / 17 652 | clean dirs, `$0`, 2026-11-13 |
@@ -419,14 +420,22 @@ Delivered in this cycle:
 
 Open, in priority order:
 
-1. **Free-form VQA tier** (SmolVLM2-500M, Apache-2.0): the Florence-2
+1. **Speaker-attributed ASR for overlap.** The long fixture is 14/16 because
+   the AOSC document has no overlap turns; the old spans were word-duplication
+   artifacts. Research: Parakeet TDT 0.6B v3 multitalker (CC-BY-4.0, ~2.6 GB,
+   `parakeet-rs` with the same `ort`), 7–10 days; the deterministic per-turn
+   baseline is 2–3 days but cannot split simultaneous words.
+2. **Free-form VQA tier** (SmolVLM2-500M, Apache-2.0): the Florence-2
    caption tier is in; the next gap is arbitrary questions ("is he holding a
    knife?") that a one-shot caption does not answer. Opt-in, RAM/license gate.
-2. **Music depth**: basic-pitch notes and technical highlight windows.
-3. **Distribution and launch**: external brew tap (needs a separate repo),
-   Docker image, a second Gemini run when the quota resets, launch assets.
-4. **Easy fixed cost**: median 8 818 vs 8 000; the remaining cost is the
+3. **Music depth**: basic-pitch notes and technical highlight windows.
+4. **Distribution and launch**: external brew tap (needs a separate repo),
+   a second Gemini run when the quota resets, launch assets; Docker and
+   `setup` are done.
+5. **Easy fixed cost**: median 8 818 vs 8 000; the remaining cost is the
    harness prompt, the skill read and the agent's own loop.
+6. **MCP hardening**: streamable HTTP and the official `rmcp` SDK; the stdio
+   tools server is done.
 
 AOSC streaming shipped (2026-11-12): license reviewed, `fvhrk` 4/4 speakers at
 DER 6.40 % / JER 6.29 % (gate ≥3 / ≤11.8 %), no regression on the 1-4 speaker

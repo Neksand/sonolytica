@@ -38,7 +38,12 @@ curl -fsSL https://raw.githubusercontent.com/neksand/sonolytica/main/install.sh 
 # or build from source
 cargo build --release -p sonolytica-cli --features full-metal   # macOS, Metal
 cargo build --release -p sonolytica-cli --features full         # CPU only
+
+# or run the published container
+docker run --rm -v sonolytica-data:/data ghcr.io/neksand/sonolytica:latest setup --no-skill
 ```
+
+Docker, volumes and MCP-from-container: [`docs/DOCKER.md`](docs/DOCKER.md).
 
 Requirements: FFmpeg 7+ on `PATH`; `cmake` for the speech pipeline. Models are
 downloaded on demand and verified by digest.
