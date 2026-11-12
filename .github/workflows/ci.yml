@@ -22,6 +22,8 @@ jobs:
           toolchain: "1.99.0"
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test without any model feature
@@ -37,7 +39,7 @@ jobs:
           toolchain: "1.99.0"
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: brew install cmake
+      - run: brew install cmake ffmpeg
       - run: cargo clippy --workspace --all-targets --features "sonolytica-engine/full,sonolytica-engine/metal,sonolytica-cli/full-metal" -- -D warnings
       - name: Test with every provider compiled in
         run: cargo test --workspace --features "sonolytica-engine/full,sonolytica-engine/metal,sonolytica-cli/full-metal"
