@@ -114,8 +114,8 @@ divergence explained.
   OSI-approved and is not copyleft: it does not change the MIT/Apache-2.0
   licensing of SONOLYTICA code. The required attribution is in `NOTICE`; the
   weights are downloaded at runtime, never vendored. Earlier `sortformer-4spk-v2`
-  (CC-BY-4.0) is replaced by this export; its attribution remains in
-  `docs/EVAL.md` for the historical numbers.
+  (CC-BY-4.0) is replaced by this export; its numbers stay in `docs/EVAL.md` as
+  the v2 window baseline.
 - FFmpeg is invoked as a separate process. A distributed binary does not link
   it, but users who redistribute FFmpeg must comply with FFmpeg's own license.
   Homebrew's build is GPL; an LGPL build works identically.
