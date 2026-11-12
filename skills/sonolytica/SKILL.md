@@ -31,21 +31,22 @@ aggregates, `segments` = the timeline. Never load the whole JSON into context.
 | `ultra` | standard, plus exit 2 if any requested capability failed or never ran | automation that must not silently degrade |
 
 `scene` is a no-op on audio-only files and is excluded from the `ultra` check.
-`ultra` adds forced word alignment (English, wav2vec2 CTC) and treats a
-capability that never ran as a failure. If the user did not say, pick `standard`
-under ~30 minutes and `structure` for a very long first pass. Details:
-`references/profiles.md`.
+`ultra` adds forced word alignment (English, wav2vec2 CTC) and fails on a
+capability that never ran. Default: `standard` under ~30 minutes, `structure`
+for a very long first pass. Details: `references/profiles.md`.
 
 ## 3. Run it
 
 ```bash
 sonolytica doctor                          # ffmpeg + models + providers
-sonolytica analyze FILE --out doc.json --profile standard --summary
+sonolytica analyze FILE --out doc.json --profile standard --ocr --summary
 sonolytica query brief doc.json            # one compact overview — start here
 sonolytica query runs doc.json             # stage status in detail
 sonolytica report doc.json --out report.html  # human page: chapters, quotes, frames
 ```
 
+`--ocr` runs on the keyframes at analyze time: pass it whenever the media may
+have on-screen text — it cannot be added later without re-running.
 `analyze` prints the document to stdout unless `--out` is given; `--summary`
 goes to stderr; `--strict` (or `--profile ultra`) exits 2 when a stage failed or
 a requested capability never ran. A missing model disables one capability.
@@ -89,11 +90,9 @@ answering — never answer from half a document.
 | which stages ran or failed | `query runs doc` |
 | media facts and totals | `query summary doc` |
 
-Start at `brief` and add one command only when the answer needs evidence the
-brief does not contain: `search` + `words` for an exact quote, `timeline
---from … --to …` for a window, `timeline --type text_overlay` for on-screen
-text, `frames` to look, `chapters`/`speakers` for full lists. Routing table:
-`references/query-cheatsheet.md`.
+Start at `brief`; add `search`+`words` for a quote, `timeline` for a window or
+text overlays, `frames` to look, `chapters`/`speakers` for full lists. Routing
+table: `references/query-cheatsheet.md`.
 
 Rules of use:
 
@@ -148,8 +147,8 @@ Detail and edge cases: `references/citation-rules.md`.
 An empty `query search` is a fact about the transcript, not about the world.
 Say "В транскрипте нет слова X", then offer the nearest token as a
 **hypothesis** ("возможно, ASR расслышал его как Y, 00:00:03.140"), never as a
-quote and never as "не говорили". Numbers are normalised: search the digits and
-the stem first. Full protocol: `references/citation-rules.md`.
+quote and never as "не говорили". Numbers are normalised: search digits first.
+Full protocol: `references/citation-rules.md`.
 
 ## 10. Speech, music and video rules
 

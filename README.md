@@ -111,6 +111,10 @@ Reproduce any row with `scripts/bench/prepare_agent_fixture.sh` and
 `scripts/bench/session_tokens.sh`. If a number moves, it comes with the date,
 model, fixture and command log — or it is not written down.
 
+Head-to-head on the same hard fixture: **Gemini (Antigravity) 14/16 alone,
+16/16 with the skill and 6.6× faster; TwelveLabs Pegasus 10/16**; raw outputs
+and the exact misses in [`docs/BENCHMARK.md`](docs/BENCHMARK.md).
+
 ## Why not X?
 
 | | Gemini / TwelveLabs | WhisperX + pyannote scripts | SONOLYTICA |

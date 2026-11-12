@@ -21,7 +21,7 @@ runtime, no GPL.
 | CLI | `analyze`, `query`, `report` (HTML), `install-skill` (4 harnesses), `models fetch --set core\|full`, `doctor`, `inspect`, `schema` |
 | Models | 10, all SHA-256 pinned: Silero VAD, whisper tiny/base/small, wav2vec2 aligner, Sortformer 4spk, pyannote segmentation, WeSpeaker, PP-OCRv5 det/rec |
 | Schema | 1.4.0 (`Document::validate`, additive 1.0 → 1.4) |
-| Agent skill | `SKILL.md` (200 lines) + 5 references + 5 workflows + install guide |
+| Agent skill | `SKILL.md` (199 lines) + 5 references + 5 workflows + install guide |
 | Docs | 15 files incl. 5 ADRs; `EVAL.md`, `BENCHMARK.md`, `DOGFOOD.md`, `OCR.md` |
 
 ## Engineering health
@@ -55,6 +55,7 @@ runtime, no GPL.
 | Agent | answers | **16/20 vs 20/20** easy; **7/16 vs 16/16** hard | no skill vs skill; the hard fixture is a 4 min, 4-voice meeting with no ASR/OCR tools for the baseline |
 | Agent, `query brief` v2 | fresh tokens | easy **7 517** at 8/8; hard **10 393** at 16/16; long **11 308** at 16/16 | DeepSeek V4.1 Flash, clean dirs, fixed prompts; see BENCHMARK |
 | Agent, 20 min real meeting | score / cost | old skill **16/16 / 17 633**, new **16/16 / 11 308** | VoxConverse `fvhrk`, 4 speakers (document reports 2 + cap warning) |
+| Agent, head-to-head | hard 4 min, 8 questions | Gemini alone **14/16**, Gemini + skill **16/16**, TwelveLabs Pegasus **10/16**, SONOLYTICA **16/16** | same prompts and rubric; Gemini is an agent with a shell, TwelveLabs is a raw API; see BENCHMARK |
 
 WER and DER are **pilots**, not leaderboard results: small subsets, one machine,
 and the VoxConverse threshold was calibrated on the same dev files. The numbers

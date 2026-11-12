@@ -28,7 +28,7 @@ OCR text, and provenance on every segment. Agents read it via
 | Schema | **1.4.0**, additive 1.0 → 1.4 |
 | Models | 10, SHA-256 pinned, in `~/.cache/sonolytica/models` |
 | Commands | 15 query subcommands (brief … verify, help) + `report`, `install-skill`, `analyze`, `models`, `doctor`, `inspect`, `schema` |
-| Skill | `skills/sonolytica/` (SKILL.md 200 lines + 5 references + 5 workflows) |
+| Skill | `skills/sonolytica/` (SKILL.md 199 lines + 5 references + 5 workflows) |
 | Tests | **143** model-free / **158** all-features |
 
 Features: `sonolytica-cli --features full-metal` = whisper + silero + diarize +
@@ -79,7 +79,12 @@ must not claim sight.
 fixture): hard **16/16 at 10 393 fresh in 9 commands** (22 410 before), easy
 **8/8 at 7 517 in 7** (9 521), long 20-minute meeting **16/16 at 11 308 in 8**
 (17 633). The overlap spans in `brief` fixed the only lost point and cut the
-long session from 22 commands to 8. Details and caveats: BENCHMARK.
+long session from 22 commands to 8.
+Head-to-head (2026-11-12, same prompts): Gemini via Antigravity scored 14/16
+alone and 16/16 with the skill, 6.6× faster; TwelveLabs Pegasus 1.5 scored
+10/16 on hard, 3/8 on easy, 10/16 on long and got the 20-minute speaker count
+right (4) where Sortformer reports 2 — the AOSC case. Details, raw outputs and
+caveats: BENCHMARK.
 
 ## 3. Things that must not regress
 

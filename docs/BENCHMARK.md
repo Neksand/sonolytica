@@ -329,6 +329,83 @@ annotation. The document reports 2 speaker labels with a
 `diarization_speaker_cap` warning — the known long-file failure, not an agent
 error.
 
+## Head-to-head: Gemini (Antigravity) and TwelveLabs Pegasus (2026-11-12)
+
+Same fixtures, same eight (or four) questions, same 0/2 rubric. Three systems:
+
+- **Gemini alone** — `agy` (Google Antigravity CLI, Gemini backend) in a clean
+  directory with only the media and the questions. Tools were allowed:
+  `ffmpeg`, Python and the machine's local `whisper`. This is a strong agent
+  baseline, not a raw API call.
+- **Gemini + SONOLYTICA** — the same CLI, the same questions, plus
+  `skills-sonolytica/`, the full-metal binary and the instruction to start at
+  `query brief`.
+- **TwelveLabs Pegasus 1.5** — the raw synchronous `/v1.3/analyze` API, one
+  prompt per fixture, no tools, no document. Base64 upload; the long audio
+  fixture was wrapped in a black 640×360 video because the API rejects
+  audio-only media.
+
+Scores are manual, against the same reference document; a correct claim with a
+wrong or missing range scores 1, not 2.
+
+| Fixture | Gemini alone | Gemini + skill | TwelveLabs Pegasus | SONOLYTICA + DeepSeek |
+|---|---|---|---|---|
+| hard 4 min (max 16) | **14** | **16** | **10** | **16** |
+| easy 14.4 s (max 8) | **6** | **8** | **3** | **8** |
+| long 20 min (max 16) | not run¹ | **16** | **10** | **16** |
+
+Wall time and API usage (single runs):
+
+| Run | Time | Tokens |
+|---|---|---|
+| Gemini alone, hard | 7 m 43 s | not exposed by `agy` |
+| Gemini + skill, hard | **1 m 10 s** | not exposed |
+| Gemini alone, easy | 2 m 39 s | not exposed |
+| Gemini + skill, easy | **0 m 50 s** | not exposed |
+| Gemini + skill, long | **2 m 07 s** | not exposed |
+| TwelveLabs, hard | 0 m 20 s | 71 592 in / 400 out |
+| TwelveLabs, easy | 0 m 13 s | 5 687 in / 84 out |
+| TwelveLabs, long | 0 m 55 s | 54 563 in / 421 out |
+| SONOLYTICA hard / easy / long | — | **10 393 / 7 517 / 11 308 fresh** |
+
+¹ The long baseline ran for six minutes, then Antigravity returned
+`RESOURCE_EXHAUSTED` ("AI credits balance is too low"). Not scored, not hidden.
+
+Reading it:
+
+- **Gemini is a strong baseline with a shell.** It extracted frames, ran local
+  Whisper and answered 14/16 on the hard fixture. Its weak spot is precision:
+  "pricing" got the slide time (00:00:40) instead of the word (00:00:44.058),
+  the budget answer invented "last quarter" where the recording says "last
+  week", and several answers gave no range at all.
+- **The skill improved Gemini on its own turf**: 14 → 16 on hard, 6 → 8 on
+  easy, and 6.6× faster on hard (7 m 43 s → 1 m 10 s) because it queried a
+  document instead of rebuilding a pipeline. It also fixed the OCR omission
+  only after the skill started telling the agent to pass `--ocr` at analyze
+  time; the first skill run scored 12/16 for that reason — a real skill bug
+  found by this test and fixed.
+- **TwelveLabs is fast and semantic, not citable.** It answered in 13–55 s with
+  no ranges: on hard it scored 10/16, on easy 3/8 (it missed speech that exists
+  between 00:07 and 00:09 and halved the dominant speaker's time), on long
+  10/16 with an invented 20:32 duration and summarised "chapters" that are not
+  in the media document.
+- **The long fixture exposes our real gap.** TwelveLabs reported **4 speakers**
+  on the 20-minute debate; our Sortformer document reports 2 labels with a
+  `diarization_speaker_cap` warning. The skill forces the honest "at least 2,
+  may be more", but the underlying count is worse. AOSC streaming is the fix,
+  not a prompt.
+- **No free lunch on quotas.** Antigravity exhausted its credits mid-baseline;
+  TwelveLabs' free plan is metered in minutes. Local SONOLYTICA has neither
+  failure mode.
+
+Raw outputs, including every wrong timestamp, are in
+[`bench/2026-11-12/`](bench/2026-11-12/). Keys were never written to the
+repository.
+
+Caveat: one run per cell, one Gemini model, manual scoring; the Gemini baseline
+is an agent with tools, not the raw multimodal API. Treat this as a smoke
+head-to-head, not a leaderboard.
+
 ## Limits
 
 - Four fixtures, 26 questions, fifteen sessions. This is a smoke benchmark, not
