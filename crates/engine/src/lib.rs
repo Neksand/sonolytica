@@ -41,10 +41,6 @@ pub use merge::{Utterance, build_speaker_turns};
 
 const SPEECH_RATE: u32 = 16_000;
 const MUSIC_RATE: u32 = 32_000;
-/// Sortformer's 4-speaker cap becomes unreliable on long recordings: after
-/// 10 minutes voices start merging. The document says so instead of pretending
-/// the count is exact.
-const SPEAKER_CAP_WARN_AFTER: MediaTime = MediaTime::from_millis(600_000);
 /// Silero speech probability used for the diarization gate. The configured
 /// 0.45 is tuned for ASR recall and calls music and room noise speech; at 0.70
 /// the same regions reject non-speech while clean-speech WER is unchanged.
@@ -542,11 +538,14 @@ impl Engine {
                 ));
                 if provider_info
                     .as_ref()
-                    .is_some_and(|info| info.name == "sortformer-4spk-v2")
+                    .is_some_and(|info| info.name == "sortformer-4spk-v2.1")
                 {
-                    if let Some(message) = speaker_cap_warning(builder.document().duration()) {
-                        builder
-                            .warn(Warning::new("diarization_speaker_cap", message).with_run(run));
+                    if let Ok(output) = &outcome {
+                        if let Some(message) = speaker_cap_warning(&output.turns) {
+                            builder.warn(
+                                Warning::new("diarization_speaker_cap", message).with_run(run),
+                            );
+                        }
                     }
                 }
                 if gated_out > 0 {
@@ -1114,13 +1113,15 @@ fn merge_speech_regions(regions: &[SpeechRegion], limit: MediaTime) -> Vec<TimeR
     out
 }
 
-/// A long Sortformer run is not just "up to four speakers" — past ten minutes
-/// the model starts merging voices, so the document must say the count is
-/// approximate rather than let an agent cite it as fact.
-fn speaker_cap_warning(duration: MediaTime) -> Option<&'static str> {
-    (duration > SPEAKER_CAP_WARN_AFTER).then_some(
-        "Sortformer tracks at most 4 speakers; files longer than 10 minutes can merge voices. \
-         Treat the speaker count and short turns as approximate.",
+/// A sortformer run that fills all four slots has hit the model's cap: there
+/// may be a fifth voice merged into one of them. The document says the count is
+/// a lower bound instead of letting an agent cite 4 as exact.
+fn speaker_cap_warning(turns: &[DiarTurn]) -> Option<&'static str> {
+    let speakers: std::collections::BTreeSet<&str> =
+        turns.iter().map(|turn| turn.speaker.as_str()).collect();
+    (speakers.len() >= 4).then_some(
+        "Sortformer tracks at most 4 speakers; this recording used all four slots. \
+         The speaker count is a lower bound and 5+ voices may be merged.",
     )
 }
 
@@ -1261,9 +1262,15 @@ mod tests {
     }
 
     #[test]
-    fn speaker_cap_warning_starts_after_ten_minutes() {
-        assert!(speaker_cap_warning(MediaTime::from_millis(600_000)).is_none());
-        assert!(speaker_cap_warning(MediaTime::from_millis(600_001)).is_some());
+    fn speaker_cap_warning_fires_only_at_four_speakers() {
+        let turn = |speaker: &str| DiarTurn {
+            range: TimeRange::from_secs(0.0, 1.0),
+            speaker: SpeakerId::new(speaker),
+            confidence: None,
+        };
+        assert!(speaker_cap_warning(&[]).is_none());
+        assert!(speaker_cap_warning(&[turn("S1"), turn("S2"), turn("S3")]).is_none());
+        assert!(speaker_cap_warning(&[turn("S1"), turn("S2"), turn("S3"), turn("S4")]).is_some());
     }
 
     #[test]

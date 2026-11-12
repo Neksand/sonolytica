@@ -48,7 +48,7 @@ fn write_document(dir: &Path) -> PathBuf {
         ..MediaInfo::default()
     };
     let mut builder = DocumentBuilder::new(media, AnalysisConfig::default());
-    let diarize = builder.add_run(run_record(Capability::Diarize, "sortformer-4spk-v2"));
+    let diarize = builder.add_run(run_record(Capability::Diarize, "sortformer-4spk-v2.1"));
     let turn_track = builder.add_track(TrackKind::SpeakerTurn, "speaker_turns", diarize);
     builder.add_segment(
         turn_track,

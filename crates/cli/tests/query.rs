@@ -796,7 +796,7 @@ fn brief_maps_overlap_spans() {
     let mut builder = DocumentBuilder::new(media, AnalysisConfig::default());
     let run = builder.add_run(run_record(
         Capability::Diarize,
-        "sortformer-4spk-v2",
+        "sortformer-4spk-v2.1",
         RunStatus::Complete,
     ));
     let track = builder.add_track(TrackKind::SpeakerTurn, "speaker_turns", run);

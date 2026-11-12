@@ -155,8 +155,9 @@ full protocol in `references/citation-rules.md`.
 ## 10. Speech, music and video rules
 
 - Speaker labels are local to one document; they are not people. Sortformer
-  tracks at most four speakers; above 10 minutes a `diarization_speaker_cap`
-  warning makes the count approximate — say "at least N".
+  tracks at most four speakers; when all four slots are used a
+  `diarization_speaker_cap` warning makes the count a lower bound — say "at
+  least N".
 - `overlap: true` means two people spoke at once. Sortformer returns two
   simultaneous turns, the pyannote fallback only flags; the transcript is one
   ASR stream, so never invent separate words per speaker. `brief` lists the

@@ -116,26 +116,26 @@ impl Registry {
             // Sortformer is preferred: it resolves overlap and does not
             // over-segment 2-4 speaker recordings. Pyannote stays registered
             // as the fallback for files where the model is absent or fails.
-            match find_model("sortformer-4spk-v2") {
+            match find_model("sortformer-4spk-v2.1") {
                 Some(spec) => match store.require(spec) {
                     Ok(path) => {
                         match crate::sortformer::SortformerDiarizer::load(spec, &path, threads) {
                             Ok(provider) => registry.diarizers.push(Box::new(provider)),
                             Err(error) => registry.unavailable.push(Unavailable {
-                                provider: "sortformer-4spk-v2",
+                                provider: "sortformer-4spk-v2.1",
                                 capability: Capability::Diarize,
                                 reason: error.to_string(),
                             }),
                         }
                     }
                     Err(error) => registry.unavailable.push(Unavailable {
-                        provider: "sortformer-4spk-v2",
+                        provider: "sortformer-4spk-v2.1",
                         capability: Capability::Diarize,
                         reason: error.to_string(),
                     }),
                 },
                 None => registry.unavailable.push(Unavailable {
-                    provider: "sortformer-4spk-v2",
+                    provider: "sortformer-4spk-v2.1",
                     capability: Capability::Diarize,
                     reason: "model is not in this build's registry".into(),
                 }),

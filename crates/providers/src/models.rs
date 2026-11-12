@@ -92,16 +92,17 @@ pub const MODELS: &[ModelSpec] = &[
                 32-class uppercase English vocabulary. English-only, 30 s per pass.",
     },
     ModelSpec {
-        id: "sortformer-4spk-v2",
+        id: "sortformer-4spk-v2.1",
         capability: Capability::Diarize,
-        filename: "sortformer-4spk-v2.onnx",
-        url: "https://huggingface.co/DimQ1/sortformer-4spk-v2-onnx-fp32-cpu/resolve/main/sortformer.onnx",
-        sha256: "58c2b74072e7ae08ba25ab334260eb675b96f34571574cb0ecac9467e41f27f7",
-        license: "CC-BY-4.0",
-        approx_bytes: 492_188_878,
-        notes: "End-to-end 4-speaker diarization, 128-bin log-mel input, 80 ms output. \
-                 Overlap is resolved into simultaneous turns. Derived from \
-                 nvidia/diar_streaming_sortformer_4spk-v2 with no retraining.",
+        filename: "sortformer-4spk-v2.1.onnx",
+        url: "https://huggingface.co/soniqo/Sortformer-Diarization-4spk-ONNX/resolve/main/sortformer-default.onnx",
+        sha256: "cc5d606a5e9f6381c736d753bac34875c436bb27210d1ab0adc4ccb952c0062a",
+        license: "NVIDIA Open Model License",
+        approx_bytes: 474_630_246,
+        notes: "Streaming 4-speaker diarization with the native Arrival-Order Speaker Cache: \
+                 128-bin log-mel in, 80 ms activity out, 340-frame chunks and a 188-frame \
+                 speaker cache. ONNX export of nvidia/diar_streaming_sortformer_4spk-v2.1 \
+                 with no retraining. Attribution in NOTICE.",
     },
     ModelSpec {
         id: "pyannote-segmentation-3.0",

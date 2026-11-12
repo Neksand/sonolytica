@@ -7,7 +7,7 @@
 | `warnings[code=provider_unavailable]` | a capability had no model or provider | `sonolytica models fetch <ids>`, then re-run |
 | `warnings[code=diarization_vad_gated]` | the VAD gate removed diarizer turns that did not overlap speech | not an error; the removed time was music/noise |
 | `warnings[code=diarization_vad_gate_unavailable]` | the stricter gate pass failed | speaker turns are ungated; read the message |
-| `warnings[code=diarization_speaker_cap]` | file longer than 10 min; Sortformer may merge voices | say "at least N" speakers; do not cite the count as exact |
+| `warnings[code=diarization_speaker_cap]` | all four Sortformer slots are in use; 5+ voices may be merged | say "at least N" speakers; do not cite the count as exact |
 | `run.status = partial` | it ran but produced less than asked | read `reason`; re-run with the model installed |
 | `run.status = failed` | it ran and errored | read `warnings` for the same `run` id |
 | `doctor` shows ffmpeg NOT AVAILABLE | nothing can be decoded | install FFmpeg (7+) |
@@ -42,9 +42,10 @@ Do not claim the word was never said; note the limit.
   if all four are active and the room sounds busier, say "at least four", not
   an exact count.
 - On a single-voice lecture, a high speaker count is a diarizer failure: say so.
-- On a file longer than 10 minutes with a `diarization_speaker_cap` warning, the
-  speaker count is **approximate**: voices may be merged. Say "at least N" when
-  the warning is present.
+- With a `diarization_speaker_cap` warning the four-slot cap was reached:
+  the speaker count is a **lower bound** and voices may be merged. Say "at
+  least N"; without the warning the count is exact for up to four speakers,
+  regardless of file length.
 - Short files (< ~10 s) can produce one speaker only.
 
 **Language is wrong in an old document** (e.g. `"my"` for English audio):

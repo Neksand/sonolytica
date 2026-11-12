@@ -204,7 +204,7 @@ const CORE_MODELS: [&str; 5] = [
     "whisper-base.en",
     "whisper-small",
     "wav2vec2-base-960h",
-    "sortformer-4spk-v2",
+    "sortformer-4spk-v2.1",
 ];
 
 #[derive(Debug, Subcommand)]
