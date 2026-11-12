@@ -18,7 +18,7 @@ Same fixtures, same prompts, 0/2 per task. Sources: `docs/BENCHMARK.md`,
 |---|---|---|---|---|
 | hard 4 min (max 16) | **16/16** | **16/16** | 14/16 | 10/16 |
 | easy 14.4 s (max 8) | **8/8** | **8/8** | 6/8 | 3/8 |
-| long 20 min (max 16) | **16/16*** | **16/16** | not run¹ | 10/16 |
+| long 20 min (max 16) | **16/16*** | **14/16*** | not run¹ | 10/16 |
 | blind judge, hard | **15/16**, **19 valid citations** | 16/16, 19 | 10/16, 7 | 7/16, 3 |
 
 `*` Q4 corrected: the `fvhrk` RTTM has only `spk02` at 19:15–19:32; the old

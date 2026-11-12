@@ -6,6 +6,8 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
+keywords = ["media", "transcription", "diarization", "mcp", "video"]
+categories = ["multimedia::audio", "command-line-utilities"]
 
 [[bin]]
 name = "sonolytica"

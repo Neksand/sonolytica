@@ -364,7 +364,7 @@ wrong or missing range scores 1, not 2.
 |---|---|---|---|---|
 | hard 4 min (max 16) | **14** | **16** | **10** | **16** |
 | easy 14.4 s (max 8) | **6** | **8** | **3** | **8** |
-| long 20 min (max 16) | not run¹ | **16** | **10** | **16** |
+| long 20 min (max 16) | not run¹ | **14\*** | **10** | **16\*** |
 
 Wall time and API usage (single runs):
 
@@ -382,6 +382,10 @@ Wall time and API usage (single runs):
 
 ¹ The long baseline ran for six minutes, then Antigravity returned
 `RESOURCE_EXHAUSTED` ("AI credits balance is too low"). Not scored, not hidden.
+`*` Q4 corrected: the RTTM has only `spk02` in the questioned window; the old
+S1 "overlap" spans were merge artifacts. Gemini+skill reported those old spans,
+so its corrected long score is 14/16; the AOSC document reports none and is
+16/16. See `docs/bench/overlap.md`.
 
 Reading it:
 
