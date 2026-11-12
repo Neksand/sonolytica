@@ -27,7 +27,7 @@ validator enforces this (`segment_bounds`, `word_bounds`).
 ```jsonc
 {
   "schema_version": "1.6.0",
-  "generator": { "name": "sonolytica", "version": "0.1.0" },
+  "generator": { "name": "sonolytica", "version": "0.2.0" },
   "created_unix_ms": 1794345592518,
 
   "media": {
