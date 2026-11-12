@@ -131,8 +131,7 @@ makes the agent **honest and citable**, not more perceptive.
   benchmark are the differentiator; perception is deliberately local and
   replaceable.
 
-Next, in order of payoff: an overlap-aware query (`brief` maps cuts and OCR but
-not overlapping turns, which cost the new core a point on the long fixture);
-AOSC streaming for long files (license check first), multitalker ASR for overlap,
-`--effort` modes, music notes/stems, caching, MCP, non-English alignment,
-objects/faces.
+Next, in order of payoff: AOSC streaming for long files (license check first;
+the one measured quality gap the skill cannot fix), an opt-in local VLM, music
+notes/highlights, multitalker ASR for overlap, `--effort` modes, caching, MCP,
+non-English alignment.

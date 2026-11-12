@@ -1,15 +1,17 @@
-# Handoff — SONOLYTICA after the diarization/agent cycle
+# Handoff — SONOLYTICA after the vision and skill-cost cycles
 
-Last updated: 2026-11-12, after the skill-cost cycle. Branch `main`, working tree
-clean, **no remote configured** (the user pushes). The cycle's commits are on top
-of `1960e26`: reproducible bench, `brief` v2, the 200-line skill core.
+Last updated: 2026-11-12. Branch `main`, working tree clean, **no remote
+configured** (the user pushes). Since `1960e26`: reproducible benchmark + token
+scripts, `brief` v2 (scene cuts, OCR lines, overlap spans), `query verify`,
+HTML `report`, `install-skill` for four harnesses, release workflow, dense
+frames, YuNet faces, YOLOS objects, and a 200-line skill core.
 
 Read this first, then `docs/STATUS.md` (numbers), `docs/EVAL.md` (methods),
-`docs/BENCHMARK.md` (agent tests), `docs/MODELS.md` (cap/gate notes),
-`docs/OCR.md` (OCR), `docs/SCHEMA.md` (schema 1.4.0). The forward plan lives
-outside the repo at
-`/Users/neksand/.opencode/plan/sonolytica-skill-cost-2026-11-12.md` — the goal
-is a skill that is **cheaper and better at the same time**.
+`docs/BENCHMARK.md` (agent and head-to-head tests), `docs/MODELS.md` (licenses,
+caps), `docs/OCR.md`, `docs/SCHEMA.md` (1.4.0). Forward plans live outside the
+repo: `/Users/neksand/.opencode/plan/sonolytica-skill-cost-2026-11-12.md`
+(closed), `sonolytica-ideal-night-2026-11-12.md` (night work), and
+`sonolytica-beat-all-2026-11-12.md` (category + launch).
 
 ---
 
@@ -22,7 +24,7 @@ OCR text, and provenance on every segment. Agents read it via
 
 | | |
 |---|---|
-| Rust | 17 161 lines, 7 crates: `providers` (4.3k), `cli` (4.8k), `engine` (2.6k), `core` (2.1k), `dsp` (1.4k), `media` (1.2k), `eval` (0.7k) |
+| Rust | 18 894 lines, 7 crates: `providers` (5.1k), `cli` (5.8k), `engine` (2.6k), `core` (2.1k), `dsp` (1.4k), `media` (1.2k), `eval` (0.7k) |
 | Binary | `sonolytica` (`sonolytica-cli`) |
 | SDK | `sonolytica-engine` (`Engine::analyze`) |
 | Schema | **1.4.0**, additive 1.0 → 1.4 |
@@ -32,7 +34,8 @@ OCR text, and provenance on every segment. Agents read it via
 | Tests | **153** model-free / **168** all-features |
 
 Features: `sonolytica-cli --features full-metal` = whisper + silero + diarize +
-ocr + align + metal. `cargo test --workspace` runs without models/cmake/ORT.
+ocr + vision + align + metal. `cargo test --workspace` runs without
+models/cmake/ORT.
 
 ## 2. Capabilities and verified numbers
 
@@ -43,7 +46,9 @@ ocr + align + metal. `cargo test --workspace` runs without models/cmake/ORT.
 | Alignment | wav2vec2 CTC, 20 ms frames, English; **median 110 ms** vs Whisper, 88 % ≤600 ms; Whisper itself is 300–950 ms early on JFK | EVAL |
 | OCR | PP-OCRv5 det+rec; 12/12 lines exact on the 6-slide fixture; 7/7 CJK terminal | OCR |
 | Music | 120.3 BPM for a 120 BPM click; C major triad correct; A–B–A section boundaries within 80/160 ms | EVAL |
-| Video | 2 fps chromaticity signatures, cuts ±0.5 s; 6/6 scenes, 6 keyframes on the hard fixture | EVAL/BENCHMARK |
+| Video | 2 fps chromaticity signatures, cuts ±0.5 s; 6/6 scenes, 6 keyframes on the hard fixture; `--frame-stride N` adds dense frames (scene first, `--max-frames` caps) | EVAL/BENCHMARK |
+| Faces | YuNet on keyframes: 1/1 on a portrait (0.946), 3/3 on a synthetic 3-face frame, 0 false faces on 6 slide keyframes | local test |
+| Objects | YOLOS-tiny on keyframes: `person` 0.999 + `tie` 0.991 on a portrait, 0 false objects on 6 slide keyframes | local test |
 | Throughput | **16.9×** on the 240 s hard fixture with the VAD gate (17.9× without; +0.8 s); 14.1× on the 155.6 s full audio pipeline before the gate | EVAL |
 | Russian | exact 12 s transcript with `whisper-small --language ru` | DOGFOOD |
 
@@ -75,16 +80,19 @@ whisper/tesseract/sonolytica (8 tasks, max 16):
 `*` one false "visually confirmed" claim, fixed in the skill: text-only models
 must not claim sight.
 
-`query brief` v2 + overlap map (2026-11-12, reproducible prompts, one run per
-fixture): hard **16/16 at 10 393 fresh in 9 commands** (22 410 before), easy
-**8/8 at 7 517 in 7** (9 521), long 20-minute meeting **16/16 at 11 308 in 8**
-(17 633). The overlap spans in `brief` fixed the only lost point and cut the
-long session from 22 commands to 8.
-Head-to-head (2026-11-12, same prompts): Gemini via Antigravity scored 14/16
-alone and 16/16 with the skill, 6.6× faster; TwelveLabs Pegasus 1.5 scored
-10/16 on hard, 3/8 on easy, 10/16 on long and got the 20-minute speaker count
-right (4) where Sortformer reports 2 — the AOSC case. Details, raw outputs and
-caveats: BENCHMARK.
+`query brief` v2 + overlap map + command budget (2026-11-12, reproducible
+prompts). Medians across runs: hard **16/16 / 14 773 fresh** (range 13 517–27 235,
+n=3), easy **8/8 / 8 818** (7 517–21 021, n=5), long 20-minute meeting
+**16/16 / 13 443** (11 308–15 578, n=2). The range is real: every command
+re-sends context. Adding "no `--help`/`doctor` once `brief` shows the stages"
+took easy from 21 021 to **9 150** on the next run, same 8/8.
+
+Head-to-head (same prompts): Gemini via Antigravity **14/16 alone, 16/16 with
+the skill, 6.6× faster**; TwelveLabs Pegasus 1.5 **10/16 hard, 3/8 easy,
+10/16 long**, and it got the 20-minute speaker count right (4) where Sortformer
+reports 2 — the AOSC case. A blind judge (Codex, anonymised) kept the ranking:
+Gemini 10, skill 16, TwelveLabs 7, DeepSeek+skill 15, with **19 valid citations
+for skill runs vs 7 and 3**. Raw outputs: `docs/bench/2026-11-12/`.
 
 ## 3. Things that must not regress
 
@@ -100,11 +108,23 @@ caveats: BENCHMARK.
   failure warns `diarization_vad_gate_unavailable` and leaves turns ungated.
 - Sortformer files longer than 10 minutes carry `diarization_speaker_cap`; an
   agent must say "at least N" there, never an exact count.
-- Skill cost/quality baseline (medians): hard **16/16 / 14 773 fresh** (range
-  13 517–27 235, n=3), easy **8/8 / 8 818** (7 517–21 021, n=5), long 20 min
-  **16/16 / 13 443** (11 308–15 578, n=2). Cost is dominated by agent behaviour:
-  one `--help` or `doctor` run re-sends thousands of tokens. Re-run the paired
-  benchmark before claiming an improvement; do not preload reference files.
+- Skill cost/quality baseline (medians): hard **16/16 / 14 773 fresh** (13 517–
+  27 235, n=3), easy **8/8 / 8 818** (7 517–21 021, n=5), long **16/16 / 13 443**
+  (11 308–15 578, n=2). Cost is dominated by agent behaviour: one `--help` or
+  `doctor` run re-sends thousands of tokens. Quote the median and the range, not
+  a single run. Re-run the paired benchmark before claiming an improvement; do
+  not preload reference files.
+- **Faces are detection-only**: `--faces` stores class `face`, a box and a
+  score. No embeddings, names, identity or tracking. Do not add recognition
+  without an explicit product decision (privacy) and a license that allows it.
+- **Objects are YOLOS-tiny**: 91 COCO classes, **softmax over 92 ids with id 91
+  as background**, threshold 0.5. Sigmoid decoding returns background-only
+  detections; do not "fix" it back.
+- **Vision models look at sampled keyframes only.** "Not detected" is not "not
+  present"; `--frame-stride N` is the tool for long static shots.
+- **Dense frames are opt-in**: scene keyframes first, stride fills the rest,
+  `--max-frames` still caps. `brief` collapses consecutive identical OCR lines
+  so a dense run does not turn the map into a contact sheet.
 - `ort` pinned `=2.0.0-rc.15`; one environment per process; **shared session
   builder uses `AutoDevicePolicy::PreferCPU`** (CoreML silently mis-executes
   dynamic-shape graphs: PP-OCRv5 detection collapsed, recognition blank; VAD
@@ -158,9 +178,25 @@ caveats: BENCHMARK.
 - **Reference preloading is the main fixed skill cost**: reading the cheatsheet
   and two workflows cost 4 588 fresh tokens and bought nothing. The skill says
   read `SKILL.md` once, open one reference only when needed.
-- **Keyframes**: one per scene by default; OCR runs on those keyframes and adds
-  `text_overlay` with a **point range** (the frame instant, not the shot).
-  Artifacts use paths relative to the document; `query frames` resolves them.
+- **Keyframes**: one per scene by default; `--frame-stride N` adds dense
+  samples, scene frames first and `--max-frames` caps the total. OCR, faces and
+  objects run on those keyframes and add **point ranges** (the frame instant,
+  not the shot). Artifacts use paths relative to the document; `query frames`
+  resolves them.
+- **YuNet preprocessing is exact**: fixed 640×640 input, **BGR, 0..255 floats**,
+  no mean subtraction, score `sqrt(cls*obj)`, NMS 0.3. Feeding 0..1 yields zero
+  detections with no error — that cost one debug cycle.
+- **YOLOS decoding is not DETR-sigmoid**: the export uses **softmax over 92
+  ids**, id 91 is background, boxes are normalised `(cx, cy, w, h)`, shortest
+  edge 512. The first implementation used sigmoid and saw only background at
+  0.92 confidence; verify a new detector's distribution in Python before
+  trusting the postprocess.
+- **Report paths are hostile by default**: keyframes are copied into
+  `<report>.artifacts/frames/` with an index prefix, absolute paths and `..` are
+  refused. A document is untrusted input.
+- **The skill is embedded in the binary**: `install-skill` writes it to Claude
+  Code, Codex, OpenCode and Cursor; `--dry-run`/`--uninstall` must never delete
+  anything in dry-run mode.
 - **Shot detection**: 2 fps, 64×36 RGB, **chromaticity** histogram (pixel
   normalised by its brightest channel). Raw RGB collapses all dark scenes into
   bin 0; that bug cost a whole 4-minute fixture.
@@ -178,17 +214,19 @@ verified on PIL-rendered slides and real keyframes. `whisper` CLI and
 `tesseract` **are installed** on PATH — the first benchmarks' baselines used
 them; the hard benchmark forbids them by instruction.
 
-Model store `~/.cache/sonolytica/models` (~1.7 GB): silero_vad.onnx,
+Model store `~/.cache/sonolytica/models` (~2 GB, 12 models): silero_vad.onnx,
 ggml-tiny.en/base.en/small, wav2vec2-base-960h.onnx, segmentation-3.0.onnx,
-sortformer-4spk-v2.onnx, wespeaker CAM++, pp_ocrv5_det/rec.onnx. `models list`
-shows status.
+sortformer-4spk-v2.onnx, wespeaker CAM++, pp_ocrv5_det/rec.onnx,
+yunet_face_detection_2023mar.onnx, yolos_tiny.onnx. `models list` shows status.
 
 Fixtures under `/private/tmp` (not committed; regenerate):
 `sono-eval` (LibriSpeech, VoxConverse parquet + `der-test2-*`, `der-test3-*`
 workdirs and JSON scores), `bench-hard` (meeting.mp4 + ref.json + artifacts),
 `sono-bench` (14 s video), `sono-query-e2e`, `sono-stats` (abc/aba wavs).
-Benchmark scratch dirs: `bench-brief`, `bench-easy`; baseline binary:
-`sonolytica-baseline`. They survive a session clear but not a reboot.
+Benchmark scratch dirs: `bench-brief`, `bench-easy`, `bench-agent-*`,
+`bench-gemini-*`; baseline binary: `sonolytica-baseline`; head-to-head raw
+outputs are committed under `docs/bench/2026-11-12/`. They survive a session
+clear but not a reboot.
 
 ## 6. How to verify and reproduce
 
@@ -197,8 +235,8 @@ cd /Users/neksand/orca/projects/SONOLYTICA
 git status                       # must be clean
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace           # 137, no models
-cargo test --workspace --all-features   # 152
+cargo test --workspace           # 153, no models
+cargo test --workspace --all-features   # 168
 
 # real models (macOS fixtures, ~10 s)
 SONOLYTICA_E2E=1 cargo test -p sonolytica-engine --features "full,metal" --test e2e_speech
@@ -221,6 +259,15 @@ python3 scripts/eval/der_voxconverse.py \
   --count 0 --min-speakers 2 --max-speakers 4 \
   --workdir /private/tmp/sono-eval/der-test3-env \
   --json-out /private/tmp/sono-eval/der-test3-env.json
+
+# vision smoke (models fetched): one face, three faces, zero false positives
+./target/debug/sonolytica analyze /private/tmp/face.mp4 --out /tmp/face.json \
+  --profile structure --faces --objects
+./target/debug/sonolytica query timeline /tmp/face.json --type object
+
+# HTML report and skill install
+./target/debug/sonolytica report /private/tmp/bench-brief2/doc.json --out /tmp/report.html
+./target/debug/sonolytica install-skill --dry-run --target opencode
 
 # query brief smoke: compact JSON 2-5 KB, key sections present
 cargo build -p sonolytica-cli --features full-metal
@@ -257,46 +304,51 @@ Token accounting: OpenCode stores per-session totals in
 
 ## 7. Known gaps and next steps (priority)
 
-### Skill cycle (2026-11-12): done, two gates missed
+### Skill cycle + vision (2026-11-12): delivered
 
-Full plan: `/Users/neksand/.opencode/plan/sonolytica-skill-cost-2026-11-12.md`.
-Delivered: reproducible fixture + token scripts, `brief` v2 (scene cuts, one OCR
-line per keyframe), a 200-line `SKILL.md` with modality detail moved to
-`references/modalities.md`, and a 20-minute real-meeting fixture.
+Full plans: `/Users/neksand/.opencode/plan/sonolytica-skill-cost-2026-11-12.md`
+(closed), `sonolytica-ideal-night-2026-11-12.md`. Medians over every run
+(DeepSeek V4.1 Flash, clean directories, fixed prompts):
 
-Results (medians, DeepSeek V4.1 Flash, one clean directory per run):
-
-| Fixture | Before | After (round 2) | Gate | Verdict |
+| Fixture | Before | Now (median) | Range | Gate |
 |---|---|---|---|---|
-| hard 4 min | 16/16, 22 410 | **16/16, 10 393** | ≤18 000 | met |
-| easy 14.4 s | 8/8, 9 521 | **8/8, 7 517** | ≤8 000 | met |
-| long 20 min | 16/16, 17 633 | **16/16, 11 308** | score ≥, ≤+10 % | met |
+| hard 4 min | 16/16, 22 410 | **16/16, 14 773** | 13 517–27 235 (n=3) | ≤18 000: met at the median |
+| easy 14.4 s | 8/8, 9 521 | **8/8, 8 818** | 7 517–21 021 (n=5) | ≤8 000: missed |
+| long 20 min | 16/16, 17 633 | **16/16, 13 443** | 11 308–15 578 (n=2) | met |
 
-Delivered in the same pass:
+The spread is agent behaviour, not the document: every command re-sends the
+context. The budget rule ("no `--help`/`doctor` once `brief` shows the stages")
+took easy 21 021 → 9 150 on the next run with the same 8/8.
 
-- `brief.speech.overlaps`: merged overlap spans, measured above (long 22 → 8
-  commands, 15/16 → 16/16);
-- `query verify`: checks a verbatim quote and its range mechanically, exits 1
-  on a failed claim (`--claims` JSON or stdin);
-- `sonolytica report`: one self-contained HTML file plus copied keyframes —
-  chapters, quotes, OCR, frames, runs;
-- `sonolytica install-skill`: the skill is embedded in the binary and installed
-  into Claude Code, Codex, OpenCode and Cursor (`--project`, `--dry-run`,
-  `--uninstall`);
-- `models fetch --set core|full`;
-- `.github/workflows/release.yml` (macOS arm64/x86_64, Linux x86_64, checksums)
-  and `install.sh` with checksum verification;
-- a product README, issue forms and a PR checklist.
+Delivered in this cycle:
+
+- `brief` v2: scene cuts, one OCR line per keyframe, **overlap spans**; dense
+  OCR lines collapse so the map stays 2–4 KB compact;
+- `query verify`: mechanical quote + range check, exit 1 on a failed claim;
+- `sonolytica report`: self-contained HTML + copied keyframes, faces/objects
+  per frame;
+- `sonolytica install-skill`: skill embedded in the binary, installed into
+  Claude Code, Codex, OpenCode and Cursor;
+- `models fetch --set core|full`; 12 pinned models;
+- release workflow (macOS arm64/x86_64, Linux x86_64/arm64) + checksummed
+  `install.sh`; product README, issue forms;
+- **vision**: `--frame-stride` dense frames, `--faces` (YuNet, count/boxes only),
+  `--objects` (YOLOS-tiny, 91 COCO classes), both opt-in and keyframe-bound;
+- head-to-head vs Gemini (Antigravity) and TwelveLabs Pegasus, plus a blind
+  judge; raw outputs in `docs/bench/2026-11-12/`.
 
 Open, in priority order:
 
-1. **Video depth.** Objects and faces (detection only, no identity), dense
-   frames for long static shots, opt-in local VLM captions. Schema 1.5.0,
-   additive; every heavy model opt-in with a RAM warning.
-2. **Music depth.** Notes (basic-pitch), stems if ONNX parity holds, technical
-   highlight windows with confidence — never a taste claim.
-3. **Long-file streaming.** AOSC cache for >10-minute files; the fixture
-   `fvhrk` still reports 2 labels against 4 annotated speakers.
+1. **AOSC streaming** for >10-minute files. `fvhrk` (20 min, 4 speakers) still
+   reports 2 labels with a warning; TwelveLabs got 4. Check the NVIDIA Open
+   Model License first; if disallowed, keep the warning.
+2. **Opt-in local VLM** (`--vision local`): captions for keyframes, 2–4 GB
+   model, RAM warning, never silently enabled.
+3. **Music depth**: basic-pitch notes and technical highlight windows.
+4. **Distribution and launch**: external brew tap (needs a separate repo),
+   Docker image, a second Gemini run when the quota resets, launch assets.
+5. **Easy fixed cost**: median 8 818 vs 8 000; the remaining cost is the
+   harness prompt, the skill read and the agent's own loop.
 
 ### Capability roadmap after the skill cycle (by payoff)
 
@@ -333,8 +385,6 @@ and record it in `docs/EVAL.md`.
    duplicate engine logic in the server.
 7. **Non-English alignment.** MMS/XLSR CTC with a FLEURS WER table
    (ru/es/de/fr/zh). Later; English stays wav2vec2 for now.
-8. **Objects/faces.** Opt-in vision model with a RAM warning; later, and never
-   silently enabled.
 
 ## 8. Lessons from this cycle
 
@@ -375,14 +425,33 @@ and record it in `docs/EVAL.md`.
 - **Slimming prose moves routing knowledge, not just words.** Moving the
   "minimum commands" table to the cheatsheet saved lines; on the long fixture
   the agent then explored the raw JSON with `jq` and spent extra commands.
+- **A detector's postprocess is a hypothesis until checked.** YuNet expects BGR
+  0..255 (0..1 gives zero detections); YOLOS-tiny needs softmax with id 91 as
+  background (sigmoid returned background at 0.92). Both were caught only by
+  printing the raw distribution from Python ONNX Runtime. Do that before
+  shipping any new model.
+- **Fresh-token cost is agent behaviour, not document size.** The same skill and
+  fixture produced 7 517 and 21 021; the difference was `--help`, `doctor` and
+  two extra commands, each re-sending the whole context. A command budget is a
+  product feature.
+- **Vision is keyframe-bound.** Faces and objects are sampled at keyframes;
+  "not detected" is not "absent". Dense frames and the report are the honest
+  way to widen coverage.
 
 ## 9. For the next agent
 
-Start with `git status`, `docs/HANDOFF.md` (this file), `docs/STATUS.md`, then
-§7 above. The skill cycle is closed: hard 16/16 at 10 393 fresh, easy 8/8 at
-7 517, long 20 min 16/16 at 11 308. First objective is video depth (objects,
-faces without identity, dense frames) and long-file streaming. Do not re-litigate the rejected
-experiments (VAD gate at 0.45, merge tie-break, count heuristics) and do not
-preload reference files. Keep the model-free build and the docs-as-tests green.
-If a change is not measured on a licensed or reproducible fixture, it is not
-done.
+Start with `git status`, this file, `docs/STATUS.md`, then §7. The skill and
+vision cycles are closed: **hard 16/16 / 14 773 median, easy 8/8 / 8 818, long
+16/16 / 13 443**; Gemini alone 14/16 vs 16/16 with the skill; TwelveLabs 10/16.
+The first objective is **AOSC streaming** for long files — it is the one
+measured quality gap the skill cannot fix (2 labels vs 4 real speakers on
+`fvhrk`). Check the license before writing code. After that: opt-in VLM, music
+notes, then distribution/launch.
+
+Do not re-litigate the rejected experiments (VAD gate at 0.45, merge tie-break,
+count heuristics), do not preload reference files, and quote medians + ranges
+rather than a single run. Keep the model-free build, clippy, fmt and
+docs-as-tests green. `cargo test` rebuilds the CLI **without** features and can
+overwrite `target/debug/sonolytica` — rebuild with `--features full-metal`
+before any model-backed run. If a change is not measured on a licensed or
+reproducible fixture, it is not done.
