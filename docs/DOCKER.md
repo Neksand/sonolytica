@@ -13,7 +13,9 @@ docker pull ghcr.io/neksand/sonolytica:latest
 
 The published image is `linux/amd64`. On Apple Silicon or an arm64 server,
 build locally with `docker build -t sonolytica .`; the Dockerfile compiles for
-the host architecture.
+the host architecture. Verified on an M5 Pro (arm64, Debian trixie): the image
+is **790 MB**, and `doctor`, `analyze` with models mounted read-only,
+`query brief` and `tools/call` over MCP all pass.
 
 ## First run
 
@@ -40,6 +42,16 @@ docker run --rm \
 
 docker run --rm -v sonolytica-data:/data -v "$PWD:/media" \
   sonolytica query brief /media/talk.json
+```
+
+To reuse models already downloaded on the host, mount them read-only instead of
+running `setup`:
+
+```bash
+docker run --rm \
+  -v "$HOME/.cache/sonolytica/models:/data/models:ro" \
+  -v "$PWD:/media" \
+  sonolytica analyze /media/talk.mp4 --out /media/talk.json --ocr --summary
 ```
 
 The `sonolytica-data` volume holds `models/` and `cache/`. The cache is keyed
