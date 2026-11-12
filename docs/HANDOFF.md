@@ -32,7 +32,7 @@ OCR text, and provenance on every segment. Agents read it via
 | SDK | `sonolytica-engine` (`Engine::analyze`) |
 | Schema | **1.6.0**, additive 1.0 → 1.6 |
 | Models | 14, SHA-256 pinned, in `~/.cache/sonolytica/models` |
-| Commands | 17 query subcommands (brief … verify, ask, poses, help) + `report`, `install-skill`, `analyze`, `models`, `cache`, `setup`, `mcp`, `completions`, `doctor`, `inspect`, `schema` |
+| Commands | 17 query subcommands (brief … verify, ask, captions, poses) + `help` + `report`, `install-skill`, `analyze`, `models`, `cache`, `setup`, `mcp`, `completions`, `doctor`, `inspect`, `schema` |
 | Skill | `skills/sonolytica/` (SKILL.md 200 lines + 5 references + 5 workflows) |
 | Tests | **173** model-free / **188** all-features |
 

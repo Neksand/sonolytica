@@ -17,7 +17,7 @@ runtime, no GPL.
 | | |
 |---|---|
 | Rust | 22 450 lines across 7 crates (`providers` 6 167, `cli` 8 201, `engine` 2 638, `core` 2 167, `dsp` 1 360, `media` 1 226, `eval` 691) |
-| Query commands | 17 (`brief`, `ask`, `timeline`, `at`, `search`, `transcript`, `words`, `speakers`, `chapters`, `frames`, `poses`, `music`, `acoustic`, `runs`, `summary`, `verify`, `help`) |
+| Query commands | 17 (`brief`, `ask`, `timeline`, `at`, `search`, `transcript`, `words`, `speakers`, `chapters`, `frames`, `captions`, `poses`, `music`, `acoustic`, `runs`, `summary`, `verify`) + `help` |
 | CLI | `analyze`, `query`, `report` (HTML), `install-skill` (4 harnesses), `models fetch --set core\|full`, `mcp` (stdio), `setup`, `completions`, `doctor`, `inspect`, `schema` |
 | Models | 14, all SHA-256 pinned: Silero VAD, whisper tiny/base/small, wav2vec2 aligner, Sortformer 4spk streaming, pyannote segmentation, WeSpeaker, PP-OCRv5 det/rec, YuNet face detection, YOLOS-tiny object detection, MoveNet Multipose, Florence-2-base-ft captions |
 | Schema | 1.6.0 (`Document::validate`, additive 1.0 → 1.6) |
