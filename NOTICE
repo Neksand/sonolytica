@@ -1,0 +1,29 @@
+SONOLYTICA
+==========
+
+The SONOLYTICA source code is licensed under MIT OR Apache-2.0 (see LICENSE-MIT
+and LICENSE-APACHE). This file records attribution for model weights that are
+downloaded at runtime and are not part of the source distribution.
+
+NVIDIA Sortformer
+-----------------
+
+`sortformer-4spk-v2.1` is an ONNX export of
+`nvidia/diar_streaming_sortformer_4spk-v2.1`:
+
+  Licensed by NVIDIA Corporation under the NVIDIA Open Model License.
+
+  Source model: https://huggingface.co/nvidia/diar_streaming_sortformer_4spk-v2.1
+  ONNX export:  https://huggingface.co/soniqo/Sortformer-Diarization-4spk-ONNX
+  License:      https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/
+
+The NVIDIA Open Model License permits commercial use and redistribution of the
+model and derivative models, provided that recipients receive a copy of the
+agreement and the attribution notice above. The weights are not vendored in
+this repository: `sonolytica models fetch sortformer-4spk-v2.1` downloads the
+pinned artifact from the URL in `crates/providers/src/models.rs` after verifying
+its SHA-256. Anyone who redistributes a copy of the weights must include this
+notice and the license agreement.
+
+Evaluation datasets (VoxConverse, LibriSpeech) are not bundled either; their
+citations and licenses are recorded in `docs/EVAL.md`.

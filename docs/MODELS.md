@@ -16,7 +16,7 @@ their licenses are their own.
 | `whisper-tiny.en` | ASR (English) | 78 MB | MIT | ggerganov/whisper.cpp GGML |
 | `whisper-base.en` | ASR (English) | 148 MB | MIT | ggerganov/whisper.cpp GGML |
 | `whisper-small` | ASR (multilingual) | 488 MB | MIT | ggerganov/whisper.cpp GGML |
-| `sortformer-4spk-v2` | Diarization (up to 4 speakers, overlap) | 469 MB | CC-BY-4.0 | ONNX export of `nvidia/diar_streaming_sortformer_4spk-v2` |
+| `sortformer-4spk-v2.1` | Diarization (up to 4 speakers, overlap, native streaming cache) | 475 MB | NVIDIA Open Model License | `soniqo/Sortformer-Diarization-4spk-ONNX` export of `nvidia/diar_streaming_sortformer_4spk-v2.1` |
 | `pyannote-segmentation-3.0` | Diarization (speaker change) | 6 MB | MIT | pyannote-rs release (ONNX export of pyannote/segmentation-3.0) |
 | `wespeaker-campplus` | Speaker embeddings | 28 MB | Apache-2.0 | pyannote-rs release (WeSpeaker CAM++) |
 | `pp-ocrv5-det` / `pp-ocrv5-rec` | OCR detection + recognition | 4.8 / 16.5 MB | Apache-2.0 | PaddlePaddle ONNX release |
@@ -40,16 +40,17 @@ list`. If a file's digest does not match, it is rejected and the run reports a
   drop everything after a short utterance when the model emits an early
   end-of-text (an upstream Whisper/whisper.cpp behaviour, reproduced with a
   bare `whisper_full` call on a two-voice fixture).
-- **Sortformer 4spk v2** is an end-to-end diarizer: 128-bin NeMo log-mel in,
-  per-speaker activity at 80 ms out. SONOLYTICA computes the mel front-end in
-  Rust and thresholds the activity into turns. It resolves overlap into two
+- **Sortformer 4spk v2.1** is an end-to-end streaming diarizer: 128-bin NeMo
+  log-mel in, per-speaker activity at 80 ms out. SONOLYTICA computes the mel
+  front-end in Rust and drives the model's native Arrival-Order Speaker Cache
+  (AOSC): 30.48 s chunks (340 core frames, 1 left, 40 right), a 40-frame FIFO,
+  and a 188-frame speaker cache compressed by activity confidence. The cache
+  keeps a speaker index attached to the same person for the whole recording, so
+  long files no longer re-cluster per window. It resolves overlap into two
   simultaneous turns, which the pyannote path only flags. It tracks at most
   four speakers; beyond that voices are collapsed, so the doc says "up to 4".
-  Long files are processed in 300 s windows with 10 s overlap and the speaker
-  channels are matched by activity co-occurrence across the seam. Past ten
-  minutes voices can merge even with fewer than four speakers; the document
-  carries a `diarization_speaker_cap` warning so an agent cannot cite the count
-  as exact.
+  A hypothesis that fills all four slots carries a `diarization_speaker_cap`
+  warning: the count is then a lower bound, not an exact count.
 - **pyannote segmentation-3.0** emits powerset classes on 10 s windows:
   silence, three local speakers, or a two-speaker overlap. It remains the
   fallback when Sortformer is not installed or inference fails. SONOLYTICA uses
@@ -97,10 +98,24 @@ divergence explained.
 
 - The project itself is MIT OR Apache-2.0.
 - All registered models are permissively licensed (MIT / Apache-2.0 /
-  CC-BY-4.0). GPL music-analysis crates (`bliss-audio`, `aubio-rs`, `sonogram`)
-  were evaluated and rejected; GPL is also blocked in CI by `cargo-deny`.
-  Sortformer's CC-BY-4.0 attribution stays in its `ModelSpec` and in
-  `docs/EVAL.md`.
+  CC-BY-4.0 / NVIDIA Open Model License). GPL music-analysis crates
+  (`bliss-audio`, `aubio-rs`, `sonogram`) were evaluated and rejected; GPL is
+  also blocked in CI by `cargo-deny`.
+- **NVIDIA Open Model License review (2026-11-12).** The streaming Sortformer
+  export is governed by the
+  [NVIDIA Open Model License](https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/),
+  not CC-BY-4.0: v2.0 of the checkpoint is CC-BY-4.0, v2.1 switched to the
+  NVIDIA license. The terms permit commercial use, creation and distribution of
+  derivative models, and redistribution of the weights, royalty-free and
+  worldwide, provided recipients get a copy of the agreement and the notice
+  "Licensed by NVIDIA Corporation under the NVIDIA Open Model License".
+  NVIDIA claims no ownership of outputs. The license terminates on patent
+  litigation against NVIDIA or on circumventing a model guardrail. It is not
+  OSI-approved and is not copyleft: it does not change the MIT/Apache-2.0
+  licensing of SONOLYTICA code. The required attribution is in `NOTICE`; the
+  weights are downloaded at runtime, never vendored. Earlier `sortformer-4spk-v2`
+  (CC-BY-4.0) is replaced by this export; its attribution remains in
+  `docs/EVAL.md` for the historical numbers.
 - FFmpeg is invoked as a separate process. A distributed binary does not link
   it, but users who redistribute FFmpeg must comply with FFmpeg's own license.
   Homebrew's build is GPL; an LGPL build works identically.
