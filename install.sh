@@ -64,4 +64,4 @@ case ":$PATH:" in
     *":${bin_dir}:"*) ;;
     *) echo "add ${bin_dir} to PATH: export PATH=\"${bin_dir}:\$PATH\"" ;;
 esac
-echo "next: sonolytica doctor && sonolytica install-skill && sonolytica models fetch --set core"
+echo "next: sonolytica setup"

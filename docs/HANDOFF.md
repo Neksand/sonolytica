@@ -11,7 +11,7 @@ captions behind a multi-file model bundle.
 
 Read this first, then `docs/STATUS.md` (numbers), `docs/EVAL.md` (methods),
 `docs/BENCHMARK.md` (agent and head-to-head tests), `docs/MODELS.md` (licenses,
-caps), `docs/OCR.md`, `docs/SCHEMA.md` (1.6.0). Forward plans live outside the
+caps), `docs/OCR.md`, `docs/SCHEMA.md` (1.6.0), `docs/MCP.md`. Forward plans live outside the
 repo: `/Users/neksand/.opencode/plan/sonolytica-skill-cost-2026-11-12.md`
 (closed), `sonolytica-ideal-night-2026-11-12.md` (night work), and
 `sonolytica-beat-all-2026-11-12.md` (category + launch).
@@ -27,14 +27,14 @@ OCR text, and provenance on every segment. Agents read it via
 
 | | |
 |---|---|
-| Rust | 21 768 lines, 7 crates: `providers` (6 167), `cli` (7 519), `engine` (2 638), `core` (2 167), `dsp` (1 360), `media` (1 226), `eval` (691) |
+| Rust | 22 450 lines, 7 crates: `providers` (6 167), `cli` (8 201), `engine` (2 638), `core` (2 167), `dsp` (1 360), `media` (1 226), `eval` (691) |
 | Binary | `sonolytica` (`sonolytica-cli`) |
 | SDK | `sonolytica-engine` (`Engine::analyze`) |
 | Schema | **1.6.0**, additive 1.0 → 1.6 |
 | Models | 14, SHA-256 pinned, in `~/.cache/sonolytica/models` |
-| Commands | 17 query subcommands (brief … verify, ask, poses, help) + `report`, `install-skill`, `analyze`, `models`, `cache`, `doctor`, `inspect`, `schema` |
+| Commands | 17 query subcommands (brief … verify, ask, poses, help) + `report`, `install-skill`, `analyze`, `models`, `cache`, `setup`, `mcp`, `completions`, `doctor`, `inspect`, `schema` |
 | Skill | `skills/sonolytica/` (SKILL.md 200 lines + 5 references + 5 workflows) |
-| Tests | **166** model-free / **181** all-features |
+| Tests | **173** model-free / **188** all-features |
 
 Features: `sonolytica-cli --features full-metal` = whisper + silero + diarize +
 ocr + vision + align + metal. `cargo test --workspace` runs without
@@ -55,6 +55,8 @@ models/cmake/ORT.
 | Pose | MoveNet Multipose on a portrait: 1 person, 11 COCO keypoints above 0.3; on a face-only frame it invents 3 person-shaped boxes (0.41–0.62), so it is an observation, not a body-presence oracle | local test |
 | Cost | cache hit **0.01 s** vs 7.64 s on the 14.4 s fixture; `query ask` 978 B text vs 3 912 B for three equivalent queries | local test |
 | Captions | Florence-2-base-ft (MIT, 550 MB): portrait caption answered 6/8 visual-boundary questions, 0 unsupported; 16/16 caption-aware; slide captions can invent colours | local test |
+| Agent interface | `sonolytica mcp`: tools-only stdio JSON-RPC, 14 tools, same binary; `setup` fetches core models + installs the skill; completions for bash/zsh/fish | local test |
+
 
 | Free agents | easy 8/8 / 18 224, hard 16/16 / 19 396, long 14/16 / 31 570, visual 16/16 refusal / 17 652 | clean dirs, `$0`, 2026-11-13 |
 
@@ -139,6 +141,11 @@ for skill runs vs 7 and 3**. Raw outputs: `docs/bench/2026-11-12/`.
 - **Multi-file models are pinned file by file plus a composite manifest
   digest.** Never pin only the decoder and fetch a different tokenizer later;
   `ModelStore::require` returns the verified bundle directory.
+- **MCP mirrors the CLI, it does not reimplement it.** `sonolytica mcp` runs
+  the same binary for every tool call. A second query implementation would
+  drift; keep the server as a transport adapter.
+- **`setup` is idempotent.** It verifies and skips existing models, installs
+  the skill only when asked, and never deletes media or documents.
 - **Pose is detection-only and keyframe-bound.** 17 COCO keypoints per person,
   no tracking, no identity. A tight face crop can produce a plausible body
   below it; treat pose as an observation at one instant, never as proof that a
@@ -290,8 +297,8 @@ cd /Users/neksand/orca/projects/SONOLYTICA
 git status                       # must be clean
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace           # 166, no models
-cargo test --workspace --all-features   # 181
+cargo test --workspace           # 173, no models
+cargo test --workspace --all-features   # 188
 
 # real models (macOS fixtures, ~10 s)
 SONOLYTICA_E2E=1 cargo test -p sonolytica-engine --features "full,metal" --test e2e_speech
@@ -309,6 +316,12 @@ python3 scripts/eval/der_voxconverse.py \
   --count 0 --min-speakers 2 --max-speakers 4 \
   --workdir /private/tmp/sono-eval/der-test2-final \
   --json-out /private/tmp/sono-eval/der-test2-final.json
+# MCP and onboarding
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | ./target/debug/sonolytica mcp
+./target/debug/sonolytica setup --no-models --no-skill
+./target/debug/sonolytica completions bash | head
+cargo test -p sonolytica-cli --test mcp
 # cache, evidence pack, pose, captions
 ./target/debug/sonolytica analyze /private/tmp/face.mp4 --out /tmp/cap.json --max-frames 1 --caption
 ./target/debug/sonolytica query captions /tmp/cap.json --json
@@ -452,8 +465,10 @@ the analysis cache, `query ask` evidence packs and MoveNet pose.
    `analysis_cached`; 0.01 s vs 7.64 s on the 14.4 s fixture. Degraded or
    partial annotations are not cached. `sonolytica cache [--clear]` manages it.
    Still open: a cache-size budget and eviction policy.
-6. **MCP (`rmcp`).** Only for a shell-less client; tools mirror `query`. Do not
-   duplicate engine logic in the server.
+6. **MCP — delivered 2026-11-13 (stdio, tools-only).** 14 tools; the server
+   runs the same binary for every call, so there is no duplicate query logic.
+   See `docs/MCP.md`. Remaining: official `rmcp`, streamable HTTP,
+   resources/prompts. `setup` + completions also shipped for onboarding.
 7. **Non-English alignment.** MMS/XLSR CTC with a FLEURS WER table
    (ru/es/de/fr/zh). Later; English stays wav2vec2 for now.
 
@@ -541,8 +556,9 @@ DER 6.40 % (was 2/4, 15.99 %), no regression on 1-4 speaker files. The free
 agent matrix is easy 8/8, hard 16/16, visual 16/16 refusal, visual+caption
 16/16, long 14/16 — the long loss is the overlap question, not the count.
 Cost tooling is in: cache, `query ask`, and pose. The first caption tier is in
-(Florence-2). The next objectives are **speaker-attributed ASR** and a
-**free-form VQA tier** (SmolVLM2), then music notes and distribution/launch.
+(Florence-2), and the first MCP server + one-command `setup` + completions are
+in. The next objectives are **speaker-attributed ASR**, a **free-form VQA tier**
+(SmolVLM2), streamable HTTP/rmcp, music notes, and distribution/launch.
 
 Do not re-litigate the rejected experiments (VAD gate at 0.45, merge tie-break,
 count heuristics), do not preload reference files, and quote medians + ranges

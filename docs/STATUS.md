@@ -16,9 +16,9 @@ runtime, no GPL.
 
 | | |
 |---|---|
-| Rust | 21 768 lines across 7 crates (`providers` 6 167, `cli` 7 519, `engine` 2 638, `core` 2 167, `dsp` 1 360, `media` 1 226, `eval` 691) |
+| Rust | 22 450 lines across 7 crates (`providers` 6 167, `cli` 8 201, `engine` 2 638, `core` 2 167, `dsp` 1 360, `media` 1 226, `eval` 691) |
 | Query commands | 17 (`brief`, `ask`, `timeline`, `at`, `search`, `transcript`, `words`, `speakers`, `chapters`, `frames`, `poses`, `music`, `acoustic`, `runs`, `summary`, `verify`, `help`) |
-| CLI | `analyze`, `query`, `report` (HTML), `install-skill` (4 harnesses), `models fetch --set core\|full`, `doctor`, `inspect`, `schema` |
+| CLI | `analyze`, `query`, `report` (HTML), `install-skill` (4 harnesses), `models fetch --set core\|full`, `mcp` (stdio), `setup`, `completions`, `doctor`, `inspect`, `schema` |
 | Models | 14, all SHA-256 pinned: Silero VAD, whisper tiny/base/small, wav2vec2 aligner, Sortformer 4spk streaming, pyannote segmentation, WeSpeaker, PP-OCRv5 det/rec, YuNet face detection, YOLOS-tiny object detection, MoveNet Multipose, Florence-2-base-ft captions |
 | Schema | 1.6.0 (`Document::validate`, additive 1.0 → 1.6) |
 | Agent skill | `SKILL.md` (199 lines) + 5 references + 5 workflows + install guide |
@@ -28,8 +28,8 @@ runtime, no GPL.
 
 | Check | Result |
 |---|---|
-| `cargo test --workspace` | 166 passed, 0 failed |
-| with `full,metal` | 181 passed, 0 failed |
+| `cargo test --workspace` | 173 passed, 0 failed |
+| with `full,metal` | 188 passed, 0 failed |
 | `cargo clippy -D warnings` | clean (default and full) |
 | `cargo fmt --check` | clean |
 | Model-free build | tests pass with no models, no cmake, no ONNX runtime |
@@ -144,4 +144,4 @@ makes the agent **honest and citable**, not more perceptive.
 
 Next, in order of payoff: speaker-attributed ASR for overlap, free-form VQA
 (SmolVLM2) behind the same opt-in, music notes/highlights, `--effort` modes,
-MCP, non-English alignment.
+streamable HTTP/rmcp (the stdio MCP server is in), non-English alignment.

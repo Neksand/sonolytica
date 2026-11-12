@@ -44,14 +44,17 @@ Requirements: FFmpeg 7+ on `PATH`; `cmake` for the speech pipeline. Models are
 downloaded on demand and verified by digest.
 
 ```bash
+sonolytica setup                  # doctor, core models (~1.5 GB), agent skill
+sonolytica setup --full           # + OCR, faces, objects, pose, Florence captions
 sonolytica doctor                 # what this machine can actually run
-sonolytica models fetch --set core  # ~1.5 GB: VAD, Whisper, Sortformer, aligner
-sonolytica install-skill          # Claude Code, Codex, OpenCode, Cursor
 ```
 
-`install-skill` embeds the skill in the binary: no repository checkout, no
-copy-paste, re-run to upgrade. `--project` installs into the current directory,
-`--dry-run` prints paths, `--uninstall` removes it.
+`setup` is idempotent: it verifies existing models and skips them, and installs
+the skill into Claude Code, Codex, OpenCode and Cursor. Use `--no-models` or
+`--no-skill` to skip a part. `install-skill` embeds the skill in the binary:
+no repository checkout, no copy-paste, re-run to upgrade; `--project` installs
+into the current directory, `--dry-run` prints paths, `--uninstall` removes it.
+Shell completion: `sonolytica completions bash|zsh|fish`.
 
 ## 60-second tour
 
@@ -66,6 +69,27 @@ sonolytica report talk.json --out talk.html # human page: chapters, quotes, fram
 
 `report` writes one HTML file plus its keyframes — open it, share it, print it.
 Every quote carries its range; warnings are shown, not hidden.
+
+## Use it from an MCP client
+
+Shell-less clients (Claude Desktop, Cursor, IDE agents) use the stdio server:
+
+```json
+{
+  "mcpServers": {
+    "sonolytica": {
+      "command": "sonolytica",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+It exposes `analyze_media`, `query_brief`, `query_ask`, `query_timeline`,
+`query_search`, `query_transcript`, `query_words`, `query_speakers`,
+`query_captions`, `query_poses`, `query_runs`, `query_verify`, `list_models`
+and `doctor`. Every call runs the same local binary; there is no cloud and no
+second query implementation. Full setup and examples: [`docs/MCP.md`](docs/MCP.md).
 
 ## What is in the document
 
@@ -146,7 +170,7 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 - `crates/core` — document model, schema, validator, timeline math.
 - `crates/engine` — pipeline stages and the async boundary.
 - `crates/providers` — model registry, Whisper, Silero, diarization, OCR.
-- `crates/cli` — `analyze`, `query`, `report`, `install-skill`, `models`.
+- `crates/cli` — `analyze`, `query`, `report`, `install-skill`, `models`, `mcp`, `setup`.
 
 Design: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), ADRs in
 [`docs/adr/`](docs/adr/). Current numbers: [`docs/STATUS.md`](docs/STATUS.md).

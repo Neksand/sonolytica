@@ -95,11 +95,13 @@ audio-video timestamps agree on the container timebase.
 
 ## Phase 5 — Agent ecosystem
 
-- `sonolytica mcp`: official `rmcp` SDK (MCP 2026-07-28), stdio and streamable
-  HTTP.
-- Tools: `inspect_media`, `analyze_media`, `get_timeline`, `query_segments`,
-  `search_dialogue`, `find_speaker`, `get_music_features`, `summarize`, `export`.
-- Resources: the document itself, plus per-capability slices.
+- `sonolytica mcp` ✅ (2026-11-13): tools-only stdio JSON-RPC, same binary and
+  query implementation. Tools: `analyze_media`, `query_brief`, `query_ask`,
+  `query_timeline`, `query_search`, `query_transcript`, `query_words`,
+  `query_speakers`, `query_captions`, `query_poses`, `query_runs`,
+  `query_verify`, `list_models`, `doctor`. See `docs/MCP.md`.
+  Remaining: official `rmcp` SDK, streamable HTTP, resources/prompts.
+- Resources: the document itself, plus per-capability slices (not yet).
 - Transcript index (SQLite FTS5) for large corpora; documents stay the source
   of truth.
 - Portable agent skill updated with tool schemas and citation rules.
