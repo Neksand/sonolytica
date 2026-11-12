@@ -35,7 +35,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Native toolchain
         run: |
-          if [ "$RUNNER_OS" = "macOS" ]; then brew install cmake ffmpeg; else sudo apt-get update && sudo apt-get install -y cmake libasound2-dev; fi
+          if [ "$RUNNER_OS" = "macOS" ]; then brew install cmake ffmpeg; else sudo apt-get update && sudo apt-get install -y cmake libasound2-dev clang libclang-dev; fi
       - name: Build
         run: |
           cargo build --release -p sonolytica-cli --features ${{ matrix.features }}

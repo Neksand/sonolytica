@@ -13,6 +13,7 @@ FROM rust:1.99-bookworm AS build
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends cmake libasound2-dev pkg-config \
+        clang libclang-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src

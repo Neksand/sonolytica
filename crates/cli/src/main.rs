@@ -541,6 +541,12 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                             .collect::<Result<Vec<_>>>()?
                     };
                     for spec in specs {
+                        eprintln!(
+                            "model {} ({:.0} MB, {})",
+                            spec.id,
+                            spec.approx_bytes as f64 / 1e6,
+                            spec.license
+                        );
                         let path = store.fetch(spec).with_context(|| {
                             format!("could not fetch {} ({})", spec.id, spec.license)
                         })?;
@@ -588,6 +594,12 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                         failed += 1;
                         continue;
                     };
+                    eprintln!(
+                        "model {} ({:.0} MB, {})",
+                        spec.id,
+                        spec.approx_bytes as f64 / 1e6,
+                        spec.license
+                    );
                     match store.fetch(spec) {
                         Ok(path) => println!("model {:<28} -> {}", spec.id, path.display()),
                         Err(error) => {
