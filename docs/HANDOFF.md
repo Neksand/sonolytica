@@ -100,10 +100,11 @@ caveats: BENCHMARK.
   failure warns `diarization_vad_gate_unavailable` and leaves turns ungated.
 - Sortformer files longer than 10 minutes carry `diarization_speaker_cap`; an
   agent must say "at least N" there, never an exact count.
-- Skill cost/quality baseline: hard **16/16 / 10 393 fresh / 9 commands**,
-  easy **8/8 / 7 517 / 7**, long 20 min **16/16 / 11 308 / 8**. Re-run the
-  paired benchmark (`scripts/bench/prepare_agent_fixture.sh`, same prompt file)
-  before claiming an improvement; do not preload reference files.
+- Skill cost/quality baseline (medians): hard **16/16 / 14 773 fresh** (range
+  13 517–27 235, n=3), easy **8/8 / 8 818** (7 517–21 021, n=5), long 20 min
+  **16/16 / 13 443** (11 308–15 578, n=2). Cost is dominated by agent behaviour:
+  one `--help` or `doctor` run re-sends thousands of tokens. Re-run the paired
+  benchmark before claiming an improvement; do not preload reference files.
 - `ort` pinned `=2.0.0-rc.15`; one environment per process; **shared session
   builder uses `AutoDevicePolicy::PreferCPU`** (CoreML silently mis-executes
   dynamic-shape graphs: PP-OCRv5 detection collapsed, recognition blank; VAD

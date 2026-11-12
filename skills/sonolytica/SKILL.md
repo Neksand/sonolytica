@@ -66,6 +66,8 @@ skip `analyze` and start at `query runs`.
 2. Only the command the question needs (§5) — for an exact quote, a time
    window, a frame or the full speaker list.
 3. Visual questions: set `--ocr --objects --faces` at analyze time, not later.
+4. Budget: no `--help`, `doctor`, `models list` or `runs` once `brief` shows the
+   stages. Aim for ≤6 commands on a clip, ≤10 on a meeting.
 
 `brief` is a map, not a citation source: quote exact wording and ranges from
 `search`, `words` or `transcript`. Full speaker/chapter lists are
@@ -182,8 +184,7 @@ Troubleshooting detail: `references/troubleshooting.md`.
 
 ## 12. Workflows
 
-Open **one** file for the media type at hand: `references/workflows/`
-(`interview`, `meeting`, `lecture`, `music`, `video`).
+`references/workflows/` has one file per media type; open only the one you need.
 
 ## 13. Limits — do not claim these
 
@@ -196,5 +197,4 @@ Open **one** file for the media type at hand: `references/workflows/`
 
 ## 14. Accuracy claims
 
-Only from an actual run, naming dataset, subset, model and date (see
-`sonolytica-eval report`). Never quote a number you did not produce here.
+Only from an actual run, naming dataset, model and date; never quote a number you did not produce here.

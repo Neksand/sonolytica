@@ -434,6 +434,39 @@ Caveat: one run per cell, one Gemini model, manual scoring; the Gemini baseline
 is an agent with tools, not the raw multimodal API. Treat this as a smoke
 head-to-head, not a leaderboard.
 
+## Round 3: vision-era skill, full suite (same day)
+
+After faces/objects and the command-budget rule, three fixtures plus one rerun:
+
+| Fixture | Score | Commands | Fresh | Note |
+|---|---|---|---|---|
+| hard 4 min | 16/16 | 17 | 27 235 | outlier: read transcript, scenes, chapters and five absence variants |
+| easy 14.4 s | 7/8 | 11 | 21 021 | missed the tail of the first phrase; read `analyze --help` |
+| easy, rerun | **8/8** | 11 | **9 150** | budget rule added: no `--help`/`doctor` once brief shows the stages |
+| long 20 min | 16/16 | 12 | 15 578 | quote split across two segments, both ranges cited |
+
+Medians over every comparable run:
+
+| Fixture | Runs | Median fresh | Range |
+|---|---|---|---|
+| hard 4 min | 3 | **14 773** | 13 517–27 235 |
+| easy 14.4 s | 5 | **8 818** | 7 517–21 021 |
+| long 20 min | 2 | **13 443** | 11 308–15 578 |
+
+Reading it honestly:
+
+- **Fresh cost is dominated by agent behaviour, not by the document.** Every
+  command re-sends the whole context; a single `analyze --help` is thousands of
+  input tokens. The same skill and fixture produced 7.5k and 21k.
+- **The command-budget rule works**: the rerun after adding "no `--help`,
+  `doctor`, `models list` or `runs` once `brief` shows the stages" fell from
+  21 021 to **9 150** for the same 8/8.
+- **The hard gate holds at the median** (14 773 ≤ 18 000) but not on a bad run
+  (27 235). Do not quote a single hard number; quote the median and the range.
+- **The easy gate is still missed at the median** (8 818 vs 8 000) even though
+  the best run was 7 517. The remaining cost is the harness prompt, the skill
+  read and the model's own reasoning loop.
+
 ## Limits
 
 - Four fixtures, 26 questions, fifteen sessions. This is a smoke benchmark, not

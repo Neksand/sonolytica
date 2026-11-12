@@ -55,7 +55,7 @@ runtime, no GPL.
 | Throughput | realtime factor | **16.9×** on the 240 s hard fixture (17.9× without the VAD gate pass); 14.1× was the 155.6 s pipeline before the gate | full audio pipeline with Sortformer |
 | Russian | transcript | exact | 12 s, `whisper-small --language ru`, 0 word errors on a clean fixture |
 | Agent | answers | **16/20 vs 20/20** easy; **7/16 vs 16/16** hard | no skill vs skill; the hard fixture is a 4 min, 4-voice meeting with no ASR/OCR tools for the baseline |
-| Agent, `query brief` v2 | fresh tokens | easy **7 517** at 8/8; hard **10 393** at 16/16; long **11 308** at 16/16 | DeepSeek V4.1 Flash, clean dirs, fixed prompts; see BENCHMARK |
+| Agent, `query brief` v2 | fresh tokens | medians: easy **8 818** (7 517–21 021, n=5), hard **14 773** (13 517–27 235, n=3), long **13 443** (11 308–15 578, n=2) | DeepSeek V4.1 Flash, clean dirs, fixed prompts; cost is agent-behaviour dominated; see BENCHMARK |
 | Agent, 20 min real meeting | score / cost | old skill **16/16 / 17 633**, new **16/16 / 11 308** | VoxConverse `fvhrk`, 4 speakers (document reports 2 + cap warning) |
 | Agent, head-to-head | hard 4 min, 8 questions | manual: Gemini **14**, +skill **16**, TwelveLabs **10**, SONOLYTICA **16**; blind judge: **10 / 16 / 7 / 15**, ranking identical | Gemini is an agent with a shell, TwelveLabs a raw API; 19 valid citations for skill runs vs 7 and 3; see BENCHMARK |
 
@@ -69,11 +69,11 @@ exist so changes can be judged by deltas, not to claim state of the art.
 
 - video fixture: 5/8 without, 8/8 with; the skill used **43 % fewer fresh
   tokens** (35 013 vs 61 280) because it queried instead of experimenting;
-- with `query brief` v2 and the overlap map (2026-11-12) the easy fixture fell
-  to **7 517 fresh** (9 521 before), the hard fixture to **10 393** (22 410) at
-  16/16, and the 20-minute meeting to **11 308** (17 633) at 16/16;
-- that is cheaper **and** better: −21 % easy, −54 % hard, −36 % long, with one
-  extra point on the long fixture after overlaps entered `brief`;
+- with `query brief` v2 and the overlap map (2026-11-12) the medians are
+  **8 818** easy, **14 773** hard, **13 443** long, all with the top score;
+- against the pre-skill baseline that is −7 % easy, −34 % hard, −24 % long, and
+  the long fixture gained the point it used to lose on overlap; the range is
+  wide (7.5k–27k) because every command re-sends the context;
 - Russian fixture: 11/12 without, 12/12 with; here the skill cost **more**
   (34 558 vs 23 131 fresh tokens) because a 12 s voice memo does not need a
   five-stage document;
