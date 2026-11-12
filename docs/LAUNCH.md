@@ -96,7 +96,9 @@ There is no free-form VQA model yet.
 - [x] Dockerfile + GHCR workflow; image verified on arm64 (790 MB)
 - [x] agent skill for Claude Code, Codex, OpenCode, Cursor
 - [x] measured benchmark, eval methods, model licences, `NOTICE`
-- [ ] tag `v0.2.0` and publish GitHub release (user pushes)
+- [x] tag `v0.2.0` + public GitHub release:
+      <https://github.com/Neksand/sonolytica/releases/tag/v0.2.0>
+- [x] public GHCR image (`linux/amd64`; arm64 builds locally)
 - [ ] brew tap (needs a separate repository)
 - [ ] 2-minute demo video and three example documents
 - [ ] MCP directory listings (Claude/Cursor) and a launch post

@@ -1,7 +1,9 @@
 # Handoff — SONOLYTICA after the AOSC streaming cycle
 
-Last updated: 2026-11-13. Branch `main`, working tree clean, **no remote
-configured** (the user pushes). Since `1960e26`: reproducible benchmark + token
+Last updated: 2026-11-13. Branch `main`, working tree clean. Public repo:
+<https://github.com/Neksand/sonolytica>; `v0.2.0` is tagged and released
+(macOS arm64, Linux x86_64/arm64), Docker is public on GHCR, CI is green.
+Since `1960e26`: reproducible benchmark + token
 scripts, `brief` v2 (scene cuts, OCR lines, overlap spans), `query verify`,
 HTML `report`, `install-skill` for four harnesses, release workflow, dense
 frames, YuNet faces, YOLOS objects, a 200-line skill core, AOSC streaming
