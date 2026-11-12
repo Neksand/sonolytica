@@ -9,7 +9,7 @@
 # Models and the analysis cache live in the /data volume; nothing is baked
 # into the image. FFmpeg is a subprocess, not a linked library.
 
-FROM rust:1.99-bookworm AS build
+FROM rust:1.99-trixie AS build
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends cmake libasound2-dev pkg-config \
@@ -23,13 +23,12 @@ COPY skills ./skills
 # whisper.cpp/ggml needs FP16 NEON on arm64; Debian's GCC 12 rejects the
 # always_inline without the target flag, so use clang and an explicit march.
 RUN if [ "$(uname -m)" = "aarch64" ]; then \
-        export CFLAGS="-march=armv8.2-a+fp16" CXXFLAGS="-march=armv8.2-a+fp16" \
-            CMAKE_C_FLAGS="-march=armv8.2-a+fp16" CMAKE_CXX_FLAGS="-march=armv8.2-a+fp16"; \
+        export GGML_NATIVE=OFF GGML_CPU_ARM_ARCH=armv8.2-a+fp16; \
     fi; \
     cargo build --release -p sonolytica-cli --features full \
     && cargo build --release -p sonolytica-eval
 
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg ca-certificates \
