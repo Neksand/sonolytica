@@ -4,16 +4,17 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use anyhow::{Context, Result, bail};
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum};
 use sonolytica_core::{
     AnalysisBlock, AnalysisConfig, Capability, Confidence, Document, MediaTime, RunRecord,
     RunStatus, Segment, SegmentKind, TimeRange, Track, TrackKind, Warning,
 };
 use sonolytica_engine::Engine;
-use sonolytica_providers::{ModelStore, default_model_dir, models::MODELS};
+use sonolytica_providers::{ModelStore, default_model_dir, find_model, models::MODELS};
 use tracing_subscriber::EnvFilter;
 
 mod cache;
+mod mcp;
 mod query;
 mod report;
 mod skill;
@@ -64,6 +65,16 @@ enum Command {
     },
     /// Inspect or clear the analysis cache
     Cache(CacheArgs),
+    /// One-command onboarding: fetch core models and install the agent skill
+    Setup(SetupArgs),
+    /// Run the MCP server over stdio (for Claude Desktop, Cursor, IDE agents)
+    Mcp,
+    /// Print shell completion script
+    Completions {
+        /// Shell to generate for
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
+    },
     /// Environment and capability check
     Doctor,
     /// Print the document schema example
@@ -84,6 +95,22 @@ struct InstallSkillArgs {
     /// Remove the installed skill
     #[arg(long)]
     uninstall: bool,
+}
+
+#[derive(Debug, Args)]
+struct SetupArgs {
+    /// Fetch every pinned model, including the vision models (~3 GB)
+    #[arg(long)]
+    full: bool,
+    /// Do not download models
+    #[arg(long)]
+    no_models: bool,
+    /// Do not install the agent skill
+    #[arg(long)]
+    no_skill: bool,
+    /// Harness to install the skill into
+    #[arg(long, value_enum, default_value_t = skill::Target::All)]
+    skill_target: skill::Target,
 }
 
 #[derive(Debug, Args)]
@@ -544,6 +571,59 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                     bytes as f64 / 1e6
                 );
             }
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Setup(args) => {
+            println!("SONOLYTICA setup");
+            let mut failed = 0_usize;
+            if !args.no_models {
+                let ids: Vec<&str> = if args.full {
+                    MODELS.iter().map(|spec| spec.id).collect()
+                } else {
+                    CORE_MODELS.to_vec()
+                };
+                for id in ids {
+                    let Some(spec) = find_model(id) else {
+                        eprintln!("warning: unknown core model `{id}`");
+                        failed += 1;
+                        continue;
+                    };
+                    match store.fetch(spec) {
+                        Ok(path) => println!("model {:<28} -> {}", spec.id, path.display()),
+                        Err(error) => {
+                            eprintln!("warning: could not fetch {}: {error}", spec.id);
+                            failed += 1;
+                        }
+                    }
+                }
+            }
+            if !args.no_skill {
+                skill::run(&skill::Options {
+                    target: args.skill_target,
+                    project: false,
+                    dry_run: false,
+                    uninstall: false,
+                })?;
+            }
+            println!();
+            println!("next:");
+            println!("  sonolytica doctor");
+            println!("  sonolytica analyze FILE --out doc.json --profile standard --ocr --summary");
+            println!("  sonolytica query brief doc.json");
+            println!("  sonolytica mcp                 # MCP clients (Claude Desktop, Cursor)");
+            Ok(if failed > 0 {
+                ExitCode::from(2)
+            } else {
+                ExitCode::SUCCESS
+            })
+        }
+        Command::Mcp => {
+            mcp::run()?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Completions { shell } => {
+            let mut command = Cli::command();
+            clap_complete::generate(shell, &mut command, "sonolytica", &mut std::io::stdout());
             Ok(ExitCode::SUCCESS)
         }
         Command::Doctor => {
