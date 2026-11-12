@@ -177,6 +177,9 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 - `crates/providers` — model registry, Whisper, Silero, diarization, OCR.
 - `crates/cli` — `analyze`, `query`, `report`, `install-skill`, `models`, `mcp`, `setup`.
 
+Launch brief, competitor scoreboard and use cases:
+[`docs/LAUNCH.md`](docs/LAUNCH.md). One-file demo: `scripts/demo.sh talk.mp4`.
+
 Design: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), ADRs in
 [`docs/adr/`](docs/adr/). Current numbers: [`docs/STATUS.md`](docs/STATUS.md).
 Eval methods: [`docs/EVAL.md`](docs/EVAL.md).
