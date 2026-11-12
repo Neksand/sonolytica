@@ -265,6 +265,10 @@ fn frames_section(out: &mut String, document: &Document, frames: &[(usize, Strin
         )
         .map(|segment| segment.range.start.micros())
         .collect();
+    let poses: Vec<i64> = document
+        .segments_of_kind("pose")
+        .map(|segment| segment.range.start.micros())
+        .collect();
     let objects: Vec<(i64, String)> = document
         .segments_of_kind("object")
         .filter_map(|segment| match &segment.kind {
@@ -321,6 +325,21 @@ fn frames_section(out: &mut String, document: &Document, frames: &[(usize, Strin
                     "1 face".to_string()
                 } else {
                     format!("{face_count} faces")
+                }
+            );
+        }
+        let pose_count = poses
+            .iter()
+            .filter(|pose_at| **pose_at / 1000 == at / 1000)
+            .count();
+        if pose_count > 0 {
+            let _ = write!(
+                out,
+                "<p class=\"note\">{} with pose</p>",
+                if pose_count == 1 {
+                    "1 person".to_string()
+                } else {
+                    format!("{pose_count} people")
                 }
             );
         }
