@@ -505,6 +505,11 @@ count and output size improve, but only a paired session can claim the token
 win. The skill now tells the agent to use `ask` after `brief` and treats
 `analysis_cached` as valid data.
 
+A pilot subagent session on the easy fixture scored **8/8** with 8 `sonolytica`
+commands, but its OpenCode session directory was the repository rather than the
+clean fixture. Its **11 935 fresh** tokens are therefore excluded from the
+table; the run is a behaviour check, not a comparable cost number.
+
 ## Limits
 
 - Four fixtures, 26 questions, fifteen sessions. This is a smoke benchmark, not
