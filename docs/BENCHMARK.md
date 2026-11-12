@@ -537,6 +537,7 @@ fixture (only media + skill + binary + `PROMPT.md`), with the current skill
 | visual boundary 6 s | DeepSeek V4.1 Flash free | 4 | **16/16 refusal** | 17 652 | $0 |
 | visual boundary 6 s | GLM 5.3 Flash free | 4 | **16/16 refusal** | 24 130 | $0 |
 | visual boundary + caption 6 s | DeepSeek V4.1 Flash free | 4 | **16/16 caption-aware** | 31 961 | $0 |
+| visual boundary + caption 6 s | GLM 5.3 Flash free | 6 | **16/16 caption-aware** | 25 832 | $0 |
 | hard 4 min | DeepSeek V4.1 Flash free | 8 | **16/16** | 19 396 | $0 |
 | hard 4 min | GLM 5.3 Flash free | 10 | **16/16** | 23 025 | $0 |
 | long 20 min | DeepSeek V4.1 Flash free | 24 | **14/16** | 31 570 | $0 |
@@ -546,8 +547,8 @@ Reading it:
 - **Both free models reach the maximum score on easy** (8/8) and hard (16/16).
   Without captions both refuse every visual-boundary question without
   inventing a colour, action, expression or background; with `--caption` the
-  agent answers six of eight from the model observation and still refuses the
-  two the caption does not contain. DeepSeek-free is cheaper in tokens on both
+  both free models answer six of eight from the model observation and still
+  refuse the two the caption does not contain. DeepSeek-free is cheaper in tokens on both
   scored fixtures (18 224 / 19 396 vs 24 294 / 23 025); GLM-free needed one
   retry after passing `doc` instead of `doc.json`. Neither needs a paid quota.
 - **Long is 14/16, and that is a real finding.** The new AOSC document reports

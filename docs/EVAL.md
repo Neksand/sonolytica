@@ -483,7 +483,7 @@ and stops at 2.
 | Measurement | Value |
 |---|---|
 | bundle / peak RSS | 550 MB / **1.69 GB** |
-| 2 keyframes incl. load + OCR | 17.6 s |
+| 2 keyframes, captions vs baseline (no OCR) | **11.4 s vs 6.0 s** (model load included) |
 | cache hit, same flags | **0.01 s** |
 | portrait: visual-boundary questions answered | **6/8** from the caption, 0 unsupported guesses |
 | full visual-boundary score, caption-aware | **16/16** |

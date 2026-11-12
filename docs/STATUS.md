@@ -49,7 +49,7 @@ runtime, no GPL.
 | OCR | lines | 2/2, 6/6, 7/7 CJK | synthetic slides and a terminal screenshot, PP-OCRv5, 0.987 confidence on the benchmark slide |
 | Video | cut accuracy | ±0.5 s | 3-shot synthetic video, 2 fps signatures; colour-cut bug found and fixed |
 | Faces | detection | 3/3 on a synthetic 3-face frame, 1/1 on a portrait (score 0.888–0.946) | YuNet on keyframes, count and boxes only, no identity; a face between sampled keyframes is missed |
-| Captions | keyframe descriptions | portrait: **6/8** visual-boundary questions answered from the caption, 0 unsupported; full caption-aware score **16/16**; slide captions called a red background "black" | Florence-2-base-ft, MIT, 550 MB, 1.69 GB peak RSS, ~2.5 s/frame; model-generated, not OCR |
+| Captions | keyframe descriptions | portrait: **6/8** visual-boundary questions answered from the caption, 0 unsupported; full caption-aware score **16/16**; slide captions called a red background "black" | Florence-2-base-ft, MIT, 550 MB, 1.69 GB peak RSS; 11.4 s vs 6.0 s for 2 keyframes incl. load; model-generated, not OCR |
 | Pose | keypoints | portrait: 1 person, 11 keypoints above 0.3 (nose 0.79, shoulders 0.76/0.89); a face-only 3-face frame: 3 person-shaped false positives (0.41–0.62) | MoveNet Multipose on keyframes, 17 COCO points, detection only; a close-up can invent a body, so pose is an observation, not a body-presence oracle |
 | Objects | detection | portrait: `person` 0.999 + `tie` 0.991; 6 slide keyframes: 0 false positives | YOLOS-tiny, 91 COCO classes, threshold 0.5, keyframes only |
 | Alignment | word drift vs Whisper | **median 110 ms** | wav2vec2 CTC, English, two-voice fixture; 88 % within 600 ms |
