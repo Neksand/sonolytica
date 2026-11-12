@@ -441,6 +441,35 @@ ceiling — the remaining error is dominated by missed speech at ASR boundaries,
 not confusion.
 
 
+## Vision: keyframe observations
+
+Everything visual is sampled: one observation per keyframe, no tracking and no
+claim about the frames in between. The numbers below are local tests on
+licensed or synthetic fixtures, not a detection benchmark.
+
+| Detector | Fixture | Result |
+|---|---|---|
+| YuNet faces | synthetic 3-face frame / portrait / 6 slide keyframes | 3/3, 1/1 (0.888–0.946), 0 false faces |
+| YOLOS-tiny objects | portrait / 6 slide keyframes | `person` 0.999 + `tie` 0.991, 0 false objects |
+| PP-OCRv5 | 6-slide fixture / CJK terminal | 12/12 lines exact, 7/7 CJK |
+| MoveNet Multipose | portrait / face-only 3-face frame | 1 person, 11 keypoints above 0.3 / **3 false person-shaped boxes** (0.41–0.62) |
+
+Reading it honestly:
+
+- **Pose is an observation, not a body-presence oracle.** On a tight face crop
+  MoveNet extends a plausible body below the face; the person score is 0.41–0.62,
+  not zero. The document reports what the sampled frame produced; an agent must
+  not turn "detected" into "the person was there" or "not detected" into
+  "absent".
+- **Keyframes are the coverage limit.** A face, a gesture or an object between
+  two samples is missed. `--frame-stride` widens coverage; it does not create
+  tracking.
+- **No identity.** Faces are boxes, pose keypoints are body points; neither
+  carries a name, embedding or cross-recording identity.
+- **The next visual gap is semantics, not another detector.** "What is the
+  person doing / wearing / holding" needs a VLM; a pose model alone cannot
+  answer it. That is an opt-in step with its own RAM and license check.
+
 ## What the numbers say to do next
 
 The planned order was forced alignment, then diarization. The measurements
@@ -453,12 +482,15 @@ argue for swapping that:
    the next change is speaker-attributed ASR, not another count heuristic.
    The 4-speaker model cap remains: a document that fills all four slots carries
    `diarization_speaker_cap` and its count is a lower bound.
-2. **Alignment second.** WER 6.05 % is near the model ceiling and deletions are
+2. **Visual semantics are the next perception gap.** Pose, faces, objects and
+   OCR are keyframe observations; "what is happening" needs an opt-in local VLM
+   with a RAM/license gate, not another per-frame detector.
+3. **Alignment second.** WER 6.05 % is near the model ceiling and deletions are
    1.1 %; alignment improves *when* a word was said (citations, cutting), not
    *what* was said. Still worth doing, but it does not move the headline.
-3. **Do not touch the ASR model yet.** `base.en` on clean speech is not the
+4. **Do not touch the ASR model yet.** `base.en` on clean speech is not the
    bottleneck. A larger model is a cost decision, not a quality fix.
-4. **Fresh data before the next claim.** `test-00002` was used for the gate
+5. **Fresh data before the next claim.** `test-00002` was used for the gate
    threshold and `test-00003` for its final number; both have been seen. The
    next diarization number needs `test-00004`.
 

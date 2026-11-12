@@ -4,12 +4,13 @@ Last updated: 2026-11-12. Branch `main`, working tree clean, **no remote
 configured** (the user pushes). Since `1960e26`: reproducible benchmark + token
 scripts, `brief` v2 (scene cuts, OCR lines, overlap spans), `query verify`,
 HTML `report`, `install-skill` for four harnesses, release workflow, dense
-frames, YuNet faces, YOLOS objects, a 200-line skill core, and AOSC streaming
-diarization for long files (4/4 speakers on `fvhrk`, DER 6.40 %).
+frames, YuNet faces, YOLOS objects, a 200-line skill core, AOSC streaming
+diarization for long files (4/4 speakers on `fvhrk`, DER 6.40 %), an analysis
+cache, `query ask` evidence packs, and MoveNet body pose on keyframes.
 
 Read this first, then `docs/STATUS.md` (numbers), `docs/EVAL.md` (methods),
 `docs/BENCHMARK.md` (agent and head-to-head tests), `docs/MODELS.md` (licenses,
-caps), `docs/OCR.md`, `docs/SCHEMA.md` (1.4.0). Forward plans live outside the
+caps), `docs/OCR.md`, `docs/SCHEMA.md` (1.5.0). Forward plans live outside the
 repo: `/Users/neksand/.opencode/plan/sonolytica-skill-cost-2026-11-12.md`
 (closed), `sonolytica-ideal-night-2026-11-12.md` (night work), and
 `sonolytica-beat-all-2026-11-12.md` (category + launch).
@@ -25,14 +26,14 @@ OCR text, and provenance on every segment. Agents read it via
 
 | | |
 |---|---|
-| Rust | 19 099 lines, 7 crates: `providers` (5 330), `cli` (5 774), `engine` (2 638), `core` (2 080), `dsp` (1 360), `media` (1 226), `eval` (691) |
+| Rust | 20 910 lines, 7 crates: `providers` (5 681), `cli` (7 156), `engine` (2 638), `core` (2 158), `dsp` (1 360), `media` (1 226), `eval` (691) |
 | Binary | `sonolytica` (`sonolytica-cli`) |
 | SDK | `sonolytica-engine` (`Engine::analyze`) |
-| Schema | **1.4.0**, additive 1.0 → 1.4 |
-| Models | 12, SHA-256 pinned, in `~/.cache/sonolytica/models` |
-| Commands | 15 query subcommands (brief … verify, help) + `report`, `install-skill`, `analyze`, `models`, `doctor`, `inspect`, `schema` |
+| Schema | **1.5.0**, additive 1.0 → 1.5 |
+| Models | 13, SHA-256 pinned, in `~/.cache/sonolytica/models` |
+| Commands | 17 query subcommands (brief … verify, ask, poses, help) + `report`, `install-skill`, `analyze`, `models`, `cache`, `doctor`, `inspect`, `schema` |
 | Skill | `skills/sonolytica/` (SKILL.md 200 lines + 5 references + 5 workflows) |
-| Tests | **153** model-free / **168** all-features |
+| Tests | **163** model-free / **178** all-features |
 
 Features: `sonolytica-cli --features full-metal` = whisper + silero + diarize +
 ocr + vision + align + metal. `cargo test --workspace` runs without
@@ -50,6 +51,8 @@ models/cmake/ORT.
 | Video | 2 fps chromaticity signatures, cuts ±0.5 s; 6/6 scenes, 6 keyframes on the hard fixture; `--frame-stride N` adds dense frames (scene first, `--max-frames` caps) | EVAL/BENCHMARK |
 | Faces | YuNet on keyframes: 1/1 on a portrait (0.946), 3/3 on a synthetic 3-face frame, 0 false faces on 6 slide keyframes | local test |
 | Objects | YOLOS-tiny on keyframes: `person` 0.999 + `tie` 0.991 on a portrait, 0 false objects on 6 slide keyframes | local test |
+| Pose | MoveNet Multipose on a portrait: 1 person, 11 COCO keypoints above 0.3; on a face-only frame it invents 3 person-shaped boxes (0.41–0.62), so it is an observation, not a body-presence oracle | local test |
+| Cost | cache hit **0.01 s** vs 7.64 s on the 14.4 s fixture; `query ask` 978 B text vs 3 912 B for three equivalent queries | local test |
 | Throughput | **16.9×** on the 240 s hard fixture with the VAD gate (17.9× without; +0.8 s); 14.1× on the 155.6 s full audio pipeline before the gate | EVAL |
 | Russian | exact 12 s transcript with `whisper-small --language ru` | DOGFOOD |
 
@@ -125,6 +128,18 @@ for skill runs vs 7 and 3**. Raw outputs: `docs/bench/2026-11-12/`.
   detections; do not "fix" it back.
 - **Vision models look at sampled keyframes only.** "Not detected" is not "not
   present"; `--frame-stride N` is the tool for long static shots.
+- **Pose is detection-only and keyframe-bound.** 17 COCO keypoints per person,
+  no tracking, no identity. A tight face crop can produce a plausible body
+  below it; treat pose as an observation at one instant, never as proof that a
+  person was present or absent between samples.
+- **The cache is a proven record, not a new run.** A hit copies the document
+  and its artifacts, rewrites the relative paths and `media.path`, and adds
+  `analysis_cached`; timings and `created_unix_ms` stay from the first run.
+  Never present it as a fresh analysis. Degraded or partial annotations are
+  not cached.
+- **`query ask` is retrieval, not an answer.** It ranks existing segments,
+  names absent terms and returns ranges; it never synthesises prose. The agent
+  must still quote from the returned evidence and verify with `query verify`.
 - **Dense frames are opt-in**: scene keyframes first, stride fills the rest,
   `--max-frames` still caps. `brief` collapses consecutive identical OCR lines
   so a dense run does not turn the map into a contact sheet.
@@ -192,6 +207,15 @@ for skill runs vs 7 and 3**. Raw outputs: `docs/bench/2026-11-12/`.
 - **YuNet preprocessing is exact**: fixed 640×640 input, **BGR, 0..255 floats**,
   no mean subtraction, score `sqrt(cls*obj)`, NMS 0.3. Feeding 0..1 yields zero
   detections with no error — that cost one debug cycle.
+- **MoveNet output is keypoints-first, not box-first**: each of the 6 rows is
+  `17 × (y, x, score)` followed by `[ymin, xmin, ymax, xmax, person_score]`.
+  The input is `int32` RGB, 256×256 letterboxed; a `uint8` feed is rejected.
+  The output is split as keypoints first only because the ONNX export reordered
+  the TF Hub tensor; read the raw row before trusting a port.
+- **Cache artifact paths are relative to the document name.** Store under a
+  canonical `document.json.artifacts/` prefix and rewrite on load; a literal
+  `String::strip_prefix` keeps the leading `/`, so use a prefix with the
+  separator or `Path::strip_prefix`. The cache unit test pins the rewrite.
 - **YOLOS decoding is not DETR-sigmoid**: the export uses **softmax over 92
   ids**, id 91 is background, boxes are normalised `(cx, cy, w, h)`, shortest
   edge 512. The first implementation used sigmoid and saw only background at
@@ -210,7 +234,7 @@ for skill runs vs 7 and 3**. Raw outputs: `docs/bench/2026-11-12/`.
   verse/chorus labels; novelty is normalised 0–1.
 - **Schema**: only additive changes, minor bumps, old documents stay readable.
   `1.1.0` artifacts, `1.2.0` text_overlay/text track, `1.3.0` align,
-  `1.4.0` music sections.
+  `1.4.0` music sections, `1.5.0` pose.
 
 ## 5. Environment (this machine)
 
@@ -220,7 +244,7 @@ verified on PIL-rendered slides and real keyframes. `whisper` CLI and
 `tesseract` **are installed** on PATH — the first benchmarks' baselines used
 them; the hard benchmark forbids them by instruction.
 
-Model store `~/.cache/sonolytica/models` (~2 GB, 12 models): silero_vad.onnx,
+Model store `~/.cache/sonolytica/models` (~2 GB, 13 models): silero_vad.onnx,
 ggml-tiny.en/base.en/small, wav2vec2-base-960h.onnx, segmentation-3.0.onnx,
 sortformer-4spk-v2.1.onnx, wespeaker CAM++, pp_ocrv5_det/rec.onnx,
 yunet_face_detection_2023mar.onnx, yolos_tiny.onnx. `models list` shows status.
@@ -241,8 +265,8 @@ cd /Users/neksand/orca/projects/SONOLYTICA
 git status                       # must be clean
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace           # 153, no models
-cargo test --workspace --all-features   # 168
+cargo test --workspace           # 163, no models
+cargo test --workspace --all-features   # 178
 
 # real models (macOS fixtures, ~10 s)
 SONOLYTICA_E2E=1 cargo test -p sonolytica-engine --features "full,metal" --test e2e_speech
@@ -260,6 +284,10 @@ python3 scripts/eval/der_voxconverse.py \
   --count 0 --min-speakers 2 --max-speakers 4 \
   --workdir /private/tmp/sono-eval/der-test2-final \
   --json-out /private/tmp/sono-eval/der-test2-final.json
+# cache, evidence pack, pose
+./target/debug/sonolytica cache
+./target/debug/sonolytica query ask /private/tmp/bench-brief2/doc.json "budget" --json
+./target/debug/sonolytica query poses /private/tmp/pose-test/face.json --json
 # AOSC gate: the only 4-speaker file in that shard
 python3 scripts/eval/der_voxconverse.py \
   --parquet /private/tmp/sono-eval/voxconverse-test2.parquet \
@@ -341,7 +369,7 @@ Delivered in this cycle:
   per frame;
 - `sonolytica install-skill`: skill embedded in the binary, installed into
   Claude Code, Codex, OpenCode and Cursor;
-- `models fetch --set core|full`; 12 pinned models;
+- `models fetch --set core|full`; 13 pinned models;
 - release workflow (macOS arm64/x86_64, Linux x86_64/arm64) + checksummed
   `install.sh`; product README, issue forms;
 - **vision**: `--frame-stride` dense frames, `--faces` (YuNet, count/boxes only),
@@ -352,7 +380,8 @@ Delivered in this cycle:
 Open, in priority order:
 
 1. **Opt-in local VLM** (`--vision local`): captions for keyframes, 2–4 GB
-   model, RAM warning, never silently enabled.
+   model, RAM warning, never silently enabled. Pose/faces/objects are
+   keyframe-bound; semantics is the remaining visual gap.
 2. **Music depth**: basic-pitch notes and technical highlight windows.
 3. **Distribution and launch**: external brew tap (needs a separate repo),
    Docker image, a second Gemini run when the quota resets, launch assets.
@@ -361,13 +390,16 @@ Open, in priority order:
 
 AOSC streaming shipped (2026-11-12): license reviewed, `fvhrk` 4/4 speakers at
 DER 6.40 % / JER 6.29 % (gate ≥3 / ≤11.8 %), no regression on the 1-4 speaker
-files. Full numbers in `docs/EVAL.md`.
+files. Cost tooling also shipped: analysis cache (0.01 s hit vs 7.64 s),
+`query ask` evidence packs, and MoveNet pose (Apache-2.0, `--pose`). Full
+numbers in `docs/EVAL.md` and `docs/BENCHMARK.md`.
 
 ### Capability roadmap after the skill cycle (by payoff)
 
 Do these only after the skill-cost cycle, unless the user explicitly reprioritises.
 Each needs its own measurement and one local commit; when a gate fails, revert
-and record it in `docs/EVAL.md`.
+and record it in `docs/EVAL.md`. Delivered since this list: AOSC streaming,
+the analysis cache, `query ask` evidence packs and MoveNet pose.
 
 1. **AOSC streaming for long files — delivered 2026-11-12.** The 300 s windows
    and their 10-minute warning are gone; the v2.1 streaming export with the
@@ -387,9 +419,12 @@ and record it in `docs/EVAL.md`.
 4. **Music notes/stems.** basic-pitch (Apache-2.0, ~20 MB) for notes; Demucs
    (MIT) for stems/bass only if the ONNX export works and F1 ≥0.6. No claim
    before that number exists.
-5. **Caching.** Key = media SHA-256 + config hash + model digests; re-runs ≤5 %
-   of the first. Artifacts (keyframes) must travel with the cached document;
-   never serve a document with stale paths or provenance.
+5. **Caching — delivered 2026-11-12.** Key = media SHA-256 + `AnalysisConfig`
+   hash + annotation flags + schema/generator/cache version. A hit copies the
+   document and artifacts, rewrites relative paths and `media.path`, and adds
+   `analysis_cached`; 0.01 s vs 7.64 s on the 14.4 s fixture. Degraded or
+   partial annotations are not cached. `sonolytica cache [--clear]` manages it.
+   Still open: a cache-size budget and eviction policy.
 6. **MCP (`rmcp`).** Only for a shell-less client; tools mirror `query`. Do not
    duplicate engine logic in the server.
 7. **Non-English alignment.** MMS/XLSR CTC with a FLEURS WER table
@@ -443,9 +478,21 @@ and record it in `docs/EVAL.md`.
   fixture produced 7 517 and 21 021; the difference was `--help`, `doctor` and
   two extra commands, each re-sending the whole context. A command budget is a
   product feature.
-- **Vision is keyframe-bound.** Faces and objects are sampled at keyframes;
-  "not detected" is not "absent". Dense frames and the report are the honest
-  way to widen coverage.
+- **Vision is keyframe-bound.** Faces, objects and pose are sampled at
+  keyframes; "not detected" is not "absent". Dense frames and the report are the
+  honest way to widen coverage.
+- **A body model on a face crop invents a body.** MoveNet returned three
+  person-shaped boxes with 0.41–0.62 scores on a face-only synthetic frame. Pose
+  is an observation at one instant, not a body-presence oracle; say what the
+  keypoints are, not who was there.
+- **`query ask` is retrieval.** Ranking existing segments and naming absent
+  terms is cheap and citable; synthesising an answer in the CLI would be a
+  second, unverified narrator. Keep it deterministic.
+- **Cache keys must include post-analysis flags.** OCR/faces/objects/pose run
+  after the engine, so `AnalysisConfig` alone is not enough; the annotation
+  fingerprint and schema version are part of the key.
+- **A cached document is a record, not a new run.** Keep its `created_unix_ms`
+  and run timings, rewrite the media path, and mark it `analysis_cached`.
 
 ## 9. For the next agent
 
@@ -453,8 +500,9 @@ Start with `git status`, this file, `docs/STATUS.md`, then §7. The skill and
 vision cycles are closed: **hard 16/16 / 14 773 median, easy 8/8 / 8 818, long
 16/16 / 13 443**; Gemini alone 14/16 vs 16/16 with the skill; TwelveLabs 10/16.
 The AOSC streaming cycle is closed: `fvhrk` 4/4 speakers, DER 6.40 % (was 2/4,
-15.99 %), no regression on 1-4 speaker files. The next objective is the
-**opt-in local VLM**, then music notes, then distribution/launch.
+15.99 %), no regression on 1-4 speaker files. Cost tooling is in: cache,
+`query ask`, and pose. The next objective is the **opt-in local VLM**, then the
+visual-boundary agent run, music notes, and distribution/launch.
 
 Do not re-litigate the rejected experiments (VAD gate at 0.45, merge tie-break,
 count heuristics), do not preload reference files, and quote medians + ranges

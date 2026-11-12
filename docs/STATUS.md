@@ -16,11 +16,11 @@ runtime, no GPL.
 
 | | |
 |---|---|
-| Rust | 19 099 lines across 7 crates (`providers` 5 330, `cli` 5 774, `engine` 2 638, `core` 2 080, `dsp` 1 360, `media` 1 226, `eval` 691) |
-| Query commands | 15 (`brief`, `timeline`, `at`, `search`, `transcript`, `words`, `speakers`, `chapters`, `frames`, `music`, `acoustic`, `runs`, `summary`, `verify`, `help`) |
+| Rust | 20 910 lines across 7 crates (`providers` 5 681, `cli` 7 156, `engine` 2 638, `core` 2 158, `dsp` 1 360, `media` 1 226, `eval` 691) |
+| Query commands | 17 (`brief`, `ask`, `timeline`, `at`, `search`, `transcript`, `words`, `speakers`, `chapters`, `frames`, `poses`, `music`, `acoustic`, `runs`, `summary`, `verify`, `help`) |
 | CLI | `analyze`, `query`, `report` (HTML), `install-skill` (4 harnesses), `models fetch --set core\|full`, `doctor`, `inspect`, `schema` |
-| Models | 12, all SHA-256 pinned: Silero VAD, whisper tiny/base/small, wav2vec2 aligner, Sortformer 4spk, pyannote segmentation, WeSpeaker, PP-OCRv5 det/rec, YuNet face detection, YOLOS-tiny object detection |
-| Schema | 1.4.0 (`Document::validate`, additive 1.0 → 1.4) |
+| Models | 13, all SHA-256 pinned: Silero VAD, whisper tiny/base/small, wav2vec2 aligner, Sortformer 4spk streaming, pyannote segmentation, WeSpeaker, PP-OCRv5 det/rec, YuNet face detection, YOLOS-tiny object detection, MoveNet Multipose |
+| Schema | 1.5.0 (`Document::validate`, additive 1.0 → 1.5) |
 | Agent skill | `SKILL.md` (199 lines) + 5 references + 5 workflows + install guide |
 | Docs | 15 files incl. 5 ADRs; `EVAL.md`, `BENCHMARK.md`, `DOGFOOD.md`, `OCR.md` |
 
@@ -28,8 +28,8 @@ runtime, no GPL.
 
 | Check | Result |
 |---|---|
-| `cargo test --workspace` | 153 passed, 0 failed |
-| with `full,metal` | 168 passed, 0 failed |
+| `cargo test --workspace` | 163 passed, 0 failed |
+| with `full,metal` | 178 passed, 0 failed |
 | `cargo clippy -D warnings` | clean (default and full) |
 | `cargo fmt --check` | clean |
 | Model-free build | tests pass with no models, no cmake, no ONNX runtime |
@@ -49,6 +49,7 @@ runtime, no GPL.
 | OCR | lines | 2/2, 6/6, 7/7 CJK | synthetic slides and a terminal screenshot, PP-OCRv5, 0.987 confidence on the benchmark slide |
 | Video | cut accuracy | ±0.5 s | 3-shot synthetic video, 2 fps signatures; colour-cut bug found and fixed |
 | Faces | detection | 3/3 on a synthetic 3-face frame, 1/1 on a portrait (score 0.888–0.946) | YuNet on keyframes, count and boxes only, no identity; a face between sampled keyframes is missed |
+| Pose | keypoints | portrait: 1 person, 11 keypoints above 0.3 (nose 0.79, shoulders 0.76/0.89); a face-only 3-face frame: 3 person-shaped false positives (0.41–0.62) | MoveNet Multipose on keyframes, 17 COCO points, detection only; a close-up can invent a body, so pose is an observation, not a body-presence oracle |
 | Objects | detection | portrait: `person` 0.999 + `tie` 0.991; 6 slide keyframes: 0 false positives | YOLOS-tiny, 91 COCO classes, threshold 0.5, keyframes only |
 | Alignment | word drift vs Whisper | **median 110 ms** | wav2vec2 CTC, English, two-voice fixture; 88 % within 600 ms |
 | Music | tempo / key / sections | 120.3 vs 120 BPM; C major correct; A–B–A boundaries within 160 ms | synthetic clicks, triads and a 30 s C–G–C track |
@@ -57,6 +58,7 @@ runtime, no GPL.
 | Agent | answers | **16/20 vs 20/20** easy; **7/16 vs 16/16** hard | no skill vs skill; the hard fixture is a 4 min, 4-voice meeting with no ASR/OCR tools for the baseline |
 | Agent, `query brief` v2 | fresh tokens | medians: easy **8 818** (7 517–21 021, n=5), hard **14 773** (13 517–27 235, n=3), long **13 443** (11 308–15 578, n=2) | DeepSeek V4.1 Flash, clean dirs, fixed prompts; cost is agent-behaviour dominated; see BENCHMARK |
 | Agent, 20 min real meeting | score / cost | old skill **16/16 / 17 633**, new **16/16 / 11 308** | VoxConverse `fvhrk`, 4 speakers; those runs used the old document (2 labels + cap warning), the AOSC build now reports 4/4 at 6.40 % DER |
+| Agent, cost tooling | cache / evidence pack | cache hit **0.01 s** vs 7.64 s on the 14.4 s fixture; `query ask` 978 B text / 2 893 B JSON vs 3 912 B for three equivalent queries | bytes are not tokens; the agent benchmark has not been rerun with `ask` |
 | Agent, head-to-head | hard 4 min, 8 questions | manual: Gemini **14**, +skill **16**, TwelveLabs **10**, SONOLYTICA **16**; blind judge: **10 / 16 / 7 / 15**, ranking identical | Gemini is an agent with a shell, TwelveLabs a raw API; 19 valid citations for skill runs vs 7 and 3; see BENCHMARK |
 
 WER and DER are **pilots**, not leaderboard results: small subsets, one machine,
@@ -88,7 +90,7 @@ makes the agent **honest and citable**, not more perceptive.
 
 | | Native multimodal APIs | TwelveLabs / Gemini video | SONOLYTICA |
 |---|---|---|---|
-| Open-ended visual semantics | strong | strong (Pegasus / 1 fps) | **none** (no object/face model) |
+| Open-ended visual semantics | strong | strong (Pegasus / 1 fps) | **partial**: OCR, faces, objects and pose at keyframes; no general VLM |
 | Exact word quotes + timestamps | weak / unverifiable | summary-level | **word-level, from the document** |
 | Speaker turns and overlap flag | inconsistent | yes (paid) | yes, overlap split into simultaneous turns (Sortformer); pyannote fallback only flags |
 | Provenance and "absence is null" | no | no | **enforced by schema + validator** |
@@ -111,8 +113,10 @@ makes the agent **honest and citable**, not more perceptive.
    bass or instruments.
 4. **Alignment is English-only**: word timings are aligned with wav2vec2 CTC
    for English; other languages keep Whisper token timestamps.
-5. **No objects, faces or vision model**: keyframes and OCR are the whole
-   visual layer.
+5. **The visual layer is keyframe-bound**: OCR, faces, objects and pose run on
+   sampled keyframes. There is no general VLM, no tracking and no identity;
+   pose can hallucinate body parts on tightly cropped faces. "Not detected" is
+   never "absent".
 6. **Video keyframes are one per scene**: text or action inside a long static
    shot is missed.
 

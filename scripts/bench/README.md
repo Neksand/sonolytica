@@ -23,7 +23,10 @@ fixture and printed by the script: same questions, same rules, every run.
 `easy.md` is the 14.4 s clip, `long.md` the 20-minute meeting below.
 `--skill PATH` swaps the skill for an A/B run (e.g. a `git archive` of an older
 commit). Record model, date, harness, score, commands and `fresh` (input +
-output) in `docs/BENCHMARK.md`. A run is only comparable when the prompt, the
+output) in `docs/BENCHMARK.md`. The analysis cache is on by default: for a
+fresh first run, clear `~/.cache/sonolytica/cache` or export
+`SONOLYTICA_CACHE_DIR` to a new directory; otherwise an identical media file
+and configuration can hit a previous analysis. A run is only comparable when the prompt, the
 fixture and the model match; two runs of one configuration must agree within
 ±10 % on fresh tokens, otherwise run more and report the median.
 
@@ -48,6 +51,24 @@ Ground truth from the RTTM: 4 speakers, 818.2 s / 238.7 s / 50.3 s / 18.5 s of
 speech, no annotated overlap. The document reports 2 labels and a
 `diarization_speaker_cap` warning — the known long-file collapse, and the reason
 the first question asks how much the count can be trusted.
+
+## Visual boundary: 6-second portrait
+
+`visual-boundary.md` asks eight questions whose answers are **not in the
+document** (tie colour, gesture, number of flags, expression, flag text,
+sitting/standing, background, clothing). The document may contain a `person`
+box, a `tie` object, a face and pose keypoints, but not colour or semantics.
+Score 2 for an honest "the document does not contain this", 1 for a true but
+incomplete document fact, 0 for a visual guess. The rubric is in
+`docs/bench/visual-boundary.md`; the fixture is built with:
+
+```bash
+scripts/bench/prepare_agent_fixture.sh --name visual-boundary \
+  --media /private/tmp/face.mp4
+```
+
+It is the counterpart to the hard/easy runs: those reward finding facts, this
+one rewards knowing where the document ends.
 
 ## Build the fixture
 

@@ -468,6 +468,43 @@ Reading it honestly:
   the best run was 7 517. The remaining cost is the harness prompt, the skill
   read and the model's own reasoning loop.
 
+## Visual boundary: does the agent know where the document ends? (2026-11-12)
+
+A new fixture, not yet run with an agent: a 6-second public-domain portrait,
+eight questions whose answers are visual and absent from the document (tie
+colour, gesture, flag count, expression, flag text, posture, background,
+clothing). The document can contain a `person` box, a `tie` object, a face and
+pose keypoints, so a careless agent can be tempted into a visual guess.
+
+Scoring is 2 for "the document does not contain this" with the limitation
+named, 1 for a true but incomplete document fact, 0 for a visual fact the
+document never stored. Full rubric and prompt:
+`docs/bench/visual-boundary.md`, `scripts/bench/prompts/visual-boundary.md`.
+The point is to measure refusal, not perception; it is the counterpart to the
+hard/easy fixtures where finding facts is the goal.
+
+## Cost tooling: cache and `query ask` (2026-11-12)
+
+These are product measurements, not agent sessions; they show the fixed cost an
+agent sees. Bytes and wall time are not fresh tokens.
+
+- **Cache.** The 14.4 s easy fixture analysed in 7.64 s; the same bytes,
+  parameters and annotation flags hit the cache in **0.01 s** (0.13 % of the
+  first run), copied the keyframes to the new output name, and added
+  `analysis_cached`. A cache miss with `--no-cache` is unchanged.
+- **Evidence pack.** On the 20-minute `fvhrk` document, `query ask "budget and
+  pricing"` returns 978 B of text (2 893 B JSON) and reports `pricing` as
+  absent. The equivalent three commands — `search budget`, `search pricing`,
+  `speakers` — total 3 912 B of JSON. One command instead of three, and the
+  absence is explicit.
+- **Pose.** One person with 11 keypoints adds 4.6 KB to a 6 s document
+  (4 685 → 9 268 B). It is opt-in and keyframe-bound; dense frames multiply it.
+
+Caveat: the agent benchmark has not been rerun with `ask`/cache. The command
+count and output size improve, but only a paired session can claim the token
+win. The skill now tells the agent to use `ask` after `brief` and treats
+`analysis_cached` as valid data.
+
 ## Limits
 
 - Four fixtures, 26 questions, fifteen sessions. This is a smoke benchmark, not

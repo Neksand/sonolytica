@@ -1,4 +1,4 @@
-# Document schema (v1.4.0)
+# Document schema (v1.5.0)
 
 One analysis produces one `Document`. It is designed for machine consumption:
 typed fields, stable names, explicit units, and no placeholders standing in for
@@ -10,7 +10,7 @@ unknown values.
 |---|---|
 | Timeline | `MediaTime` = integer **microseconds** from the start of the container |
 | Interval | `TimeRange { start, end }`, half-open `[start, end)` |
-| Modality | `Track.kind`: `speech`, `speaker_turn`, `music`, `acoustic`, `scene`, `text`, `object`, `face` |
+| Modality | `Track.kind`: `speech`, `speaker_turn`, `music`, `acoustic`, `scene`, `text`, `object`, `face`, `pose` |
 | Identity | `Track.id` and `Segment.id` equal their index in `tracks` / `segments` |
 | Hierarchy | `Segment.parent` points into another track (refinement, not grouping) |
 | Cross-modal facts | `relations[]` with typed `kind` |
@@ -26,7 +26,7 @@ validator enforces this (`segment_bounds`, `word_bounds`).
 
 ```jsonc
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.5.0",
   "generator": { "name": "sonolytica", "version": "0.1.0" },
   "created_unix_ms": 1794345592518,
 
@@ -166,11 +166,13 @@ can be moved together. A still image carries a point range (`start == end`).
 | `scene` | `index`, `cut` |
 | `text_overlay` | `text`, `bbox` — an OCR line from one keyframe |
 | `object` | `class`, `bbox?` |
+| `pose` | `person` (slot within the frame), `bbox?`, `keypoints[]` — 17 COCO `name`, `x`, `y`, `score`, all normalised `0..1` |
 
 `scene` segments come from shot detection (2 fps frame signatures, adaptive
 threshold); `cut: true` marks a detected edit, the first scene has `cut: false`.
-They are technical boundaries, not topics. Object, face and on-screen-text
-analysis is not implemented yet.
+They are technical boundaries, not topics. OCR, faces, objects and pose are
+keyframe-bound: one observation per sampled keyframe, no tracking and no claim
+about the frames in between. "Not detected" is not "absent".
 
 `speaker` labels are stable within a document, not across recordings. There is
 no claim that `S1` in two files is the same person.
@@ -207,6 +209,7 @@ A capability with no provider does **not** create a failed run: it appears in
 | `parent_cycle` | no segment is its own parent |
 | `relation_ref`, `relation_self` | edges resolve and are not self-loops |
 | `confidence_range` | confidence is finite and within `[0,1]` |
+| `pose_keypoint`, `pose_bbox` | pose coordinates are finite and within `[0,1]` |
 | `segment_bounds`, `word_bounds` | timestamps never exceed the media duration |
 | `range_order`, `word_order` | end is not before start |
 | `artifact_path`, `artifact_bounds` | an artifact has a path and lies within the media |
@@ -223,7 +226,8 @@ A capability with no provider does **not** create a failed run: it appears in
   there are no silent reinterpretations.
 - `1.1.0` adds `artifacts[]`; `1.2.0` adds `text_overlay` segments and the
   `text` track kind; `1.3.0` adds the `align` capability and `config.align_words`;
-  `1.4.0` adds `music.sections`. Every older document stays readable.
+  `1.4.0` adds `music.sections`; `1.5.0` adds `pose` segments and the `pose`
+  track kind. Every older document stays readable.
 
 ## Query commands
 
@@ -233,6 +237,12 @@ Nothing is mutated and no model is loaded.
 ```bash
 # One compact overview: media, runs, speech, speakers, chapters, counts
 sonolytica query brief doc.json --json
+
+# Rank evidence for one question; report absent terms (retrieval, not an answer)
+sonolytica query ask doc.json "budget and pricing" --json
+
+# Body keypoints per person per keyframe
+sonolytica query poses doc.json --max 20 --json
 
 # Everything that happens between 00:12 and 00:30 (half-open window)
 sonolytica query timeline doc.json --from 00:00:12 --to 00:00:30
@@ -267,7 +277,7 @@ sonolytica query runs doc.json
 ```
 
 `--type` accepts `speech`, `speaker_turn`, `music_label`, `acoustic_event`,
-`scene`, `object`.
+`scene`, `object`, `pose`, `text_overlay`.
 
 Chapters are derived, not stored: `query chapters` boundaries on silence longer
 than `--min-gap` (default 1.2 s), a change of speaker, or a scene cut. The

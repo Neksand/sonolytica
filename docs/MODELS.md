@@ -22,6 +22,7 @@ their licenses are their own.
 | `pp-ocrv5-det` / `pp-ocrv5-rec` | OCR detection + recognition | 4.8 / 16.5 MB | Apache-2.0 | PaddlePaddle ONNX release |
 | `yunet-face-detection` | Face detection (count and boxes) | 0.2 MB | MIT | OpenCV Zoo, `face_detection_yunet_2023mar.onnx` |
 | `yolos-tiny` | Object detection (91 COCO classes) | 26 MB | Apache-2.0 | Xenova/yolos-tiny ONNX export |
+| `movenet-multipose` | Body pose (up to 6 people, 17 COCO keypoints) | 19 MB | Apache-2.0 | Xenova/movenet-multipose-lightning ONNX export of Google MoveNet |
 
 Pinned digests live in the registry and are printed by `sonolytica models
 list`. If a file's digest does not match, it is rejected and the run reports a
@@ -56,6 +57,10 @@ list`. If a file's digest does not match, it is rejected and the run reports a
   fallback when Sortformer is not installed or inference fails. SONOLYTICA uses
   single-speaker regions for embeddings and reports overlap globally; it does
   not invent two simultaneous speaker turns from the overlap classes.
+- **MoveNet Multipose** detects up to six people per keyframe and returns 17
+  COCO body keypoints (`x`, `y`, `score`, normalised to the frame). Detection
+  only: no tracking, no identity and no coverage between sampled keyframes.
+  The model is Apache-2.0; the input is a 256×256 letterboxed RGB image.
 - **YOLOS-tiny** detects 91 COCO object classes on extracted keyframes. It is a
   DETR-style query model: softmax over class ids (id 91 is background), boxes
   normalised to the resized image, threshold 0.5. Class, box and score only; no
@@ -77,7 +82,7 @@ list`. If a file's digest does not match, it is rejected and the run reports a
 | `silero` | VAD via ONNX Runtime | prebuilt ONNX Runtime (downloaded by `ort`) |
 | `whisper` | ASR via whisper.cpp | cmake, C/C++ toolchain |
 | `diarize` | Sortformer, pyannote segmentation and WeSpeaker embeddings via ONNX Runtime; Kaldi fbank for the fallback | ONNX Runtime (fbank path needs cmake) |
-| `vision` | YuNet face detection via ONNX Runtime | prebuilt ONNX Runtime |
+| `vision` | YuNet faces, YOLOS objects and MoveNet pose via ONNX Runtime | prebuilt ONNX Runtime |
 | `metal` | whisper.cpp Metal backend (Apple silicon) | macOS |
 | `full` | all of the above | cmake, toolchain, ONNX Runtime |
 
