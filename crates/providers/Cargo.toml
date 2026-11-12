@@ -18,10 +18,12 @@ whisper = ["dep:whisper-rs", "dep:hound"]
 diarize = ["dep:ort", "dep:ndarray", "dep:knf-rs", "dep:hound", "dep:rustfft"]
 # PP-OCRv5 text detection and recognition through ONNX Runtime.
 ocr = ["dep:ort", "dep:image"]
+# YuNet face detection (count and boxes only) through ONNX Runtime.
+vision = ["dep:ort", "dep:image"]
 # wav2vec2 CTC forced word alignment through ONNX Runtime.
 align = ["dep:ort"]
 # Everything, for a full local pipeline.
-full = ["silero", "whisper", "diarize", "ocr", "align"]
+full = ["silero", "whisper", "diarize", "ocr", "vision", "align"]
 # Apple Silicon GPU inference for whisper.cpp.
 metal = ["whisper-rs?/metal"]
 

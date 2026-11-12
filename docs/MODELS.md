@@ -19,6 +19,8 @@ their licenses are their own.
 | `sortformer-4spk-v2` | Diarization (up to 4 speakers, overlap) | 469 MB | CC-BY-4.0 | ONNX export of `nvidia/diar_streaming_sortformer_4spk-v2` |
 | `pyannote-segmentation-3.0` | Diarization (speaker change) | 6 MB | MIT | pyannote-rs release (ONNX export of pyannote/segmentation-3.0) |
 | `wespeaker-campplus` | Speaker embeddings | 28 MB | Apache-2.0 | pyannote-rs release (WeSpeaker CAM++) |
+| `pp-ocrv5-det` / `pp-ocrv5-rec` | OCR detection + recognition | 4.8 / 16.5 MB | Apache-2.0 | PaddlePaddle ONNX release |
+| `yunet-face-detection` | Face detection (count and boxes) | 0.2 MB | MIT | OpenCV Zoo, `face_detection_yunet_2023mar.onnx` |
 
 Pinned digests live in the registry and are printed by `sonolytica models
 list`. If a file's digest does not match, it is rejected and the run reports a
@@ -52,6 +54,10 @@ list`. If a file's digest does not match, it is rejected and the run reports a
   fallback when Sortformer is not installed or inference fails. SONOLYTICA uses
   single-speaker regions for embeddings and reports overlap globally; it does
   not invent two simultaneous speaker turns from the overlap classes.
+- **YuNet** detects faces on extracted keyframes: boxes, five landmarks and a
+  score. It does **not** produce embeddings, names or identities; the document
+  stores `object` segments with class `face` and a box. Counts are per sampled
+  keyframe, not per frame, so a face that appears between keyframes is missed.
 - **WeSpeaker CAM++** produces 256-dimensional speaker embeddings from Kaldi
   fbank features. Clustering (cosine similarity, average linkage, budget-aware
   merging) is implemented in `crates/providers/src/diarize.rs`, not in a model.
@@ -64,6 +70,7 @@ list`. If a file's digest does not match, it is rejected and the run reports a
 | `silero` | VAD via ONNX Runtime | prebuilt ONNX Runtime (downloaded by `ort`) |
 | `whisper` | ASR via whisper.cpp | cmake, C/C++ toolchain |
 | `diarize` | Sortformer, pyannote segmentation and WeSpeaker embeddings via ONNX Runtime; Kaldi fbank for the fallback | ONNX Runtime (fbank path needs cmake) |
+| `vision` | YuNet face detection via ONNX Runtime | prebuilt ONNX Runtime |
 | `metal` | whisper.cpp Metal backend (Apple silicon) | macOS |
 | `full` | all of the above | cmake, toolchain, ONNX Runtime |
 

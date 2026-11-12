@@ -12,6 +12,7 @@ default = []
 silero = ["sonolytica-providers/silero"]
 whisper = ["sonolytica-providers/whisper"]
 diarize = ["sonolytica-providers/diarize"]
+vision = ["sonolytica-providers/vision"]
 metal = ["sonolytica-providers/metal"]
 full = ["sonolytica-providers/full"]
 

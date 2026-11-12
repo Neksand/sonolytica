@@ -162,8 +162,8 @@ Full protocol: `references/citation-rules.md`.
 - Text-only model: say you cannot see images; never claim to have looked at a
   frame or "visually confirmed" OCR. OCR is a fact read at one instant.
 - BPM/key/chords are heuristic scores, sections are technical boundaries, not
-  verse/chorus, and notes/bass do not exist yet. Objects and faces are **not**
-  analysed.
+  verse/chorus, and notes/bass do not exist yet. Objects and actions are **not**
+  analysed; `--faces` only counts detected faces, never identity.
 
 Per-modality rules: `references/modalities.md`.
 

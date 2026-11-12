@@ -1163,6 +1163,12 @@ fn brief(doc: &Document, json: bool) -> Result<()> {
         .map(|segment| segment.range.start.micros())
         .take(BRIEF_SCENE_CUTS)
         .collect();
+    let faces = doc
+        .segments_of_kind("object")
+        .filter(
+            |segment| matches!(&segment.kind, SegmentKind::Object { class, .. } if class == "face"),
+        )
+        .count();
     let video = BriefVideo {
         scenes: scene_segments.len(),
         keyframes: doc
@@ -1171,6 +1177,7 @@ fn brief(doc: &Document, json: bool) -> Result<()> {
             .filter(|artifact| artifact.kind == "keyframe")
             .count(),
         text_overlays: doc.segments_of_kind("text_overlay").count(),
+        faces,
         scene_cuts,
         ocr: brief_ocr(doc),
     };
@@ -1386,6 +1393,12 @@ fn brief(doc: &Document, json: bool) -> Result<()> {
             count_label(video.keyframes, "keyframe", "keyframes"),
             count_label(video.text_overlays, "text overlay", "text overlays")
         );
+        if video.faces > 0 {
+            println!(
+                "faces      {}",
+                count_label(video.faces, "detection", "detections")
+            );
+        }
         if !video.scene_cuts.is_empty() {
             let cuts = video
                 .scene_cuts
@@ -2016,6 +2029,8 @@ struct BriefVideo {
     scenes: usize,
     keyframes: usize,
     text_overlays: usize,
+    /// Face detections across keyframes; count only, never identity.
+    faces: usize,
     /// Start of each detected cut, microseconds; empty when nothing was cut.
     scene_cuts: Vec<i64>,
     /// First OCR line per keyframe instant, at most `BRIEF_OCR_LINES`.

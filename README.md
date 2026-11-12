@@ -76,6 +76,7 @@ Every quote carries its range; warnings are shown, not hidden.
 | Alignment | word boundaries, ~110 ms median drift | wav2vec2 CTC (English) |
 | Video | shots, cuts, keyframes (dense with `--frame-stride`) | FFmpeg signatures (2 fps) |
 | On-screen text | exact OCR lines with boxes | PP-OCRv5 |
+| Faces | count and boxes per keyframe, never identity | YuNet (opt-in `--faces`) |
 | Music | tempo, key, triads, sections, loudness | local DSP |
 | Acoustics | silence, LRA, true peak | local DSP |
 
@@ -84,9 +85,9 @@ document passes `Document::validate` before it is written.
 
 ## What it does not do (honest)
 
-- **No semantics.** No object, face or action model in this release; keyframes
-  and OCR are the whole visual layer. A local VLM is opt-in roadmap work, not a
-  shipped feature.
+- **No objects or actions.** Faces can be detected and counted (`--faces`,
+  boxes only, no identity), but there is no object or action model and no VLM
+  in this release. Keyframes, OCR and face boxes are the whole visual layer.
 - **Diarization caps at four speakers.** Above 10 minutes a
   `diarization_speaker_cap` warning says the count is approximate. Long-meeting
   streaming is the next quality milestone.

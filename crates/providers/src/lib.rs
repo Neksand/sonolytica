@@ -10,6 +10,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 pub mod align;
+pub mod face;
 pub mod models;
 pub mod ocr;
 pub mod registry;
@@ -19,6 +20,7 @@ pub mod traits;
     feature = "silero",
     feature = "diarize",
     feature = "ocr",
+    feature = "vision",
     feature = "align"
 ))]
 #[cfg_attr(not(any(feature = "silero", feature = "diarize")), allow(dead_code))]

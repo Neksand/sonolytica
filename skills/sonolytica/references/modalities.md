@@ -64,4 +64,7 @@ Detail behind §10 of `SKILL.md`. Open only the section you need.
   not run — say so instead of guessing.
 - A scene is a technical cut, a frame is a still at one instant. Neither is a
   topic, and a keyframe is not a summary of the shot.
-- Objects and faces are **not** analysed. Do not claim them from metadata.
+- Objects and actions are **not** analysed. `analyze --faces` runs YuNet on the
+  keyframes and stores `object` segments with class `face`, a box and a score:
+  count and position only, **never identity, names or embeddings**. A face
+  between sampled keyframes is missed; use `--frame-stride` for dense coverage.

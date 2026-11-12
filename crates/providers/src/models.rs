@@ -143,6 +143,16 @@ pub const MODELS: &[ModelSpec] = &[
         approx_bytes: 16_534_782,
         notes: "PP-OCRv5 mobile CTC recognition; 18383-character dictionary shipped with the crate.",
     },
+    ModelSpec {
+        id: "yunet-face-detection",
+        capability: Capability::Vision,
+        filename: "yunet_face_detection_2023mar.onnx",
+        url: "https://media.githubusercontent.com/media/opencv/opencv_zoo/48b10fa505aeb51fbd127fc60a5c660040e823b7/models/face_detection_yunet/face_detection_yunet_2023mar.onnx",
+        sha256: "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
+        license: "MIT",
+        approx_bytes: 232_589,
+        notes: "YuNet face detection (OpenCV Zoo). Count and boxes only; no identity, no embeddings.",
+    },
 ];
 
 pub fn find_model(id: &str) -> Option<&'static ModelSpec> {
