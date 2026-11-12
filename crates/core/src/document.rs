@@ -100,6 +100,16 @@ pub struct BBox {
     pub height: f32,
 }
 
+/// One body keypoint, normalised to the frame (`0..1`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Keypoint {
+    /// COCO name, e.g. `left_shoulder`.
+    pub name: String,
+    pub x: f32,
+    pub y: f32,
+    pub score: f32,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TrackKind {
@@ -110,6 +120,8 @@ pub enum TrackKind {
     Scene,
     Object,
     Face,
+    /// Body pose keypoints, one segment per person per keyframe.
+    Pose,
     /// Text read from the picture (OCR), one segment per line.
     Text,
 }
@@ -155,6 +167,13 @@ pub enum SegmentKind {
         class: String,
         bbox: Option<BBox>,
     },
+    /// One person's body keypoints at one keyframe. Detection only: no
+    /// tracking, no identity, and no claim about frames that were not sampled.
+    Pose {
+        person: u16,
+        bbox: Option<BBox>,
+        keypoints: Vec<Keypoint>,
+    },
     /// Text visible in the picture at one instant, as produced by OCR. The
     /// range is the keyframe's instant, not a claim about how long the text
     /// was on screen.
@@ -173,6 +192,7 @@ impl SegmentKind {
             Self::AcousticEvent { .. } => "acoustic_event",
             Self::Scene { .. } => "scene",
             Self::Object { .. } => "object",
+            Self::Pose { .. } => "pose",
             Self::TextOverlay { .. } => "text_overlay",
         }
     }
@@ -566,6 +586,39 @@ impl Document {
                     ));
                 }
             }
+            if let SegmentKind::Pose {
+                keypoints, bbox, ..
+            } = &segment.kind
+            {
+                for keypoint in keypoints {
+                    if !keypoint.x.is_finite()
+                        || !keypoint.y.is_finite()
+                        || !(0.0..=1.0).contains(&keypoint.x)
+                        || !(0.0..=1.0).contains(&keypoint.y)
+                        || !keypoint.score.is_finite()
+                        || !(0.0..=1.0).contains(&keypoint.score)
+                    {
+                        out.push(Violation::new(
+                            "pose_keypoint",
+                            format!(
+                                "segment {} has an invalid pose keypoint `{}`",
+                                segment.id, keypoint.name
+                            ),
+                        ));
+                    }
+                }
+                if let Some(bbox) = bbox {
+                    if ![bbox.x, bbox.y, bbox.width, bbox.height]
+                        .iter()
+                        .all(|value| value.is_finite())
+                    {
+                        out.push(Violation::new(
+                            "pose_bbox",
+                            format!("segment {} has a non-finite pose box", segment.id),
+                        ));
+                    }
+                }
+            }
         }
 
         for (idx, track) in self.tracks.iter().enumerate() {
@@ -879,6 +932,31 @@ mod tests {
         b.set_parent(child, Some(parent));
         let violations = b.finish().expect_err("must fail");
         assert!(violations.iter().any(|v| v.code == "parent_contains_child"));
+    }
+
+    #[test]
+    fn pose_keypoints_outside_the_frame_are_rejected() {
+        let mut b = DocumentBuilder::new(media(), AnalysisConfig::default());
+        let r = b.add_run(run());
+        let track = b.add_track(TrackKind::Pose, "poses", r);
+        b.add_segment(
+            track,
+            TimeRange::empty(MediaTime::from_secs_f64(1.0)),
+            SegmentKind::Pose {
+                person: 0,
+                bbox: None,
+                keypoints: vec![Keypoint {
+                    name: "nose".into(),
+                    x: 1.2,
+                    y: 0.5,
+                    score: 0.9,
+                }],
+            },
+            None,
+            r,
+        );
+        let violations = b.finish().expect_err("must fail");
+        assert!(violations.iter().any(|v| v.code == "pose_keypoint"));
     }
 
     #[test]

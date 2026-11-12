@@ -1234,6 +1234,7 @@ dependencies = [
  "clap",
  "serde",
  "serde_json",
+ "sha2",
  "sonolytica-core",
  "sonolytica-engine",
  "sonolytica-media",

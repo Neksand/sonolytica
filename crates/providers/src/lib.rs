@@ -14,6 +14,7 @@ pub mod face;
 pub mod models;
 pub mod objects;
 pub mod ocr;
+pub mod pose;
 pub mod registry;
 pub mod traits;
 

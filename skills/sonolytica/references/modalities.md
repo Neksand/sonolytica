@@ -9,6 +9,10 @@ Detail behind §10 of `SKILL.md`. Open only the section you need.
 - Sortformer tracks at most four speakers. When all four slots are used the
   document adds a `diarization_speaker_cap` warning: the count is a lower bound,
   so say "at least N", never an exact count for 5+ voices.
+- `--pose` adds body keypoints from MoveNet Multipose: up to six people per
+  keyframe, 17 COCO points, normalised `0..1` with a score. Detection only: no
+  tracking, no identity, and no coverage between sampled keyframes. Say "not
+  detected at the sampled keyframes", never "the person was absent".
 - `overlap: true` means two people spoke at once. With Sortformer the document
   has two simultaneous `speaker_turn` segments; on the pyannote fallback it only
   flags the overlap. The transcript is still one ASR stream, so do not invent

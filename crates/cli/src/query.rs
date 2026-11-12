@@ -12,20 +12,21 @@ use anyhow::{Context, Result, anyhow, bail};
 use clap::{Args, Subcommand};
 use serde::{Deserialize, Serialize};
 use sonolytica_core::{
-    AcousticSummary, AnalysisBlock, AnalysisConfig, Bpm, Capability, Chord, Document, KeyEstimate,
-    Loudness, MediaInfo, MediaTime, MusicSummary, RunRecord, RunStatus, Section, Segment,
-    SegmentKind, SpeakerId, SpeechSummary, TimeRange, Warning, Word,
+    AcousticSummary, AnalysisBlock, AnalysisConfig, BBox, Bpm, Capability, Chord, Document,
+    KeyEstimate, Keypoint, Loudness, MediaInfo, MediaTime, MusicSummary, RunRecord, RunStatus,
+    Section, Segment, SegmentKind, SpeakerId, SpeechSummary, TimeRange, Warning, Word,
 };
 
 /// Segment kinds a document can contain. Kept explicit so `--type` rejects a
 /// typo instead of silently returning nothing.
-const SEGMENT_KINDS: [&str; 7] = [
+const SEGMENT_KINDS: [&str; 8] = [
     "speech",
     "speaker_turn",
     "music_label",
     "acoustic_event",
     "scene",
     "object",
+    "pose",
     "text_overlay",
 ];
 
@@ -165,10 +166,43 @@ pub enum QueryCommand {
         #[arg(long)]
         json: bool,
     },
+    /// Body pose keypoints per keyframe person
+    Poses {
+        /// Document produced by `sonolytica analyze`
+        doc: PathBuf,
+        /// Only poses at or after this instant
+        #[arg(long)]
+        from: Option<String>,
+        /// Only poses at or before this instant
+        #[arg(long)]
+        to: Option<String>,
+        /// Return at most this many people
+        #[arg(long)]
+        max: Option<usize>,
+        /// Emit typed JSON on stdout instead of a table
+        #[arg(long)]
+        json: bool,
+    },
     /// One compact overview: media, runs, speech, speakers, chapters, counts
     Brief {
         /// Document produced by `sonolytica analyze`
         doc: PathBuf,
+        /// Emit typed JSON on stdout instead of a table
+        #[arg(long)]
+        json: bool,
+    },
+    /// Rank document evidence for a question (deterministic retrieval, no model)
+    Ask {
+        /// Document produced by `sonolytica analyze`
+        doc: PathBuf,
+        /// Question or keywords; stopwords are dropped
+        question: String,
+        /// Maximum characters of evidence text (default 4000)
+        #[arg(long, default_value_t = 4000)]
+        budget: usize,
+        /// Maximum evidence items (default 12)
+        #[arg(long, default_value_t = 12)]
+        max: usize,
         /// Emit typed JSON on stdout instead of a table
         #[arg(long)]
         json: bool,
@@ -238,7 +272,21 @@ pub fn run(command: QueryCommand) -> Result<()> {
             max,
             json,
         ),
+        QueryCommand::Poses {
+            doc,
+            from,
+            to,
+            max,
+            json,
+        } => poses(&load(&doc)?, from.as_deref(), to.as_deref(), max, json),
         QueryCommand::Brief { doc, json } => brief(&load(&doc)?, json),
+        QueryCommand::Ask {
+            doc,
+            question,
+            budget,
+            max,
+            json,
+        } => ask(&load(&doc)?, &question, budget, max, json),
         QueryCommand::Summary { doc, json } => summary(&load(&doc)?, json),
         QueryCommand::Verify { doc, claims, json } => verify(&load(&doc)?, claims.as_deref(), json),
     }
@@ -1111,6 +1159,591 @@ fn brief_overlaps(doc: &Document) -> Vec<BriefOverlap> {
         .collect()
 }
 
+/// Stopwords for evidence retrieval. Kept short and bilingual: the question
+/// may be English or Russian while the document is in another language.
+const ASK_STOPWORDS: &[&str] = &[
+    "the",
+    "a",
+    "an",
+    "and",
+    "or",
+    "of",
+    "to",
+    "in",
+    "on",
+    "for",
+    "with",
+    "is",
+    "are",
+    "was",
+    "were",
+    "what",
+    "who",
+    "whom",
+    "whose",
+    "when",
+    "where",
+    "why",
+    "how",
+    "did",
+    "does",
+    "do",
+    "say",
+    "said",
+    "about",
+    "this",
+    "that",
+    "these",
+    "those",
+    "it",
+    "they",
+    "them",
+    "their",
+    "we",
+    "you",
+    "i",
+    "not",
+    "no",
+    "at",
+    "by",
+    "from",
+    "as",
+    "be",
+    "been",
+    "has",
+    "have",
+    "had",
+    "will",
+    "would",
+    "can",
+    "could",
+    "should",
+    "there",
+    "here",
+    "which",
+    "into",
+    "than",
+    "then",
+    "also",
+    "just",
+    "only",
+    "very",
+    "more",
+    "most",
+    "some",
+    "any",
+    "all",
+    "each",
+    "both",
+    "between",
+    "after",
+    "before",
+    "during",
+    "и",
+    "в",
+    "во",
+    "на",
+    "с",
+    "со",
+    "по",
+    "о",
+    "об",
+    "от",
+    "до",
+    "за",
+    "из",
+    "к",
+    "ко",
+    "у",
+    "не",
+    "ни",
+    "это",
+    "этот",
+    "эта",
+    "эти",
+    "тот",
+    "та",
+    "те",
+    "он",
+    "она",
+    "они",
+    "мы",
+    "вы",
+    "я",
+    "ты",
+    "был",
+    "была",
+    "были",
+    "быть",
+    "есть",
+    "сказал",
+    "сказала",
+    "сказали",
+    "про",
+    "для",
+    "при",
+    "над",
+    "под",
+    "без",
+    "или",
+    "а",
+    "но",
+    "да",
+    "нет",
+    "же",
+    "ли",
+    "бы",
+    "что",
+    "кто",
+    "где",
+    "когда",
+    "почему",
+    "как",
+    "сколько",
+    "чем",
+    "так",
+    "там",
+    "тут",
+    "ещё",
+    "еще",
+    "уже",
+    "только",
+    "очень",
+    "можно",
+    "нужно",
+];
+
+fn ask_terms(question: &str) -> Vec<String> {
+    let mut terms: Vec<String> = Vec::new();
+    for word in question.split(|c: char| !c.is_alphanumeric()) {
+        let word = word.trim().to_lowercase();
+        if word.chars().count() < 2 || ASK_STOPWORDS.contains(&word.as_str()) {
+            continue;
+        }
+        if !terms.contains(&word) {
+            terms.push(word);
+        }
+    }
+    terms
+}
+
+fn score_text(text: &str, terms: &[String]) -> (f32, usize) {
+    let lower = text.to_lowercase();
+    let mut score = 0.0_f32;
+    let mut hits = 0_usize;
+    for term in terms {
+        let count = lower.matches(term).count();
+        if count > 0 {
+            hits += 1;
+            score += count as f32;
+            if lower
+                .split(|c: char| !c.is_alphanumeric())
+                .any(|word| word == term)
+            {
+                score += 0.5;
+            }
+        }
+    }
+    (score, hits)
+}
+
+/// Count terms across every text segment, including speech that has no speaker
+/// turn. This is the absence evidence; scoring uses the same terms separately.
+fn count_terms(doc: &Document, terms: &[String]) -> BTreeMap<String, usize> {
+    let mut occurrences: BTreeMap<String, usize> =
+        terms.iter().map(|term| (term.clone(), 0)).collect();
+    for segment in &doc.segments {
+        let Some(text) = segment.kind.text() else {
+            continue;
+        };
+        let lower = text.to_lowercase();
+        for term in terms {
+            *occurrences.entry(term.clone()).or_default() += lower.matches(term).count();
+        }
+    }
+    occurrences
+}
+
+fn ask(doc: &Document, question: &str, budget: usize, max: usize, json: bool) -> Result<()> {
+    let terms = ask_terms(question);
+    let occurrences = count_terms(doc, &terms);
+    let mut evidence: Vec<AskEvidence<'_>> = Vec::new();
+
+    let turns = doc.dialogue();
+    if turns.is_empty() {
+        for segment in doc.segments_of_kind("speech") {
+            let SegmentKind::Speech { text, .. } = &segment.kind else {
+                continue;
+            };
+            let (score, hits) = score_text(text, &terms);
+            if hits > 0 {
+                evidence.push(AskEvidence {
+                    kind: "speech",
+                    start_us: segment.range.start.micros(),
+                    end_us: segment.range.end.micros(),
+                    speaker: None,
+                    text: Some(text),
+                    label: None,
+                    segment: Some(segment.id),
+                    frame: None,
+                    score,
+                    hits,
+                });
+            }
+        }
+    } else {
+        for turn in &turns {
+            let (score, hits) = score_text(&turn.text, &terms);
+            if hits > 0 {
+                evidence.push(AskEvidence {
+                    kind: "speaker_turn",
+                    start_us: turn.range.start.micros(),
+                    end_us: turn.range.end.micros(),
+                    speaker: Some(turn.speaker.as_str()),
+                    text: Some(&turn.text),
+                    label: None,
+                    segment: None,
+                    frame: None,
+                    score,
+                    hits,
+                });
+            }
+        }
+    }
+
+    for segment in doc.segments_of_kind("text_overlay") {
+        let SegmentKind::TextOverlay { text, .. } = &segment.kind else {
+            continue;
+        };
+        let (score, hits) = score_text(text, &terms);
+        if hits > 0 {
+            evidence.push(AskEvidence {
+                kind: "text_overlay",
+                start_us: segment.range.start.micros(),
+                end_us: segment.range.end.micros(),
+                speaker: None,
+                text: Some(text),
+                label: None,
+                segment: Some(segment.id),
+                frame: keyframe_at(doc, segment.range.start),
+                score: score * 1.2,
+                hits,
+            });
+        }
+    }
+
+    for segment in doc.segments_of_kind("object") {
+        let SegmentKind::Object { class, .. } = &segment.kind else {
+            continue;
+        };
+        let (score, hits) = score_text(class, &terms);
+        if hits > 0 {
+            evidence.push(AskEvidence {
+                kind: "object",
+                start_us: segment.range.start.micros(),
+                end_us: segment.range.end.micros(),
+                speaker: None,
+                text: None,
+                label: Some(class),
+                segment: Some(segment.id),
+                frame: keyframe_at(doc, segment.range.start),
+                score: score * 0.8,
+                hits,
+            });
+        }
+    }
+
+    for segment in &doc.segments {
+        let (kind, label) = match &segment.kind {
+            SegmentKind::MusicLabel { label } => ("music_label", label.as_str()),
+            SegmentKind::AcousticEvent { class } => ("acoustic_event", class.as_str()),
+            _ => continue,
+        };
+        let (score, hits) = score_text(label, &terms);
+        if hits > 0 {
+            evidence.push(AskEvidence {
+                kind,
+                start_us: segment.range.start.micros(),
+                end_us: segment.range.end.micros(),
+                speaker: None,
+                text: None,
+                label: Some(label),
+                segment: Some(segment.id),
+                frame: None,
+                score: score * 0.8,
+                hits,
+            });
+        }
+    }
+
+    evidence.sort_by(|a, b| {
+        b.score
+            .total_cmp(&a.score)
+            .then_with(|| a.start_us.cmp(&b.start_us))
+    });
+    evidence.truncate(max);
+
+    let mut used_chars = 0_usize;
+    let mut truncated = false;
+    let mut kept = Vec::with_capacity(evidence.len());
+    for item in evidence {
+        let size = item
+            .text
+            .map_or_else(|| item.label.map_or(0, str::len), str::len);
+        if !kept.is_empty() && used_chars + size > budget {
+            truncated = true;
+            break;
+        }
+        used_chars += size;
+        kept.push(item);
+    }
+
+    let absence: Vec<AskAbsence> = occurrences
+        .iter()
+        .filter(|(_, count)| **count == 0)
+        .map(|(term, count)| AskAbsence {
+            term: term.clone(),
+            occurrences: *count,
+        })
+        .collect();
+    let searched_segments = doc
+        .segments
+        .iter()
+        .filter(|segment| segment.kind.text().is_some())
+        .count();
+
+    if json {
+        return emit(&AskOutput {
+            question,
+            terms: &terms,
+            budget_chars: budget,
+            used_chars,
+            truncated,
+            searched_segments,
+            evidence: kept,
+            absence,
+            media: AskMedia {
+                duration_us: doc.duration().micros(),
+                has_video: doc.media.has_video(),
+                speakers: speaker_views(doc),
+            },
+            warnings: &doc.warnings,
+            hint: ASK_HINT,
+        });
+    }
+
+    println!("question: {question}");
+    println!(
+        "terms: {}",
+        if terms.is_empty() {
+            "(none)".into()
+        } else {
+            terms.join(", ")
+        }
+    );
+    println!(
+        "media: {}, {} speaker(s), {} text segment(s)",
+        doc.duration(),
+        speaker_views(doc).len(),
+        searched_segments
+    );
+    if kept.is_empty() {
+        println!("evidence: (none)");
+    } else {
+        println!("evidence:");
+        for item in &kept {
+            println!("{}", ask_line(item));
+        }
+    }
+    for item in &absence {
+        println!(
+            "absence: {:?} 0/{} text segment(s)",
+            item.term, searched_segments
+        );
+    }
+    if truncated {
+        println!("truncated: budget {budget} char(s) reached");
+    }
+    println!("hint: {}", ASK_HINT);
+    Ok(())
+}
+
+const ASK_HINT: &str = "This is retrieval, not an answer: quote only these ranges; use `query words` for exact \
+     onsets and `query verify` before claiming a quote.";
+
+fn keyframe_at(doc: &Document, instant: MediaTime) -> Option<&str> {
+    doc.artifacts
+        .iter()
+        .find(|artifact| artifact.kind == "keyframe" && artifact.range.start == instant)
+        .map(|artifact| artifact.path.as_str())
+}
+
+fn ask_line(item: &AskEvidence<'_>) -> String {
+    let mut line = format!(
+        "{}–{}  {:<14}",
+        MediaTime::from_micros(item.start_us),
+        MediaTime::from_micros(item.end_us),
+        item.kind
+    );
+    if let Some(speaker) = item.speaker {
+        let _ = write!(line, " {speaker:<4}");
+    }
+    let body = item
+        .text
+        .map(truncate)
+        .or_else(|| item.label.map(truncate))
+        .unwrap_or_default();
+    if !body.is_empty() {
+        line.push(' ');
+        line.push_str(&body);
+    }
+    let _ = write!(line, "  [score {:.1}]", item.score);
+    line
+}
+
+#[derive(Debug, Serialize)]
+struct PosesOutput<'a> {
+    count: usize,
+    poses: Vec<PoseView<'a>>,
+}
+
+#[derive(Debug, Serialize)]
+struct PoseView<'a> {
+    id: u32,
+    start_us: i64,
+    end_us: i64,
+    person: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    bbox: Option<&'a BBox>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    confidence: Option<f32>,
+    keypoints: &'a [Keypoint],
+}
+
+#[derive(Debug, Serialize)]
+struct AskOutput<'a> {
+    question: &'a str,
+    terms: &'a [String],
+    budget_chars: usize,
+    used_chars: usize,
+    truncated: bool,
+    searched_segments: usize,
+    evidence: Vec<AskEvidence<'a>>,
+    absence: Vec<AskAbsence>,
+    media: AskMedia<'a>,
+    warnings: &'a [Warning],
+    hint: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct AskMedia<'a> {
+    duration_us: i64,
+    has_video: bool,
+    speakers: Vec<SpeakerView<'a>>,
+}
+
+#[derive(Debug, Serialize)]
+struct AskEvidence<'a> {
+    kind: &'static str,
+    start_us: i64,
+    end_us: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    speaker: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    text: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    label: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    segment: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    frame: Option<&'a str>,
+    score: f32,
+    hits: usize,
+}
+
+#[derive(Debug, Serialize)]
+struct AskAbsence {
+    term: String,
+    occurrences: usize,
+}
+
+fn poses(
+    doc: &Document,
+    from: Option<&str>,
+    to: Option<&str>,
+    max: Option<usize>,
+    json: bool,
+) -> Result<()> {
+    let from = from.map(parse_time).transpose()?.unwrap_or(MediaTime::ZERO);
+    let to = to.map(parse_time).transpose()?;
+    let mut views: Vec<PoseView<'_>> = doc
+        .segments_of_kind("pose")
+        .filter_map(|segment| {
+            if segment.range.start < from || to.is_some_and(|end| segment.range.end > end) {
+                return None;
+            }
+            let SegmentKind::Pose {
+                person,
+                bbox,
+                keypoints,
+            } = &segment.kind
+            else {
+                return None;
+            };
+            Some(PoseView {
+                id: segment.id,
+                start_us: segment.range.start.micros(),
+                end_us: segment.range.end.micros(),
+                person: *person,
+                bbox: bbox.as_ref(),
+                confidence: segment.confidence.map(|value| value.get()),
+                keypoints,
+            })
+        })
+        .collect();
+    views.sort_by_key(|view| (view.start_us, view.person));
+    views.truncate(max.unwrap_or(usize::MAX));
+
+    if json {
+        return emit(&PosesOutput {
+            count: views.len(),
+            poses: views,
+        });
+    }
+    if views.is_empty() {
+        println!("(none)");
+        return Ok(());
+    }
+    for view in &views {
+        println!("{}", pose_line(view));
+    }
+    Ok(())
+}
+
+fn pose_line(view: &PoseView<'_>) -> String {
+    let mut line = format!(
+        "{}–{}  person {}",
+        MediaTime::from_micros(view.start_us),
+        MediaTime::from_micros(view.end_us),
+        view.person
+    );
+    if let Some(bbox) = view.bbox {
+        let _ = write!(
+            line,
+            "  box {:.2},{:.2} {:.2}x{:.2}",
+            bbox.x, bbox.y, bbox.width, bbox.height
+        );
+    }
+    for keypoint in view.keypoints {
+        let _ = write!(
+            line,
+            "  {}({:.2},{:.2},{:.2})",
+            keypoint.name, keypoint.x, keypoint.y, keypoint.score
+        );
+    }
+    line
+}
+
 fn brief(doc: &Document, json: bool) -> Result<()> {
     let summary = analysis_speech(doc);
     let speech_segments: Vec<&Segment> = doc.segments_of_kind("speech").collect();
@@ -1163,6 +1796,7 @@ fn brief(doc: &Document, json: bool) -> Result<()> {
         .map(|segment| segment.range.start.micros())
         .take(BRIEF_SCENE_CUTS)
         .collect();
+    let poses = doc.segments_of_kind("pose").count();
     let faces = doc
         .segments_of_kind("object")
         .filter(
@@ -1176,6 +1810,7 @@ fn brief(doc: &Document, json: bool) -> Result<()> {
         )
         .count();
     let video = BriefVideo {
+        poses,
         scenes: scene_segments.len(),
         keyframes: doc
             .artifacts
@@ -1400,6 +2035,12 @@ fn brief(doc: &Document, json: bool) -> Result<()> {
             count_label(video.keyframes, "keyframe", "keyframes"),
             count_label(video.text_overlays, "text overlay", "text overlays")
         );
+        if video.poses > 0 {
+            println!(
+                "poses      {}",
+                count_label(video.poses, "person", "people")
+            );
+        }
         if video.faces > 0 {
             println!(
                 "faces      {}",
@@ -1743,6 +2384,9 @@ fn label_of(kind: &SegmentKind) -> Option<String> {
             Some(format!("scene {index}{}", if *cut { " (cut)" } else { "" }))
         }
         SegmentKind::Object { class, .. } => Some(class.clone()),
+        SegmentKind::Pose {
+            person, keypoints, ..
+        } => Some(format!("person {person} ({} keypoints)", keypoints.len())),
         SegmentKind::TextOverlay { bbox, .. } => Some(format!(
             "{:.0}x{:.0} at {:.0},{:.0}",
             bbox.width, bbox.height, bbox.x, bbox.y
@@ -2033,6 +2677,8 @@ struct BriefOverlap {
 
 #[derive(Debug, Serialize)]
 struct BriefVideo {
+    /// Pose detections across keyframes; each is one person at one instant.
+    poses: usize,
     scenes: usize,
     keyframes: usize,
     text_overlays: usize,

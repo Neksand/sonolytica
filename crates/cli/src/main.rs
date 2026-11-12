@@ -13,6 +13,7 @@ use sonolytica_engine::Engine;
 use sonolytica_providers::{ModelStore, default_model_dir, models::MODELS};
 use tracing_subscriber::EnvFilter;
 
+mod cache;
 mod query;
 mod report;
 mod skill;
@@ -30,6 +31,11 @@ struct Cli {
     /// Model directory (defaults to $SONOLYTICA_MODEL_DIR or ~/.cache/sonolytica/models)
     #[arg(long, global = true, env = "SONOLYTICA_MODEL_DIR")]
     models_dir: Option<PathBuf>,
+
+    /// Analysis cache directory (defaults to $SONOLYTICA_CACHE_DIR or
+    /// ~/.cache/sonolytica/cache)
+    #[arg(long, global = true, env = "SONOLYTICA_CACHE_DIR")]
+    cache_dir: Option<PathBuf>,
 
     /// Increase log verbosity (repeatable)
     #[arg(long, global = true, action = clap::ArgAction::Count)]
@@ -56,6 +62,8 @@ enum Command {
         #[command(subcommand)]
         command: ModelsCommand,
     },
+    /// Inspect or clear the analysis cache
+    Cache(CacheArgs),
     /// Environment and capability check
     Doctor,
     /// Print the document schema example
@@ -76,6 +84,13 @@ struct InstallSkillArgs {
     /// Remove the installed skill
     #[arg(long)]
     uninstall: bool,
+}
+
+#[derive(Debug, Args)]
+struct CacheArgs {
+    /// Remove every cached analysis
+    #[arg(long)]
+    clear: bool,
 }
 
 #[derive(Debug, Args)]
@@ -148,6 +163,13 @@ struct AnalyzeArgs {
     /// Detect COCO objects on the keyframes (91 classes, boxes and scores)
     #[arg(long)]
     objects: bool,
+    /// Detect body pose on the keyframes: up to 6 people, 17 COCO keypoints,
+    /// detection only (no tracking or identity)
+    #[arg(long)]
+    pose: bool,
+    /// Re-run even when a cached analysis of the same bytes and parameters exists
+    #[arg(long)]
+    no_cache: bool,
     /// Exit with status 2 if any stage failed or a requested capability did not run
     #[arg(long)]
     strict: bool,
@@ -254,6 +276,7 @@ async fn main() -> ExitCode {
 
 async fn run(cli: Cli) -> Result<ExitCode> {
     let store = ModelStore::new(cli.models_dir.unwrap_or_else(default_model_dir));
+    let cache = cache::Cache::new(cli.cache_dir.unwrap_or_else(default_cache_dir));
     match cli.command {
         Command::Inspect(args) => {
             let config = AnalysisConfig {
@@ -274,6 +297,36 @@ async fn run(cli: Cli) -> Result<ExitCode> {
         }
         Command::Analyze(args) => {
             let config = build_config(&args)?;
+            let annotations = cache::Annotations {
+                ocr: args.ocr,
+                faces: args.faces,
+                objects: args.objects,
+                pose: args.pose,
+                no_frames: args.no_frames,
+                max_frames: args.max_frames,
+                frame_stride: args.frame_stride,
+            };
+            let out_path = args.out.as_deref().filter(|path| *path != Path::new("-"));
+            let key = if !args.no_cache && config.hash_media && out_path.is_some() {
+                let file = args.file.clone();
+                let sha = tokio::task::spawn_blocking(move || sonolytica_media::sha256_file(&file))
+                    .await
+                    .context("media hashing task did not finish")??;
+                Some(cache.key(&sha, &config, &annotations))
+            } else {
+                None
+            };
+            if let (Some(key), Some(out)) = (&key, out_path) {
+                if let Some(document) = cache.load(key, out, &args.file) {
+                    std::fs::write(out, document.to_json_pretty()?)
+                        .with_context(|| format!("could not write {}", out.display()))?;
+                    eprintln!("cache: hit {}", key);
+                    if args.summary {
+                        eprintln!("{}", summarize(&document));
+                    }
+                    return Ok(ExitCode::SUCCESS);
+                }
+            }
             let engine = Engine::discover(store.clone());
             let mut document = engine
                 .analyze(&args.file, &config)
@@ -334,6 +387,22 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                 }
             }
 
+            if args.pose {
+                if args.no_frames {
+                    eprintln!("warning: pose detection skipped because --no-frames was given");
+                } else {
+                    match args.out.as_deref() {
+                        Some(path) if path != Path::new("-") => {
+                            annotate_with_pose(&mut document, &store, path).await;
+                        }
+                        _ => eprintln!(
+                            "warning: pose detection skipped; pass --out <file> so keyframes \
+                             have a directory to live in"
+                        ),
+                    }
+                }
+            }
+
             if args.objects {
                 if args.no_frames {
                     eprintln!("warning: object detection skipped because --no-frames was given");
@@ -356,6 +425,13 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                         .with_context(|| format!("could not write {}", path.display()))?;
                 }
                 _ => println!("{}", document.to_json_pretty()?),
+            }
+            if let (Some(key), Some(out)) = (&key, out_path) {
+                if cacheable(&document, &config, &args) {
+                    if let Err(error) = cache.store(key, out, &document) {
+                        eprintln!("warning: could not cache the analysis: {error}");
+                    }
+                }
             }
             if args.summary {
                 eprintln!("{}", summarize(&document));
@@ -424,6 +500,29 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                         println!("{} -> {}", spec.id, path.display());
                     }
                 }
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Cache(args) => {
+            if args.clear {
+                match std::fs::remove_dir_all(cache.dir()) {
+                    Ok(()) => println!("cleared {}", cache.dir().display()),
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                        println!("cache is already empty: {}", cache.dir().display());
+                    }
+                    Err(error) => {
+                        return Err(error)
+                            .with_context(|| format!("could not clear {}", cache.dir().display()));
+                    }
+                }
+            } else {
+                let (count, bytes) = cache.stats();
+                println!("cache directory: {}", cache.dir().display());
+                println!(
+                    "{count} entr{} · {:.1} MB",
+                    if count == 1 { "y" } else { "ies" },
+                    bytes as f64 / 1e6
+                );
             }
             Ok(ExitCode::SUCCESS)
         }
@@ -496,6 +595,43 @@ async fn run(cli: Cli) -> Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
     }
+}
+
+fn default_cache_dir() -> PathBuf {
+    if let Some(dir) = std::env::var_os("SONOLYTICA_CACHE_DIR") {
+        return PathBuf::from(dir);
+    }
+    let home = std::env::var_os("HOME").map_or_else(|| PathBuf::from("."), PathBuf::from);
+    home.join(".cache").join("sonolytica").join("cache")
+}
+
+/// A failed or partial annotation must not become a cache hit: the next run
+/// with the model installed should get a real result instead.
+fn cacheable(document: &Document, config: &AnalysisConfig, args: &AnalyzeArgs) -> bool {
+    if is_degraded(document, config) {
+        return false;
+    }
+    if !args.no_frames && document.media.has_video() && document.artifacts.is_empty() {
+        return false;
+    }
+    !document.warnings.iter().any(|warning| {
+        matches!(
+            warning.code.as_str(),
+            "ocr_unavailable"
+                | "ocr_failed"
+                | "ocr_partial"
+                | "faces_unavailable"
+                | "faces_failed"
+                | "faces_partial"
+                | "objects_unavailable"
+                | "objects_failed"
+                | "objects_partial"
+                | "pose_unavailable"
+                | "pose_failed"
+                | "pose_partial"
+                | "pose_invalid"
+        )
+    })
 }
 
 fn build_config(args: &AnalyzeArgs) -> Result<AnalysisConfig> {
@@ -1109,6 +1245,167 @@ async fn annotate_with_faces(document: &mut Document, store: &ModelStore, out: &
 /// A missing model, a build without the `ocr` feature, or an unreadable frame
 /// is a warning, never a failed analysis: the document stays valid without
 /// text overlays.
+/// Detect body pose on every extracted keyframe and add a pose track.
+///
+/// Detection only: per-person boxes and 17 COCO keypoints at one instant, no
+/// tracking and no identity. A missing model or a build without `vision` is a
+/// warning, never a failed run.
+async fn annotate_with_pose(document: &mut Document, store: &ModelStore, out: &Path) {
+    let parent = out.parent().unwrap_or_else(|| Path::new(""));
+    let frames: Vec<(PathBuf, TimeRange)> = document
+        .artifacts
+        .iter()
+        .filter(|artifact| artifact.kind == "keyframe")
+        .map(|artifact| (parent.join(&artifact.path), artifact.range))
+        .collect();
+    if frames.is_empty() {
+        eprintln!("warning: pose detection skipped; no keyframes were found");
+        return;
+    }
+    let frame_count = frames.len();
+    let threads = std::thread::available_parallelism()
+        .map_or(4, std::num::NonZeroUsize::get)
+        .min(8);
+    let store = store.clone();
+    let started_at = sonolytica_core::now_unix_ms();
+    let outcome = tokio::task::spawn_blocking(move || {
+        let provider = sonolytica_providers::pose::MoveNet::load(&store, threads)?;
+        let mut people: Vec<(TimeRange, sonolytica_providers::pose::PoseDetection)> = Vec::new();
+        let mut failures: Vec<String> = Vec::new();
+        for (path, range) in frames {
+            let result = std::fs::read(&path)
+                .map_err(|error| {
+                    sonolytica_providers::ProviderError::Io(format!(
+                        "cannot read {}: {error}",
+                        path.display()
+                    ))
+                })
+                .and_then(|bytes| provider.detect_jpeg(&bytes));
+            match result {
+                Ok(found) => people.extend(found.into_iter().map(|person| (range, person))),
+                Err(error) => failures.push(format!("{}: {error}", path.display())),
+            }
+        }
+        Ok::<_, sonolytica_providers::ProviderError>((provider.info(), people, failures))
+    })
+    .await;
+
+    let (info, people, failures) = match outcome {
+        Ok(Ok(result)) => result,
+        Ok(Err(error)) => {
+            eprintln!("warning: pose detection skipped: {error}");
+            document
+                .warnings
+                .push(Warning::new("pose_unavailable", error.to_string()));
+            return;
+        }
+        Err(error) => {
+            let message = format!("pose detection task did not finish: {error}");
+            eprintln!("warning: {message}");
+            document.warnings.push(Warning::new("pose_failed", message));
+            return;
+        }
+    };
+
+    let status = if failures.len() == frame_count {
+        RunStatus::Failed {
+            reason: failures
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "pose detection failed on every keyframe".into()),
+        }
+    } else if failures.is_empty() {
+        RunStatus::Complete
+    } else {
+        RunStatus::Partial {
+            reason: format!(
+                "{} of {frame_count} keyframe(s) failed pose detection",
+                failures.len()
+            ),
+        }
+    };
+    let run = document.runs.len() as u32;
+    document.runs.push(RunRecord {
+        id: run,
+        capability: Capability::Vision,
+        provider: info.name.to_string(),
+        model: info.models.last().cloned(),
+        params_sha256: document.config.params_sha256(),
+        device: info.device.to_string(),
+        started_at_unix_ms: started_at,
+        duration_ms: sonolytica_core::now_unix_ms().saturating_sub(started_at),
+        status,
+    });
+
+    let track = document.tracks.len() as u32;
+    document.tracks.push(Track {
+        id: track,
+        kind: TrackKind::Pose,
+        label: "poses".into(),
+        run,
+    });
+    let people_count = people.len();
+    for (range, person) in people {
+        document.segments.push(Segment {
+            id: document.segments.len() as u32,
+            track,
+            range,
+            parent: None,
+            kind: SegmentKind::Pose {
+                person: 0,
+                bbox: Some(person.bbox),
+                keypoints: person.keypoints,
+            },
+            confidence: Some(Confidence::clamped(person.score)),
+            run,
+        });
+    }
+    // The model row order is not a stable person identity; keep the slot
+    // number within this frame only.
+    let mut per_frame: std::collections::BTreeMap<i64, u16> = std::collections::BTreeMap::new();
+    for segment in document
+        .segments
+        .iter_mut()
+        .filter(|segment| segment.run == run && matches!(segment.kind, SegmentKind::Pose { .. }))
+    {
+        let slot = per_frame.entry(segment.range.start.micros()).or_default();
+        if let SegmentKind::Pose { person, .. } = &mut segment.kind {
+            *person = *slot;
+        }
+        *slot += 1;
+    }
+
+    let violations = document.validate();
+    if !violations.is_empty() {
+        let codes = violations
+            .iter()
+            .map(|violation| violation.code.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        document.segments.retain(|segment| segment.run != run);
+        document.tracks.retain(|track| track.run != run);
+        document.runs.retain(|record| record.id != run);
+        eprintln!("warning: pose output discarded, the document would be invalid: {codes}");
+        document.warnings.push(Warning::new(
+            "pose_invalid",
+            format!("pose output discarded: {codes}"),
+        ));
+        return;
+    }
+    if !failures.is_empty() {
+        let message = format!(
+            "{} of {frame_count} keyframe(s) failed pose detection; first: {}",
+            failures.len(),
+            failures[0]
+        );
+        eprintln!("warning: {message}");
+        document
+            .warnings
+            .push(Warning::new("pose_partial", message).with_run(run));
+    }
+    eprintln!("pose: {people_count} person(s) on {frame_count} keyframe(s)");
+}
+
 async fn annotate_with_ocr(document: &mut Document, store: &ModelStore, out: &Path) {
     let parent = out.parent().unwrap_or_else(|| Path::new(""));
 

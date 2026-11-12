@@ -46,7 +46,8 @@ sonolytica report doc.json --out report.html  # human page: chapters, quotes, fr
 ```
 
 `--ocr` runs on the keyframes at analyze time: pass it whenever the media may
-have on-screen text — it cannot be added later without re-running.
+have on-screen text — it cannot be added later without re-running. The same is
+true for `--faces`, `--objects` and `--pose`.
 `analyze` prints the document to stdout unless `--out` is given; `--summary`
 goes to stderr; `--strict` (or `--profile ultra`) exits 2 when a stage failed or
 a requested capability never ran. A missing model disables one capability.
@@ -65,9 +66,20 @@ skip `analyze` and start at `query runs`.
    music/acoustic headlines. Most overview questions end here.
 2. Only the command the question needs (§5) — for an exact quote, a time
    window, a frame or the full speaker list.
-3. Visual questions: set `--ocr --objects --faces` at analyze time, not later.
+3. Visual questions: set `--ocr --objects --faces --pose` at analyze time, not
+   later. `--pose` stores 17 COCO body keypoints per person per keyframe
+   (detection only; no tracking or identity).
 4. Budget: no `--help`, `doctor`, `models list` or `runs` once `brief` shows the
    stages. Aim for ≤6 commands on a clip, ≤10 on a meeting.
+
+For a specific question, `query ask doc "who mentioned the budget" --json`
+ranks the evidence and reports absent terms. It is **retrieval, not an answer**:
+quote only the returned ranges, and use `words`/`verify` for exact quotes.
+
+`analyze` reuses a cached document for identical bytes and parameters. A
+`warnings[code=analysis_cached]` entry is valid data; pass `--no-cache` only
+when you intentionally want a fresh run. Artifact paths are copied next to the
+new output.
 
 `brief` is a map, not a citation source: quote exact wording and ranges from
 `search`, `words` or `transcript`. Full speaker/chapter lists are
@@ -85,6 +97,7 @@ answering — never answer from half a document.
 | every word of one utterance | `query words doc 4` |
 | keyframe images for a window | `query frames doc --from 00:12:00 --to 00:13:00 --max 8` |
 | text on screen (after `--ocr`) | `query timeline doc --type text_overlay` |
+| body pose keypoints (after `--pose`) | `query poses doc --max 20 --json` |
 | find a word, with its timestamp | `query search doc pricing` |
 | who spoke most, how long | `query speakers doc` |
 | what are the chapters | `query chapters doc` |
@@ -93,9 +106,10 @@ answering — never answer from half a document.
 | which stages ran or failed | `query runs doc` |
 | media facts and totals | `query summary doc` |
 
-Start at `brief`; add `search`+`words` for a quote, `timeline` for a window or
-text overlays, `frames` to look, `chapters`/`speakers` for full lists. Routing
-table: `references/query-cheatsheet.md`.
+Start at `brief`; use `ask` for one focused question, `search`+`words` for a
+quote, `timeline` for a window or text overlays, `frames` to look,
+`poses` for keypoints, `chapters`/`speakers` for full lists. Routing table:
+`references/query-cheatsheet.md`.
 
 Rules of use:
 

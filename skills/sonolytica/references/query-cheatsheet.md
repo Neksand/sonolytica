@@ -26,6 +26,8 @@ error, not an empty result.
 ```bash
 sonolytica query brief "$DOC"
 sonolytica query brief "$DOC" --json
+sonolytica query ask "$DOC" "budget and pricing" --json
+sonolytica query poses "$DOC" --max 20 --json
 ```
 
 One compact call (typically 2–4 KB of JSON) for the first pass and for broad

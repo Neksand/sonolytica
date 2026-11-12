@@ -3,12 +3,13 @@
 
 use std::path::PathBuf;
 use std::process::{Command, Output};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use sonolytica_core::{
     AcousticSummary, AnalysisBlock, AnalysisConfig, BBox, Bpm, Capability, Chord, ChordQuality,
-    Confidence, Document, DocumentBuilder, KeyEstimate, Loudness, MediaInfo, MediaTime, Mode,
-    ModelRef, MusicSummary, PitchClass, RunRecord, RunStatus, SegmentKind, SpeakerId, TimeRange,
-    TrackKind, Warning,
+    Confidence, Document, DocumentBuilder, KeyEstimate, Keypoint, Loudness, MediaInfo, MediaTime,
+    Mode, ModelRef, MusicSummary, PitchClass, RunRecord, RunStatus, SegmentKind, SpeakerId,
+    TimeRange, TrackKind, Warning,
 };
 
 fn run_record(capability: Capability, model: &str, status: RunStatus) -> RunRecord {
@@ -215,9 +216,14 @@ fn fixture() -> Document {
 /// The document is built here rather than stored as JSON so the fixture cannot
 /// drift from the schema: `finish()` validates every invariant.
 fn fixture_path() -> PathBuf {
+    static NEXT: AtomicU64 = AtomicU64::new(0);
     let document = fixture();
     assert!(document.validate().is_empty(), "fixture must be valid");
-    let path = std::env::temp_dir().join(format!("sonolytica-query-{}.json", std::process::id()));
+    let path = std::env::temp_dir().join(format!(
+        "sonolytica-query-{}-{}.json",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
     std::fs::write(&path, document.to_json_pretty().unwrap()).expect("write fixture");
     path
 }
@@ -315,6 +321,94 @@ fn search_returns_word_ranges_and_the_speaker() {
     assert_eq!(words[0]["text"], "pricing");
     assert_eq!(words[0]["start"], 1_000_000);
     assert_eq!(words[0]["end"], 1_600_000);
+}
+
+#[test]
+fn poses_are_returned_with_keypoints() {
+    let mut document = fixture();
+    let track = document.tracks.len() as u32;
+    document.tracks.push(sonolytica_core::Track {
+        id: track,
+        kind: TrackKind::Pose,
+        label: "poses".into(),
+        run: 0,
+    });
+    document.segments.push(sonolytica_core::Segment {
+        id: document.segments.len() as u32,
+        track,
+        range: TimeRange::empty(MediaTime::from_secs_f64(1.0)),
+        parent: None,
+        kind: SegmentKind::Pose {
+            person: 0,
+            bbox: None,
+            keypoints: vec![Keypoint {
+                name: "nose".into(),
+                x: 0.5,
+                y: 0.2,
+                score: 0.9,
+            }],
+        },
+        confidence: Confidence::new(0.8),
+        run: 0,
+    });
+    assert!(document.validate().is_empty());
+    let path = std::env::temp_dir().join(format!("sonolytica-poses-{}.json", std::process::id()));
+    std::fs::write(&path, document.to_json_pretty().unwrap()).unwrap();
+    let json = query_json(&["query", "poses", path.to_str().unwrap(), "--json"]);
+    assert_eq!(json["count"], 1);
+    assert_eq!(json["poses"][0]["person"], 0);
+    assert_eq!(json["poses"][0]["keypoints"][0]["name"], "nose");
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn ask_ranks_evidence_and_reports_absence() {
+    let path = fixture_path();
+    let json = query_json(&[
+        "query",
+        "ask",
+        path.to_str().unwrap(),
+        "who mentioned pricing",
+        "--json",
+    ]);
+    assert_eq!(json["terms"], serde_json::json!(["mentioned", "pricing"]));
+    let evidence = json["evidence"].as_array().unwrap();
+    assert!(!evidence.is_empty(), "pricing must produce evidence");
+    assert!(evidence.iter().any(|item| {
+        item["text"]
+            .as_str()
+            .is_some_and(|text| text.contains("pricing"))
+    }));
+    let absent: Vec<&str> = json["absence"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["term"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        absent,
+        vec!["mentioned"],
+        "the absent term must be reported"
+    );
+
+    let missing = query_json(&["query", "ask", path.to_str().unwrap(), "deadline", "--json"]);
+    assert!(missing["evidence"].as_array().unwrap().is_empty());
+    assert_eq!(missing["absence"][0]["term"], "deadline");
+    assert_eq!(missing["absence"][0]["occurrences"], 0);
+}
+
+#[test]
+fn ask_drops_stopwords_instead_of_matching_everything() {
+    let path = fixture_path();
+    let json = query_json(&[
+        "query",
+        "ask",
+        path.to_str().unwrap(),
+        "what did they say about it",
+        "--json",
+    ]);
+    assert_eq!(json["terms"], serde_json::json!([]));
+    assert!(json["evidence"].as_array().unwrap().is_empty());
 }
 
 #[test]

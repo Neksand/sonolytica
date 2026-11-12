@@ -155,6 +155,17 @@ pub const MODELS: &[ModelSpec] = &[
         notes: "YuNet face detection (OpenCV Zoo). Count and boxes only; no identity, no embeddings.",
     },
     ModelSpec {
+        id: "movenet-multipose",
+        capability: Capability::Vision,
+        filename: "movenet-multipose.onnx",
+        url: "https://huggingface.co/Xenova/movenet-multipose-lightning/resolve/main/onnx/model.onnx",
+        sha256: "60f724a56f0119d22d2afcf530019db307c77d4ea598eb5bd53bb65afe93930d",
+        license: "Apache-2.0",
+        approx_bytes: 19_049_169,
+        notes: "Body pose on extracted keyframes: up to 6 people, 17 COCO keypoints. \
+                 Detection only; no tracking, identity or per-frame coverage.",
+    },
+    ModelSpec {
         id: "yolos-tiny",
         capability: Capability::Vision,
         filename: "yolos_tiny.onnx",

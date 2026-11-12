@@ -32,9 +32,9 @@ pub use analysis::{
 pub use audio::Audio;
 pub use config::{AnalysisConfig, Capability, DiarizationConfig, DspConfig, Limits, VadConfig};
 pub use document::{
-    Artifact, BBox, Confidence, DialogueTurn, Document, DocumentBuilder, Relation, RelationKind,
-    Segment, SegmentId, SegmentKind, SpeakerId, Track, TrackId, TrackKind, Violation, Word,
-    now_unix_ms,
+    Artifact, BBox, Confidence, DialogueTurn, Document, DocumentBuilder, Keypoint, Relation,
+    RelationKind, Segment, SegmentId, SegmentKind, SpeakerId, Track, TrackId, TrackKind, Violation,
+    Word, now_unix_ms,
 };
 pub use error::{CoreError, Result};
 pub use media::{MediaInfo, StreamInfo, StreamKind};
@@ -42,7 +42,7 @@ pub use provenance::{ModelRef, RunId, RunRecord, RunStatus, Warning};
 pub use time::{MediaTime, TimeRange};
 
 /// Version of the serialized document schema. Bump on any breaking change.
-pub const SCHEMA_VERSION: &str = "1.4.0";
+pub const SCHEMA_VERSION: &str = "1.5.0";
 
 /// Name of this implementation, embedded in every document.
 pub const GENERATOR_NAME: &str = "sonolytica";
