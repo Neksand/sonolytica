@@ -64,8 +64,11 @@ skip `analyze` and start at `query runs`.
 1. `query brief` — media facts, run status, speech totals, speakers, up to five
    chapters, video counts, scene cuts, one OCR line per keyframe and
    music/acoustic headlines. Most overview questions end here.
-2. Only the command the question needs (§5) — for an exact quote, a time
-   window, a frame or the full speaker list.
+2. Only the command the question needs (§5). For a question with several
+   keywords or a possible absence ("did they mention X?"), run
+   `query ask doc "..." --json` **before** `search`: it ranks speech and OCR
+   and names absent terms in one call. Use `timeline` for a time window,
+   `speakers` for totals, `words` for exact onsets.
 3. Visual questions: set `--ocr --objects --faces --pose` at analyze time, not
    later. `--pose` stores 17 COCO body keypoints per person per keyframe
    (detection only; no tracking or identity).
