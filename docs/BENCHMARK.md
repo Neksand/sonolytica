@@ -275,8 +275,8 @@ document (0/2 per task), and every quote was checked character-for-character.
 | hard 4 min | v4, `brief` v2 | 13 | **16/16** | **14 773 / 13 517** | **14 145** |
 | easy 14.4 s | v3, `brief` v1 | — | 8/8 | — | 9 521 |
 | easy 14.4 s | v4, `brief` v2 | 9 / 10 | **8/8** | **8 434 / 8 818** | **8 626** |
-| long 20 min | v3 (341-line core) | 15 | **16/16** | 17 633 | 17 633 |
-| long 20 min | v4 (200-line core) | 22 | **15/16** | 17 741 | 17 741 |
+| long 20 min | v3 (341-line core) | 15 | **14/16*** | 17 633 | 17 633 |
+| long 20 min | v4 (200-line core) | 22 | **13/16*** | 17 741 | 17 741 |
 
 Reading it:
 
@@ -302,6 +302,14 @@ Reading it:
   but the routing did not: the old core had a "minimum commands" table that the
   new core delegates to the cheatsheet.
 
+`*` **Long reference correction (2026-11-13).** The RTTM for 19:15–19:32
+contains only `spk02`. The old long documents' S1 "overlap" spans were words
+duplicated inside S2 sentences by the window merge. Under the corrected
+reference, the old long runs lose Q4: v3 14/16, v4 13/16, round 2 and 3 14/16.
+The new AOSC document reports no overlap, so its free run is 16/16. Do not tune
+to the old spans; a real overlap score needs an independently annotated AMI
+fixture.
+
 ### Round 2: overlap map in `brief` (same day)
 
 `brief` now carries `speech.overlaps`: merged spans of turns flagged
@@ -313,11 +321,14 @@ same model, one run per fixture:
 |---|---|---|---|---|
 | easy 14.4 s | **8/8** | 7 | **7 517** | 8 434 / 8 818 |
 | hard 4 min | **16/16** | 9 | **10 393** | 14 773 / 13 517 |
-| long 20 min | **16/16** | 8 | **11 308** | 17 741 |
+| long 20 min | **14/16*** | 8 | **11 308** | 17 741 |
 
 The long session is the direct evidence for the change: it reported all three
-overlap spans (00:19:18.470–00:19:19.599, 00:19:19.910–00:19:26.559,
-00:19:26.650–00:19:31.780), scored 16/16, and made 8 commands instead of 22. The
+old overlap spans (00:19:18.470–00:19:19.599, 00:19:19.910–00:19:26.559,
+00:19:26.650–00:19:31.780) and made 8 commands instead of 22. Those spans are
+now known to be **merge artifacts**: the RTTM has only `spk02` in that window.
+The corrected score is 14/16; the new AOSC document reports no overlap and is
+16/16. The
 hard and easy sessions also got cheaper, but part of that is run variance: the
 skill gained one line and the fixed prompt is unchanged. Treat the direction as
 solid and the exact percentages as single runs.
@@ -444,7 +455,7 @@ After faces/objects and the command-budget rule, three fixtures plus one rerun:
 | hard 4 min | 16/16 | 17 | 27 235 | outlier: read transcript, scenes, chapters and five absence variants |
 | easy 14.4 s | 7/8 | 11 | 21 021 | missed the tail of the first phrase; read `analyze --help` |
 | easy, rerun | **8/8** | 11 | **9 150** | budget rule added: no `--help`/`doctor` once brief shows the stages |
-| long 20 min | 16/16 | 12 | 15 578 | quote split across two segments, both ranges cited |
+| long 20 min | **14/16*** | 12 | 15 578 | * old overlap Q4 spans later found spurious; quote/ranges otherwise cited |
 
 Medians over every comparable run:
 
@@ -540,26 +551,30 @@ fixture (only media + skill + binary + `PROMPT.md`), with the current skill
 | visual boundary + caption 6 s | GLM 5.3 Flash free | 6 | **16/16 caption-aware** | 25 832 | $0 |
 | hard 4 min | DeepSeek V4.1 Flash free | 8 | **16/16** | 19 396 | $0 |
 | hard 4 min | GLM 5.3 Flash free | 10 | **16/16** | 23 025 | $0 |
-| long 20 min | DeepSeek V4.1 Flash free | 24 | **14/16** | 31 570 | $0 |
+| long 20 min | DeepSeek V4.1 Flash free | 24 | **16/16*** | 31 570 | $0 |
+
+`*` Q4 was rescored: the RTTM for 19:15–19:32 contains only `spk02`; the old
+document's overlap spans were S1 word fragments inside S2 sentences.
 
 Reading it:
 
 - **Both free models reach the maximum score on easy** (8/8) and hard (16/16).
   Without captions both refuse every visual-boundary question without
   inventing a colour, action, expression or background; with `--caption` the
-  both free models answer six of eight from the model observation and still
+  free models answer six of eight from the model observation and still
   refuse the two the caption does not contain. DeepSeek-free is cheaper in tokens on both
   scored fixtures (18 224 / 19 396 vs 24 294 / 23 025); GLM-free needed one
   retry after passing `doc` instead of `doc.json`. Neither needs a paid quota.
-- **Long is 14/16, and that is a real finding.** The new AOSC document reports
-  4/4 speakers and correct quotes, but **no overlapping turns** on `fvhrk`.
-  Question 4 asks for an overlap span; the agent correctly said the document
-  contains none, which scores 0 against the old reference. The old document's
-  eight overlap turns were S1 fragments (`students`, `from`, …) duplicating
-  words inside S2 sentences — likely an artifact of the window merge, not a
-  second speaker. The new behaviour may be cleaner, but the old benchmark
-  question cannot be passed from it. Do not add a threshold hack or duplicate
-  words; the fix is speaker-attributed ASR, which is the next cycle.
+- **Long is 16/16 after correcting the reference.\*** The new AOSC document
+  reports 4/4 speakers and correct quotes, and no overlapping turns on
+  `fvhrk`. The reference RTTM for the questioned window (19:15–19:32) contains
+  **only `spk02`**; the old document's eight "overlap" turns were S1 fragments
+  (`students`, `from`, …) duplicating words inside S2 sentences — a merge
+  artifact, not a second speaker. The agent's "no overlap in the document" is
+  the correct answer. The old Q4 reference was wrong; do not add a threshold
+  hack or duplicate words. A real overlap number needs an independently
+  annotated corpus (AMI), not VoxConverse RTTM; protocol in
+  [`bench/overlap.md`](bench/overlap.md).
 - **Free is not cheaper in tokens.** Fresh is 18–19 k against the paid medians
   8 818 (easy) and 14 773 (hard); the dollar cost is $0, but the free tier is
   quota-limited. Do not compare fresh across models; compare score per dollar
@@ -597,9 +612,10 @@ still running; it will be added when the session closes.
 - The long fixture has **no independent overlap annotation**. Its Q4 is scored
   against the old window document's spans, which were S1 fragments duplicating
   words inside S2 sentences. The new AOSC document has no such spans and its
-  free run scores 14/16; read that as a benchmark-reference limitation, not
-  proof that the recording has no simultaneous speech. An annotated overlap
-  shard is needed before claiming an overlap score.
+  free run scores 16/16 after correcting Q4: the RTTM at 19:18 has only
+  `spk02`, so the old "overlap" spans were merge artifacts. An independently
+  annotated overlap shard (AMI) is still needed before claiming an overlap
+  score.
 
 ## Reproduce
 

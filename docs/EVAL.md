@@ -440,6 +440,12 @@ in that shard. The gate is met at 4 speakers and 6.40 %, not at the model's
 ceiling — the remaining error is dominated by missed speech at ASR boundaries,
 not confusion.
 
+The long agent fixture's old "overlap" Q4 was a **reference error**, not an
+AOSC regression: the RTTM has only `spk02` in 19:15–19:32, and the old S1
+spans were word-duplication artifacts. Real overlap attribution needs an
+independently annotated corpus; protocol in [`bench/overlap.md`](bench/overlap.md).
+Do not tune to the old spans.
+
 
 ## Vision: keyframe observations
 

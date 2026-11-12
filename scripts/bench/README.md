@@ -68,7 +68,9 @@ scripts/bench/prepare_agent_fixture.sh --name visual-boundary \
 ```
 
 It is the counterpart to the hard/easy runs: those reward finding facts, this
-one rewards knowing where the document ends. Re-run with
+one rewards knowing where the document ends. For real overlapping speech, see
+`docs/bench/overlap.md` (AMI protocol); VoxConverse RTTM has no overlap
+annotation and the old `fvhrk` "overlap" spans were merge artifacts. Re-run with
 `analyze ... --caption` to measure caption coverage: a correct caption fact
 must be attributed to the caption; a caption is not OCR and not a quote.
 

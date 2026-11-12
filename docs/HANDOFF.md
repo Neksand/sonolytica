@@ -59,7 +59,7 @@ models/cmake/ORT.
 | Distribution | release tarballs + checksummed `install.sh`; Dockerfile and GHCR workflow; `setup` one command | local build |
 
 
-| Free agents | easy 8/8 / 18 224, hard 16/16 / 19 396, long 14/16 / 31 570, visual 16/16 refusal / 17 652 | clean dirs, `$0`, 2026-11-13 |
+| Free agents | easy 8/8 / 18 224, hard 16/16 / 19 396, long 16/16* / 31 570, visual 16/16 refusal / 17 652 | clean dirs, `$0`, 2026-11-13; * Q4 corrected, old overlap spans were merge artifacts |
 
 | Throughput | **16.9×** on the 240 s hard fixture with the VAD gate (17.9× without; +0.8 s); 14.1× on the 155.6 s full audio pipeline before the gate | EVAL |
 | Russian | exact 12 s transcript with `whisper-small --language ru` | DOGFOOD |
@@ -123,8 +123,9 @@ for skill runs vs 7 and 3**. Raw outputs: `docs/bench/2026-11-12/`.
   `diarization_speaker_cap`; an agent must say "at least N" there, never an
   exact count. Long files no longer trigger it by duration alone.
 - Skill cost/quality baseline (medians): hard **16/16 / 14 773 fresh** (13 517–
-  27 235, n=3), easy **8/8 / 8 818** (7 517–21 021, n=5), long **16/16 / 13 443**
-  (11 308–15 578, n=2). Cost is dominated by agent behaviour: one `--help` or
+  27 235, n=3), easy **8/8 / 8 818** (7 517–21 021, n=5), long **14/16* / 13 443**
+  (11 308–15 578, n=2). * The old Q4 overlap spans were merge artifacts; the
+  AOSC document reports none and its free run is 16/16. Cost is dominated by agent behaviour: one `--help` or
   `doctor` run re-sends thousands of tokens. Quote the median and the range, not
   a single run. Re-run the paired benchmark before claiming an improvement; do
   not preload reference files.
@@ -395,7 +396,7 @@ Full plans: `/Users/neksand/.opencode/plan/sonolytica-skill-cost-2026-11-12.md`
 |---|---|---|---|---|
 | hard 4 min | 16/16, 22 410 | **16/16, 14 773** | 13 517–27 235 (n=3) | ≤18 000: met at the median |
 | easy 14.4 s | 8/8, 9 521 | **8/8, 8 818** | 7 517–21 021 (n=5) | ≤8 000: missed |
-| long 20 min | 16/16, 17 633 | **16/16, 13 443** | 11 308–15 578 (n=2) | met |
+| long 20 min | 14/16*, 17 633 | **14/16*, 13 443** | 11 308–15 578 (n=2) | met (cost); * Q4 reference corrected |
 
 The spread is agent behaviour, not the document: every command re-sends the
 context. The budget rule ("no `--help`/`doctor` once `brief` shows the stages")
@@ -420,11 +421,14 @@ Delivered in this cycle:
 
 Open, in priority order:
 
-1. **Speaker-attributed ASR for overlap.** The long fixture is 14/16 because
-   the AOSC document has no overlap turns; the old spans were word-duplication
-   artifacts. Research: Parakeet TDT 0.6B v3 multitalker (CC-BY-4.0, ~2.6 GB,
-   `parakeet-rs` with the same `ort`), 7–10 days; the deterministic per-turn
-   baseline is 2–3 days but cannot split simultaneous words.
+1. **Speaker-attributed ASR for real overlap.** The long fixture is **16/16**
+   after correcting Q4: the RTTM window has only `spk02`, so the old overlap
+   spans were merge artifacts. The capability gap is real on genuinely
+   overlapping speech (AMI), not on `fvhrk`. Research: Parakeet TDT 0.6B v3
+   multitalker (CC-BY-4.0, ~2.6 GB, `parakeet-rs` with the same `ort`),
+   7–10 days; the deterministic per-turn baseline is 2–3 days but cannot split
+   simultaneous words. Add an AMI overlap fixture before integrating it:
+   [`docs/bench/overlap.md`](bench/overlap.md).
 2. **Free-form VQA tier** (SmolVLM2-500M, Apache-2.0): the Florence-2
    caption tier is in; the next gap is arbitrary questions ("is he holding a
    knife?") that a one-shot caption does not answer. Opt-in, RAM/license gate.
@@ -548,22 +552,24 @@ the analysis cache, `query ask` evidence packs and MoveNet pose.
   (tie, arms, flags, smile) and called a red slide background black on the same
   run. Use captions for semantic navigation, OCR for exact text, and always say
   which layer made the claim.
-- **AOSC fixed the count but removed the old overlap flags.** The old
-  `fvhrk` document had eight S1 turns made of words that also sit inside S2
-  sentences (`students`, `from`, …); the new streaming document has none. The
-  long free run therefore scores 14/16, not 16/16. Those old spans were likely
-  a merge artifact; the real fix is speaker-attributed ASR, not a lower
-  threshold or duplicated words.
+- **AOSC fixed the count and exposed a bad reference.** The old `fvhrk`
+  document had eight S1 turns made of words that also sit inside S2 sentences
+  (`students`, `from`, …); the RTTM for that window has only `spk02`. The new
+  streaming document has no overlap, so the long free run is **16/16** after
+  correcting Q4, not a regression. Do not tune to the old artifact; a real
+  overlap number needs an annotated AMI fixture and speaker-attributed ASR.
 
 ## 9. For the next agent
 
 Start with `git status`, this file, `docs/STATUS.md`, then §7. The skill and
 vision cycles are closed: **hard 16/16 / 14 773 median, easy 8/8 / 8 818, long
-16/16 / 13 443**; Gemini alone 14/16 vs 16/16 with the skill; TwelveLabs 10/16.
+14/16* / 13 443**; * old Q4 overlap spans were merge artifacts; the AOSC free
+run is 16/16. Gemini alone 14/16 vs 16/16 with the skill; TwelveLabs 10/16.
 The AOSC streaming cycle is closed on the DER axis: `fvhrk` 4/4 speakers,
 DER 6.40 % (was 2/4, 15.99 %), no regression on 1-4 speaker files. The free
 agent matrix is easy 8/8, hard 16/16, visual 16/16 refusal, visual+caption
-16/16, long 14/16 — the long loss is the overlap question, not the count.
+16/16, long 16/16 after correcting the overlap reference — the old Q4 spans
+were merge artifacts, not a count loss.
 Cost tooling is in: cache, `query ask`, and pose. The first caption tier is in
 (Florence-2), and the first MCP server + one-command `setup` + completions are
 in. The next objectives are **speaker-attributed ASR**, a **free-form VQA tier**
