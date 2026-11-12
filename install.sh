@@ -29,6 +29,11 @@ case "$(uname -m)" in
 esac
 target="${arch}-${os}"
 
+if [[ $target == x86_64-apple-darwin ]]; then
+    echo "no prebuilt macOS Intel binary; use Apple Silicon, Linux, or Docker" >&2
+    exit 1
+fi
+
 if [[ $version == latest ]]; then
     url="https://github.com/${repo}/releases/latest/download"
 else

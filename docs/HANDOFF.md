@@ -412,7 +412,7 @@ Delivered in this cycle:
 - `sonolytica install-skill`: skill embedded in the binary, installed into
   Claude Code, Codex, OpenCode and Cursor;
 - `models fetch --set core|full`; 13 pinned models;
-- release workflow (macOS arm64/x86_64, Linux x86_64/arm64) + checksummed
+- release workflow (macOS arm64, Linux x86_64/arm64) + checksummed
   `install.sh`; product README, issue forms;
 - **vision**: `--frame-stride` dense frames, `--faces` (YuNet, count/boxes only),
   `--objects` (YOLOS-tiny, 91 COCO classes), both opt-in and keyframe-bound;
