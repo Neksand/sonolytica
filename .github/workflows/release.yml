@@ -38,6 +38,11 @@ jobs:
           if [ "$RUNNER_OS" = "macOS" ]; then brew install cmake ffmpeg; else sudo apt-get update && sudo apt-get install -y cmake libasound2-dev clang libclang-dev; fi
       - name: Build
         run: |
+          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
+            export CC=clang CXX=clang++ \
+              CFLAGS="-march=armv8.2-a+fp16" CXXFLAGS="-march=armv8.2-a+fp16" \
+              CMAKE_C_FLAGS="-march=armv8.2-a+fp16" CMAKE_CXX_FLAGS="-march=armv8.2-a+fp16"
+          fi
           cargo build --release -p sonolytica-cli --features ${{ matrix.features }}
           cargo build --release -p sonolytica-eval
       - name: Package
