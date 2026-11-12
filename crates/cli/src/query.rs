@@ -1353,7 +1353,13 @@ fn count_terms(doc: &Document, terms: &[String]) -> BTreeMap<String, usize> {
     let mut occurrences: BTreeMap<String, usize> =
         terms.iter().map(|term| (term.clone(), 0)).collect();
     for segment in &doc.segments {
-        let Some(text) = segment.kind.text() else {
+        let text = match &segment.kind {
+            SegmentKind::Object { class, .. } => Some(class.as_str()),
+            SegmentKind::MusicLabel { label } => Some(label.as_str()),
+            SegmentKind::AcousticEvent { class } => Some(class.as_str()),
+            _ => segment.kind.text(),
+        };
+        let Some(text) = text else {
             continue;
         };
         let lower = text.to_lowercase();
@@ -1509,7 +1515,15 @@ fn ask(doc: &Document, question: &str, budget: usize, max: usize, json: bool) ->
     let searched_segments = doc
         .segments
         .iter()
-        .filter(|segment| segment.kind.text().is_some())
+        .filter(|segment| {
+            segment.kind.text().is_some()
+                || matches!(
+                    segment.kind,
+                    SegmentKind::Object { .. }
+                        | SegmentKind::MusicLabel { .. }
+                        | SegmentKind::AcousticEvent { .. }
+                )
+        })
         .count();
 
     if json {
@@ -1542,7 +1556,7 @@ fn ask(doc: &Document, question: &str, budget: usize, max: usize, json: bool) ->
         }
     );
     println!(
-        "media: {}, {} speaker(s), {} text segment(s)",
+        "media: {}, {} speaker(s), {} searched segment(s)",
         doc.duration(),
         speaker_views(doc).len(),
         searched_segments
@@ -1557,7 +1571,7 @@ fn ask(doc: &Document, question: &str, budget: usize, max: usize, json: bool) ->
     }
     for item in &absence {
         println!(
-            "absence: {:?} 0/{} text segment(s)",
+            "absence: {:?} 0/{} searched segment(s)",
             item.term, searched_segments
         );
     }

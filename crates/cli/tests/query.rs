@@ -362,6 +362,37 @@ fn poses_are_returned_with_keypoints() {
 }
 
 #[test]
+fn ask_counts_object_labels_as_evidence() {
+    let mut document = fixture();
+    let track = document.tracks.len() as u32;
+    document.tracks.push(sonolytica_core::Track {
+        id: track,
+        kind: TrackKind::Object,
+        label: "objects".into(),
+        run: 0,
+    });
+    document.segments.push(sonolytica_core::Segment {
+        id: document.segments.len() as u32,
+        track,
+        range: TimeRange::from_secs(2.0, 2.0),
+        parent: None,
+        kind: SegmentKind::Object {
+            class: "tie".into(),
+            bbox: None,
+        },
+        confidence: None,
+        run: 0,
+    });
+    assert!(document.validate().is_empty());
+    let path = std::env::temp_dir().join(format!("sonolytica-object-{}.json", std::process::id()));
+    std::fs::write(&path, document.to_json_pretty().unwrap()).unwrap();
+    let json = query_json(&["query", "ask", path.to_str().unwrap(), "tie", "--json"]);
+    assert!(!json["evidence"].as_array().unwrap().is_empty());
+    assert!(json["absence"].as_array().unwrap().is_empty());
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
 fn ask_ranks_evidence_and_reports_absence() {
     let path = fixture_path();
     let json = query_json(&[
