@@ -398,9 +398,37 @@ Reading it:
   TwelveLabs' free plan is metered in minutes. Local SONOLYTICA has neither
   failure mode.
 
-Raw outputs, including every wrong timestamp, are in
+### Blind cross-check
+
+The four hard-fixture answers were anonymised (A–D) and scored by an
+independent judge — Codex CLI, a different model family, given only the
+reference key and the rubric, with no source names. It replaced my manual
+scores with its own:
+
+| Answer | Manual | Blind | Valid citations | Invented |
+|---|---|---|---|---|
+| Gemini alone | 14 | **10** | 7 | 8 |
+| Gemini + skill | 16 | **16** | **19** | 2¹ |
+| TwelveLabs Pegasus | 10 | **7** | 3 | 6 |
+| DeepSeek + skill | 16 | **15** | **19** | 0 |
+
+The ranking is identical — the two skill runs are first and second, the raw API
+last — but the judge is much stricter about ranges. It scored Gemini's
+`00:00:39` for "pricing" as 0 (the word is at 00:00:44.058), counted "last
+quarter" as invented (the recording says "last week"), and took a point from
+the DeepSeek run because its first slide label was 00:00:01 instead of the
+scene start 00:00:00. That strictness is the product thesis: a plausible answer
+with a wrong range is not a citation.
+
+¹ The judge marked two "invented" facts for the skill answer while giving every
+question 2/2; treat that counter as noisy and the citation count as the useful
+signal.
+
+Raw outputs, including every wrong timestamp and the judge JSON, are in
 [`bench/2026-11-12/`](bench/2026-11-12/). Keys were never written to the
-repository.
+repository. TwelveLabs at temperature 0 reproduced its first answer exactly on a
+second run; Gemini reruns were blocked by the Antigravity quota, so its cells
+remain single runs.
 
 Caveat: one run per cell, one Gemini model, manual scoring; the Gemini baseline
 is an agent with tools, not the raw multimodal API. Treat this as a smoke

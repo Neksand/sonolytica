@@ -1,0 +1,88 @@
+{
+  "A": {
+    "scores": [
+      1,
+      1,
+      0,
+      1,
+      2,
+      2,
+      2,
+      1
+    ],
+    "total": 10,
+    "invented": 8,
+    "valid_citations": 7,
+    "notes": [
+      "Q1 gives the wrong supporting timestamps and adds unsupported slide details.",
+      "Q2 identifies the correct slide but presents 00:01:30 as an OCR timestamp.",
+      "Q3 gives the wrong timestamp and refers to the slide instead of the spoken word.",
+      "Q4 changes 'last week' to 'last quarter' and uses incorrect timestamps.",
+      "Q8 uses an incorrect speaker label and a non-exact timestamp."
+    ]
+  },
+  "B": {
+    "scores": [
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2
+    ],
+    "total": 16,
+    "invented": 2,
+    "valid_citations": 19,
+    "notes": []
+  },
+  "C": {
+    "scores": [
+      1,
+      1,
+      0,
+      1,
+      2,
+      1,
+      1,
+      0
+    ],
+    "total": 7,
+    "invented": 6,
+    "valid_citations": 3,
+    "notes": [
+      "Q1 has the wrong timestamp.",
+      "Q2 gives the correct slide content but incorrectly presents it as text sampled exactly at 00:01:30.",
+      "Q3 gives the wrong timestamp and identifies a slide occurrence rather than the spoken word.",
+      "Q4 gives the wrong slide timestamp.",
+      "Q6 several scene/title timestamps are one second early.",
+      "Q7 omits the exact change timestamp.",
+      "Q8 omits the required quote and gives no valid supporting range."
+    ]
+  },
+  "D": {
+    "scores": [
+      2,
+      2,
+      2,
+      2,
+      2,
+      1,
+      2,
+      2
+    ],
+    "total": 15,
+    "invented": 0,
+    "valid_citations": 19,
+    "notes": [
+      "Q6 labels the opening title at 00:00:01 rather than the scene start at 00:00:00."
+    ]
+  },
+  "ranking": [
+    "B",
+    "D",
+    "A",
+    "C"
+  ]
+}
