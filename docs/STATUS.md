@@ -1,4 +1,4 @@
-# Project status — 2026-11-12
+# Project status — 2026-11-13
 
 A snapshot for deciding what SONOLYTICA is actually good for. Every number
 below comes from a run on this machine and a file in this repository; links go
@@ -22,7 +22,7 @@ runtime, no GPL.
 | Models | 14, all SHA-256 pinned: Silero VAD, whisper tiny/base/small, wav2vec2 aligner, Sortformer 4spk streaming, pyannote segmentation, WeSpeaker, PP-OCRv5 det/rec, YuNet face detection, YOLOS-tiny object detection, MoveNet Multipose, Florence-2-base-ft captions |
 | Schema | 1.6.0 (`Document::validate`, additive 1.0 → 1.6) |
 | Agent skill | `SKILL.md` (199 lines) + 5 references + 5 workflows + install guide |
-| Docs | 17 files incl. 5 ADRs; `EVAL.md`, `BENCHMARK.md`, `DOGFOOD.md`, `OCR.md`, `MCP.md`, `DOCKER.md` |
+| Docs | 20 files incl. 5 ADRs; `EVAL.md`, `BENCHMARK.md`, `DOGFOOD.md`, `OCR.md`, `MCP.md`, `DOCKER.md`, `LAUNCH.md`, release notes |
 
 ## Engineering health
 

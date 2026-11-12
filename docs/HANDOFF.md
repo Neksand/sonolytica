@@ -1,6 +1,6 @@
 # Handoff — SONOLYTICA after the AOSC streaming cycle
 
-Last updated: 2026-11-12. Branch `main`, working tree clean, **no remote
+Last updated: 2026-11-13. Branch `main`, working tree clean, **no remote
 configured** (the user pushes). Since `1960e26`: reproducible benchmark + token
 scripts, `brief` v2 (scene cuts, OCR lines, overlap spans), `query verify`,
 HTML `report`, `install-skill` for four harnesses, release workflow, dense
@@ -11,7 +11,7 @@ captions behind a multi-file model bundle.
 
 Read this first, then `docs/STATUS.md` (numbers), `docs/EVAL.md` (methods),
 `docs/BENCHMARK.md` (agent and head-to-head tests), `docs/MODELS.md` (licenses,
-caps), `docs/OCR.md`, `docs/SCHEMA.md` (1.6.0), `docs/MCP.md`. Forward plans live outside the
+caps), `docs/OCR.md`, `docs/SCHEMA.md` (1.6.0), `docs/MCP.md`, `docs/LAUNCH.md`. Forward plans live outside the
 repo: `/Users/neksand/.opencode/plan/sonolytica-skill-cost-2026-11-12.md`
 (closed), `sonolytica-ideal-night-2026-11-12.md` (night work), and
 `sonolytica-beat-all-2026-11-12.md` (category + launch).
