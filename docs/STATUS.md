@@ -59,6 +59,7 @@ runtime, no GPL.
 | Agent, `query brief` v2 | fresh tokens | medians: easy **8 818** (7 517–21 021, n=5), hard **14 773** (13 517–27 235, n=3), long **13 443** (11 308–15 578, n=2) | DeepSeek V4.1 Flash, clean dirs, fixed prompts; cost is agent-behaviour dominated; see BENCHMARK |
 | Agent, 20 min real meeting | score / cost | old skill **16/16 / 17 633**, new **16/16 / 11 308** | VoxConverse `fvhrk`, 4 speakers; those runs used the old document (2 labels + cap warning), the AOSC build now reports 4/4 at 6.40 % DER |
 | Agent, cost tooling | cache / evidence pack | cache hit **0.01 s** vs 7.64 s on the 14.4 s fixture; `query ask` 978 B text / 2 893 B JSON vs 3 912 B for three equivalent queries | bytes are not tokens; the agent benchmark has not been rerun with `ask` |
+| Agent, free models | score / cost | easy **8/8 / 18 224**, hard **16/16 / 19 396**, long **14/16 / 31 570**, visual boundary **16/16 refusal / 17 652** | clean dirs, `deepseek-v4.1-flash-free` / `glm-5.3-flash-free` / `flint-40b-free`, all $0; long loses Q4 because the AOSC document has no overlap spans |
 | Agent, head-to-head | hard 4 min, 8 questions | manual: Gemini **14**, +skill **16**, TwelveLabs **10**, SONOLYTICA **16**; blind judge: **10 / 16 / 7 / 15**, ranking identical | Gemini is an agent with a shell, TwelveLabs a raw API; 19 valid citations for skill runs vs 7 and 3; see BENCHMARK |
 
 WER and DER are **pilots**, not leaderboard results: small subsets, one machine,
@@ -109,15 +110,19 @@ makes the agent **honest and citable**, not more perceptive.
    work is speaker-attributed ASR for overlapping turns, not the count.
 2. **One-fixture benchmark.** Ten questions, synthetic media. Real interviews,
    meetings, music and long videos are untested.
-3. **Music is shallow**: tempo, key, triads, sections and loudness. No notes,
+3. **Overlap attribution is not solved.** The AOSC `fvhrk` document has no
+   overlapping turns; the old document's spans were S1 word fragments inside S2
+   sentences. The long free run scores 14/16 because Q4 asks for an overlap
+   span. Speaker-attributed ASR is the fix, not another threshold.
+4. **Music is shallow**: tempo, key, triads, sections and loudness. No notes,
    bass or instruments.
-4. **Alignment is English-only**: word timings are aligned with wav2vec2 CTC
+5. **Alignment is English-only**: word timings are aligned with wav2vec2 CTC
    for English; other languages keep Whisper token timestamps.
-5. **The visual layer is keyframe-bound**: OCR, faces, objects and pose run on
+6. **The visual layer is keyframe-bound**: OCR, faces, objects and pose run on
    sampled keyframes. There is no general VLM, no tracking and no identity;
    pose can hallucinate body parts on tightly cropped faces. "Not detected" is
    never "absent".
-6. **Video keyframes are one per scene**: text or action inside a long static
+7. **Video keyframes are one per scene**: text or action inside a long static
    shot is missed.
 
 ## Verdict

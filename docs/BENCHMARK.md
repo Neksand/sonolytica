@@ -510,6 +510,58 @@ commands, but its OpenCode session directory was the repository rather than the
 clean fixture. Its **11 935 fresh** tokens are therefore excluded from the
 table; the run is a behaviour check, not a comparable cost number.
 
+## Free-model runs: clean directories (2026-11-13)
+
+The previous cost rows used paid DeepSeek V4.1 Flash. This matrix uses the free
+variant `opencode/deepseek-v4.1-flash-free` in a fresh clean directory per
+fixture (only media + skill + binary + `PROMPT.md`), with the current skill
+(`ask`, `poses`, cache). Scores are against the same reference documents.
+
+| Fixture | Model | Commands | Score | Fresh | Cost |
+|---|---|---|---|---|---|
+| easy 14.4 s | DeepSeek V4.1 Flash free | 7 | **8/8** | 18 224 | $0 |
+| easy 14.4 s | GLM 5.3 Flash free | 6 | **8/8** | 24 294 | $0 |
+| easy 14.4 s | Flint 40B free | 14 | **8/8** | 76 196 | $0 |
+| visual boundary 6 s | DeepSeek V4.1 Flash free | 4 | **16/16 refusal** | 17 652 | $0 |
+| visual boundary 6 s | GLM 5.3 Flash free | 4 | **16/16 refusal** | 24 130 | $0 |
+| hard 4 min | DeepSeek V4.1 Flash free | 8 | **16/16** | 19 396 | $0 |
+| long 20 min | DeepSeek V4.1 Flash free | 24 | **14/16** | 31 570 | $0 |
+
+Reading it:
+
+- **Both free models reach the maximum score on easy** (8/8) and both refuse
+  every visual-boundary question without inventing a colour, action, expression
+  or background. DeepSeek-free also gets hard 16/16. GLM-free is more verbose
+  (24 294 fresh, 6 commands) but needs no paid quota.
+- **Long is 14/16, and that is a real finding.** The new AOSC document reports
+  4/4 speakers and correct quotes, but **no overlapping turns** on `fvhrk`.
+  Question 4 asks for an overlap span; the agent correctly said the document
+  contains none, which scores 0 against the old reference. The old document's
+  eight overlap turns were S1 fragments (`students`, `from`, …) duplicating
+  words inside S2 sentences — likely an artifact of the window merge, not a
+  second speaker. The new behaviour may be cleaner, but the old benchmark
+  question cannot be passed from it. Do not add a threshold hack or duplicate
+  words; the fix is speaker-attributed ASR, which is the next cycle. The boundary run did name the
+  `tie` object and the OCR line `印`, but explicitly said the document does not
+  contain the colour or the flag attribution.
+- **Free is not cheaper in tokens.** Fresh is 18–19 k against the paid medians
+  8 818 (easy) and 14 773 (hard); the dollar cost is $0, but the free tier is
+  quota-limited. Do not compare fresh across models; compare score per dollar
+  and note the quota.
+- **The command budget held.** 4 commands on the visual fixture, 7 on easy,
+  8 on hard. `ask` was used for both absence questions (deadline, budget cut),
+  and the hard run correctly said "at least 4 speakers" because the document
+  carries `diarization_speaker_cap`.
+- **Free models are not interchangeable.** Flint 40B free got 8/8 but spent
+  76 196 fresh in 14 commands: it ran `--help` and `doctor`, then repeated the
+  same timeline/speakers/ask queries after a path mistake. DeepSeek free got
+  the same score in 7 commands and 18 224 fresh. The skill's command budget is
+  only effective when the model follows it; measure the model, not just the
+  skill.
+
+Caveat: one session per cell, one free model, manual scoring. The long cell is
+still running; it will be added when the session closes.
+
 ## Limits
 
 - Four fixtures, 26 questions, fifteen sessions. This is a smoke benchmark, not
@@ -526,6 +578,12 @@ table; the run is a behaviour check, not a comparable cost number.
   The hard fixture stresses diarization (and exposes its over-segmentation) but
   the overlapped words are missing from the transcript, so overlap splitting is
   not measured.
+- The long fixture has **no independent overlap annotation**. Its Q4 is scored
+  against the old window document's spans, which were S1 fragments duplicating
+  words inside S2 sentences. The new AOSC document has no such spans and its
+  free run scores 14/16; read that as a benchmark-reference limitation, not
+  proof that the recording has no simultaneous speech. An annotated overlap
+  shard is needed before claiming an overlap score.
 
 ## Reproduce
 

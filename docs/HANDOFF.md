@@ -53,6 +53,8 @@ models/cmake/ORT.
 | Objects | YOLOS-tiny on keyframes: `person` 0.999 + `tie` 0.991 on a portrait, 0 false objects on 6 slide keyframes | local test |
 | Pose | MoveNet Multipose on a portrait: 1 person, 11 COCO keypoints above 0.3; on a face-only frame it invents 3 person-shaped boxes (0.41–0.62), so it is an observation, not a body-presence oracle | local test |
 | Cost | cache hit **0.01 s** vs 7.64 s on the 14.4 s fixture; `query ask` 978 B text vs 3 912 B for three equivalent queries | local test |
+| Free agents | easy 8/8 / 18 224, hard 16/16 / 19 396, long 14/16 / 31 570, visual 16/16 refusal / 17 652 | clean dirs, `$0`, 2026-11-13 |
+
 | Throughput | **16.9×** on the 240 s hard fixture with the VAD gate (17.9× without; +0.8 s); 14.1× on the 155.6 s full audio pipeline before the gate | EVAL |
 | Russian | exact 12 s transcript with `whisper-small --language ru` | DOGFOOD |
 
@@ -493,16 +495,24 @@ the analysis cache, `query ask` evidence packs and MoveNet pose.
   fingerprint and schema version are part of the key.
 - **A cached document is a record, not a new run.** Keep its `created_unix_ms`
   and run timings, rewrite the media path, and mark it `analysis_cached`.
+- **AOSC fixed the count but removed the old overlap flags.** The old
+  `fvhrk` document had eight S1 turns made of words that also sit inside S2
+  sentences (`students`, `from`, …); the new streaming document has none. The
+  long free run therefore scores 14/16, not 16/16. Those old spans were likely
+  a merge artifact; the real fix is speaker-attributed ASR, not a lower
+  threshold or duplicated words.
 
 ## 9. For the next agent
 
 Start with `git status`, this file, `docs/STATUS.md`, then §7. The skill and
 vision cycles are closed: **hard 16/16 / 14 773 median, easy 8/8 / 8 818, long
 16/16 / 13 443**; Gemini alone 14/16 vs 16/16 with the skill; TwelveLabs 10/16.
-The AOSC streaming cycle is closed: `fvhrk` 4/4 speakers, DER 6.40 % (was 2/4,
-15.99 %), no regression on 1-4 speaker files. Cost tooling is in: cache,
-`query ask`, and pose. The next objective is the **opt-in local VLM**, then the
-visual-boundary agent run, music notes, and distribution/launch.
+The AOSC streaming cycle is closed on the DER axis: `fvhrk` 4/4 speakers,
+DER 6.40 % (was 2/4, 15.99 %), no regression on 1-4 speaker files. The free
+agent matrix is easy 8/8, hard 16/16, visual 16/16 refusal, long 14/16 — the
+long loss is the overlap question, not the count. Cost tooling is in: cache,
+`query ask`, and pose. The next objectives are **speaker-attributed ASR** and
+the **opt-in local VLM**, then music notes and distribution/launch.
 
 Do not re-litigate the rejected experiments (VAD gate at 0.45, merge tie-break,
 count heuristics), do not preload reference files, and quote medians + ranges
