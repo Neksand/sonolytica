@@ -80,6 +80,22 @@ fn write_document(dir: &Path) -> PathBuf {
         text,
     );
     let object_run = builder.add_run(run_record(Capability::Vision, "yunet"));
+    let person_track = builder.add_track(TrackKind::Object, "objects", object_run);
+    builder.add_segment(
+        person_track,
+        TimeRange::empty(MediaTime::from_secs_f64(2.0)),
+        SegmentKind::Object {
+            class: "person".into(),
+            bbox: Some(BBox {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 100.0,
+            }),
+        },
+        Confidence::new(0.9),
+        object_run,
+    );
     let object_track = builder.add_track(TrackKind::Object, "faces", object_run);
     builder.add_segment(
         object_track,
@@ -145,6 +161,7 @@ fn report_is_self_contained_and_escapes_text() {
         "S1",
         "QUARTERLY REVENUE",
         "1 face",
+        "objects: person",
         "&lt;script&gt;alert(&#39;x&#39;)&lt;/script&gt;",
         "report.html.artifacts/frames/00000-frame_0001.jpg",
     ] {

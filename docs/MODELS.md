@@ -21,6 +21,7 @@ their licenses are their own.
 | `wespeaker-campplus` | Speaker embeddings | 28 MB | Apache-2.0 | pyannote-rs release (WeSpeaker CAM++) |
 | `pp-ocrv5-det` / `pp-ocrv5-rec` | OCR detection + recognition | 4.8 / 16.5 MB | Apache-2.0 | PaddlePaddle ONNX release |
 | `yunet-face-detection` | Face detection (count and boxes) | 0.2 MB | MIT | OpenCV Zoo, `face_detection_yunet_2023mar.onnx` |
+| `yolos-tiny` | Object detection (91 COCO classes) | 26 MB | Apache-2.0 | Xenova/yolos-tiny ONNX export |
 
 Pinned digests live in the registry and are printed by `sonolytica models
 list`. If a file's digest does not match, it is rejected and the run reports a
@@ -54,6 +55,11 @@ list`. If a file's digest does not match, it is rejected and the run reports a
   fallback when Sortformer is not installed or inference fails. SONOLYTICA uses
   single-speaker regions for embeddings and reports overlap globally; it does
   not invent two simultaneous speaker turns from the overlap classes.
+- **YOLOS-tiny** detects 91 COCO object classes on extracted keyframes. It is a
+  DETR-style query model: softmax over class ids (id 91 is background), boxes
+  normalised to the resized image, threshold 0.5. Class, box and score only; no
+  tracking, attributes or identity. Small objects and dense scenes are missed
+  at keyframe resolution — the document says "not detected", never "absent".
 - **YuNet** detects faces on extracted keyframes: boxes, five landmarks and a
   score. It does **not** produce embeddings, names or identities; the document
   stores `object` segments with class `face` and a box. Counts are per sampled

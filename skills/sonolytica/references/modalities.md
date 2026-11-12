@@ -64,7 +64,8 @@ Detail behind §10 of `SKILL.md`. Open only the section you need.
   not run — say so instead of guessing.
 - A scene is a technical cut, a frame is a still at one instant. Neither is a
   topic, and a keyframe is not a summary of the shot.
-- Objects and actions are **not** analysed. `analyze --faces` runs YuNet on the
-  keyframes and stores `object` segments with class `face`, a box and a score:
-  count and position only, **never identity, names or embeddings**. A face
-  between sampled keyframes is missed; use `--frame-stride` for dense coverage.
+- `analyze --objects` runs YOLOS-tiny and stores 91 COCO classes as `object`
+  segments with a box and a score; `--faces` runs YuNet and stores class `face`.
+  Both look only at sampled keyframes: no tracking, no attributes, **never
+  identity or names**. A face or object between keyframes is missed; use
+  `--frame-stride` for dense coverage. "Not detected" is not "not present".

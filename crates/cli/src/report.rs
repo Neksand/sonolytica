@@ -265,6 +265,15 @@ fn frames_section(out: &mut String, document: &Document, frames: &[(usize, Strin
         )
         .map(|segment| segment.range.start.micros())
         .collect();
+    let objects: Vec<(i64, String)> = document
+        .segments_of_kind("object")
+        .filter_map(|segment| match &segment.kind {
+            SegmentKind::Object { class, .. } if class != "face" => {
+                Some((segment.range.start.micros(), class.clone()))
+            }
+            _ => None,
+        })
+        .collect();
     if frames.is_empty() && overlays.is_empty() {
         return;
     }
@@ -285,6 +294,20 @@ fn frames_section(out: &mut String, document: &Document, frames: &[(usize, Strin
             if *overlay_at / 1000 == at / 1000 {
                 let _ = write!(out, "<p class=\"ocr\">{}</p>", esc(text));
             }
+        }
+        let mut classes: Vec<&str> = objects
+            .iter()
+            .filter(|(object_at, _)| *object_at / 1000 == at / 1000)
+            .map(|(_, class)| class.as_str())
+            .collect();
+        classes.sort_unstable();
+        classes.dedup();
+        if !classes.is_empty() {
+            let _ = write!(
+                out,
+                "<p class=\"note\">objects: {}</p>",
+                esc(&classes.join(", "))
+            );
         }
         let face_count = faces
             .iter()

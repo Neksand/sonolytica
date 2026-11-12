@@ -728,6 +728,28 @@ fn video_fixture_path() -> PathBuf {
         );
     }
 
+    let object_run = builder.add_run(run_record(
+        Capability::Vision,
+        "yolos-tiny",
+        RunStatus::Complete,
+    ));
+    let object_track = builder.add_track(TrackKind::Object, "objects", object_run);
+    builder.add_segment(
+        object_track,
+        TimeRange::empty(MediaTime::from_secs_f64(2.0)),
+        SegmentKind::Object {
+            class: "laptop".into(),
+            bbox: Some(BBox {
+                x: 1.0,
+                y: 2.0,
+                width: 30.0,
+                height: 20.0,
+            }),
+        },
+        Confidence::new(0.9),
+        object_run,
+    );
+
     let text_run = builder.add_run(run_record(
         Capability::Vision,
         "pp-ocrv5",

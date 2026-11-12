@@ -77,6 +77,7 @@ Every quote carries its range; warnings are shown, not hidden.
 | Video | shots, cuts, keyframes (dense with `--frame-stride`) | FFmpeg signatures (2 fps) |
 | On-screen text | exact OCR lines with boxes | PP-OCRv5 |
 | Faces | count and boxes per keyframe, never identity | YuNet (opt-in `--faces`) |
+| Objects | 91 COCO classes with boxes and scores | YOLOS-tiny (opt-in `--objects`) |
 | Music | tempo, key, triads, sections, loudness | local DSP |
 | Acoustics | silence, LRA, true peak | local DSP |
 
@@ -85,9 +86,9 @@ document passes `Document::validate` before it is written.
 
 ## What it does not do (honest)
 
-- **No objects or actions.** Faces can be detected and counted (`--faces`,
-  boxes only, no identity), but there is no object or action model and no VLM
-  in this release. Keyframes, OCR and face boxes are the whole visual layer.
+- **No actions or attributes.** Objects (`--objects`, 91 COCO classes) and
+  faces (`--faces`, boxes only, no identity) are detected on keyframes; there is
+  no tracking, no action recognition and no VLM in this release.
 - **Diarization caps at four speakers.** Above 10 minutes a
   `diarization_speaker_cap` warning says the count is approximate. Long-meeting
   streaming is the next quality milestone.

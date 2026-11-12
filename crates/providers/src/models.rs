@@ -153,6 +153,16 @@ pub const MODELS: &[ModelSpec] = &[
         approx_bytes: 232_589,
         notes: "YuNet face detection (OpenCV Zoo). Count and boxes only; no identity, no embeddings.",
     },
+    ModelSpec {
+        id: "yolos-tiny",
+        capability: Capability::Vision,
+        filename: "yolos_tiny.onnx",
+        url: "https://huggingface.co/Xenova/yolos-tiny/resolve/e2f9c7673f0fa61849efe2b56a0d7774779ebb9d/onnx/model.onnx",
+        sha256: "0dbdd37573fb6b6ed836aa980ab729c81b659deec900799f37b6a09a57762e88",
+        license: "Apache-2.0",
+        approx_bytes: 26_227_993,
+        notes: "YOLOS-tiny COCO object detection (91 classes). Boxes and scores only; no tracking or attributes.",
+    },
 ];
 
 pub fn find_model(id: &str) -> Option<&'static ModelSpec> {

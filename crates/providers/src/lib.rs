@@ -12,6 +12,7 @@
 pub mod align;
 pub mod face;
 pub mod models;
+pub mod objects;
 pub mod ocr;
 pub mod registry;
 pub mod traits;

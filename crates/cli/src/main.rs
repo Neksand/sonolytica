@@ -145,6 +145,9 @@ struct AnalyzeArgs {
     /// Detect faces on the keyframes: count and boxes only, never identity
     #[arg(long)]
     faces: bool,
+    /// Detect COCO objects on the keyframes (91 classes, boxes and scores)
+    #[arg(long)]
+    objects: bool,
     /// Exit with status 2 if any stage failed or a requested capability did not run
     #[arg(long)]
     strict: bool,
@@ -325,6 +328,22 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                         }
                         _ => eprintln!(
                             "warning: face detection skipped; pass --out <file> so keyframes \
+                             have a directory to live in"
+                        ),
+                    }
+                }
+            }
+
+            if args.objects {
+                if args.no_frames {
+                    eprintln!("warning: object detection skipped because --no-frames was given");
+                } else {
+                    match args.out.as_deref() {
+                        Some(path) if path != Path::new("-") => {
+                            annotate_with_objects(&mut document, &store, path).await;
+                        }
+                        _ => eprintln!(
+                            "warning: object detection skipped; pass --out <file> so keyframes \
                              have a directory to live in"
                         ),
                     }
@@ -782,6 +801,157 @@ async fn extract_document_keyframes(
         }
         Err(error) => eprintln!("warning: keyframe extraction failed: {error}"),
     }
+}
+
+/// Detect COCO objects on every extracted keyframe and add an object track.
+///
+/// Class, box and score only: no tracking, attributes or identity. A missing
+/// model or a build without the `vision` feature is a warning.
+async fn annotate_with_objects(document: &mut Document, store: &ModelStore, out: &Path) {
+    let parent = out.parent().unwrap_or_else(|| Path::new(""));
+    let frames: Vec<(PathBuf, TimeRange)> = document
+        .artifacts
+        .iter()
+        .filter(|artifact| artifact.kind == "keyframe")
+        .map(|artifact| (parent.join(&artifact.path), artifact.range))
+        .collect();
+    if frames.is_empty() {
+        eprintln!("warning: object detection skipped; no keyframes were found");
+        return;
+    }
+    let frame_count = frames.len();
+    let threads = std::thread::available_parallelism()
+        .map_or(4, std::num::NonZeroUsize::get)
+        .min(8);
+    let store = store.clone();
+    let started_at = sonolytica_core::now_unix_ms();
+    let outcome = tokio::task::spawn_blocking(move || {
+        let provider = sonolytica_providers::objects::Yolos::load(&store, threads)?;
+        let mut objects: Vec<(TimeRange, sonolytica_providers::objects::ObjectDetection)> =
+            Vec::new();
+        let mut failures: Vec<String> = Vec::new();
+        for (path, range) in frames {
+            let result = std::fs::read(&path)
+                .map_err(|error| {
+                    sonolytica_providers::ProviderError::Io(format!(
+                        "cannot read {}: {error}",
+                        path.display()
+                    ))
+                })
+                .and_then(|bytes| provider.detect_jpeg(&bytes));
+            match result {
+                Ok(found) => objects.extend(found.into_iter().map(|object| (range, object))),
+                Err(error) => failures.push(format!("{}: {error}", path.display())),
+            }
+        }
+        Ok::<_, sonolytica_providers::ProviderError>((provider.info(), objects, failures))
+    })
+    .await;
+
+    let (info, objects, failures) = match outcome {
+        Ok(Ok(result)) => result,
+        Ok(Err(error)) => {
+            eprintln!("warning: object detection skipped: {error}");
+            document
+                .warnings
+                .push(Warning::new("objects_unavailable", error.to_string()));
+            return;
+        }
+        Err(error) => {
+            let message = format!("object detection task did not finish: {error}");
+            eprintln!("warning: {message}");
+            document
+                .warnings
+                .push(Warning::new("objects_failed", message));
+            return;
+        }
+    };
+
+    let runs_before = document.runs.len();
+    let tracks_before = document.tracks.len();
+    let segments_before = document.segments.len();
+    let status = if failures.len() == frame_count {
+        RunStatus::Failed {
+            reason: failures
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "object detection failed on every keyframe".into()),
+        }
+    } else if failures.is_empty() {
+        RunStatus::Complete
+    } else {
+        RunStatus::Partial {
+            reason: format!(
+                "{} of {frame_count} keyframe(s) failed object detection",
+                failures.len()
+            ),
+        }
+    };
+    let run = document.runs.len() as u32;
+    document.runs.push(RunRecord {
+        id: run,
+        capability: Capability::Vision,
+        provider: info.name.to_string(),
+        model: info.models.last().cloned(),
+        params_sha256: document.config.params_sha256(),
+        device: info.device.to_string(),
+        started_at_unix_ms: started_at,
+        duration_ms: sonolytica_core::now_unix_ms().saturating_sub(started_at),
+        status,
+    });
+
+    let track = document.tracks.len() as u32;
+    document.tracks.push(Track {
+        id: track,
+        kind: TrackKind::Object,
+        label: "objects".into(),
+        run,
+    });
+    let object_count = objects.len();
+    for (range, object) in objects {
+        document.segments.push(Segment {
+            id: document.segments.len() as u32,
+            track,
+            range,
+            parent: None,
+            kind: SegmentKind::Object {
+                class: object.class,
+                bbox: Some(object.bbox),
+            },
+            confidence: Some(Confidence::clamped(object.score)),
+            run,
+        });
+    }
+
+    let violations = document.validate();
+    if !violations.is_empty() {
+        document.segments.truncate(segments_before);
+        document.tracks.truncate(tracks_before);
+        document.runs.truncate(runs_before);
+        let codes = violations
+            .iter()
+            .map(|violation| violation.code.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        eprintln!("warning: object output discarded, the document would be invalid: {codes}");
+        document.warnings.push(Warning::new(
+            "objects_invalid",
+            format!("object output discarded: {codes}"),
+        ));
+        return;
+    }
+    if !failures.is_empty() {
+        let message = format!(
+            "{} of {frame_count} keyframe(s) failed object detection; first: {}",
+            failures.len(),
+            failures[0]
+        );
+        eprintln!("warning: {message}");
+        document
+            .warnings
+            .push(Warning::new("objects_partial", message).with_run(run));
+    }
+    eprintln!("objects: {object_count} detection(s) on {frame_count} keyframe(s)");
 }
 
 /// Detect faces on every extracted keyframe and add an object track.
