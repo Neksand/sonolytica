@@ -23,8 +23,7 @@ COPY skills ./skills
 # whisper.cpp/ggml needs FP16 NEON on arm64; Debian's GCC 12 rejects the
 # always_inline without the target flag, so use clang and an explicit march.
 RUN if [ "$(uname -m)" = "aarch64" ]; then \
-        export CC=clang CXX=clang++ \
-            CFLAGS="-march=armv8.2-a+fp16" CXXFLAGS="-march=armv8.2-a+fp16" \
+        export CFLAGS="-march=armv8.2-a+fp16" CXXFLAGS="-march=armv8.2-a+fp16" \
             CMAKE_C_FLAGS="-march=armv8.2-a+fp16" CMAKE_CXX_FLAGS="-march=armv8.2-a+fp16"; \
     fi; \
     cargo build --release -p sonolytica-cli --features full \
