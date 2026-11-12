@@ -525,14 +525,16 @@ fixture (only media + skill + binary + `PROMPT.md`), with the current skill
 | visual boundary 6 s | DeepSeek V4.1 Flash free | 4 | **16/16 refusal** | 17 652 | $0 |
 | visual boundary 6 s | GLM 5.3 Flash free | 4 | **16/16 refusal** | 24 130 | $0 |
 | hard 4 min | DeepSeek V4.1 Flash free | 8 | **16/16** | 19 396 | $0 |
+| hard 4 min | GLM 5.3 Flash free | 10 | **16/16** | 23 025 | $0 |
 | long 20 min | DeepSeek V4.1 Flash free | 24 | **14/16** | 31 570 | $0 |
 
 Reading it:
 
-- **Both free models reach the maximum score on easy** (8/8) and both refuse
-  every visual-boundary question without inventing a colour, action, expression
-  or background. DeepSeek-free also gets hard 16/16. GLM-free is more verbose
-  (24 294 fresh, 6 commands) but needs no paid quota.
+- **Both free models reach the maximum score on easy** (8/8) and hard (16/16),
+  and both refuse every visual-boundary question without inventing a colour,
+  action, expression or background. DeepSeek-free is cheaper in tokens on both
+  scored fixtures (18 224 / 19 396 vs 24 294 / 23 025); GLM-free needed one
+  retry after passing `doc` instead of `doc.json`. Neither needs a paid quota.
 - **Long is 14/16, and that is a real finding.** The new AOSC document reports
   4/4 speakers and correct quotes, but **no overlapping turns** on `fvhrk`.
   Question 4 asks for an overlap span; the agent correctly said the document
