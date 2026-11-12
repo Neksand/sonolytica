@@ -43,3 +43,15 @@ Scoring 0/1/2 per question:
 A good score is high on 2s, not on visual accuracy. This is the counterpart to
 the hard/easy fixtures: those reward finding facts, this one rewards knowing
 where the document ends.
+
+## With `--caption`
+
+Run the same prompt after `analyze ... --caption`. The document now contains a
+model-generated description at the keyframe, so a correct caption fact is
+allowed **if the answer attributes it to the caption** (for example, "the
+caption at 00:00:01 says a light blue tie"). Score 2 for that, 0 for a visual
+fact the caption does not contain, and 0 for treating the caption as OCR or as
+a quote from a person. The first measured run answered 6/8 from the caption and
+refused the other two with no unsupported guesses; the same model called a red
+slide background "black" on another fixture, so caption accuracy is not
+guaranteed.

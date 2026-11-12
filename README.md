@@ -79,6 +79,7 @@ Every quote carries its range; warnings are shown, not hidden.
 | Faces | count and boxes per keyframe, never identity | YuNet (opt-in `--faces`) |
 | Objects | 91 COCO classes with boxes and scores | YOLOS-tiny (opt-in `--objects`) |
 | Pose | 17 COCO body keypoints per person per keyframe | MoveNet Multipose (opt-in `--pose`) |
+| Captions | model-generated description of each keyframe | Florence-2-base-ft (opt-in `--caption`) |
 | Music | tempo, key, triads, sections, loudness | local DSP |
 | Acoustics | silence, LRA, true peak | local DSP |
 

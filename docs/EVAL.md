@@ -470,6 +470,36 @@ Reading it honestly:
   person doing / wearing / holding" needs a VLM; a pose model alone cannot
   answer it. That is an opt-in step with its own RAM and license check.
 
+### Keyframe captions: Florence-2-base-ft (2026-11-13)
+
+The first local VLM layer. Florence-2-base-ft (MIT) runs as a four-file ONNX
+bundle: 768×768 fp32 vision encoder, int8 text encoder/decoder/embeddings and
+the tokenizer. The decoder re-feeds the whole prefix on every step; there is no
+KV cache. The prompt is the processor's English rewrite of
+`<MORE_DETAILED_CAPTION>` (`"Describe with a paragraph what is shown in the
+image."`), encoded **without** special tokens; generation starts at `</s>` (2)
+and stops at 2.
+
+| Measurement | Value |
+|---|---|
+| bundle / peak RSS | 550 MB / **1.69 GB** |
+| 2 keyframes incl. load + OCR | 17.6 s |
+| cache hit, same flags | **0.01 s** |
+| portrait: visual-boundary questions answered | **6/8** from the caption, 0 unsupported guesses |
+| full visual-boundary score, caption-aware | **16/16** |
+
+The portrait caption was: *"A portrait of the President of the United States of
+America… He is wearing a dark blue suit with a light blue polka dot tie. His
+arms are crossed in front of him. Behind him are two American flags… He is
+smiling."* It answered tie colour, gesture, flag count, expression, clothing
+and background. Flag text and sitting/standing stayed absent, and the agent
+said so.
+
+Honest failure: on the two slide keyframes the same model described the red
+background as **black** and repeated itself. Captions are model-generated and
+can be wrong; OCR remains the authority for exact on-screen text. The boundary
+fixture is one portrait; a varied-scene caption benchmark is the next step.
+
 ## What the numbers say to do next
 
 The planned order was forced alignment, then diarization. The measurements
@@ -482,9 +512,11 @@ argue for swapping that:
    the next change is speaker-attributed ASR, not another count heuristic.
    The 4-speaker model cap remains: a document that fills all four slots carries
    `diarization_speaker_cap` and its count is a lower bound.
-2. **Visual semantics are the next perception gap.** Pose, faces, objects and
-   OCR are keyframe observations; "what is happening" needs an opt-in local VLM
-   with a RAM/license gate, not another per-frame detector.
+2. **Visual semantics: first tier is in.** Florence-2 captions answer
+   "what/who/what are they wearing" on a keyframe; they can hallucinate and are
+   not a substitute for OCR. The next tier is a free-form VQA model
+   (SmolVLM2-500M) for questions the caption does not cover, then a
+   varied-scene caption benchmark.
 3. **Alignment second.** WER 6.05 % is near the model ceiling and deletions are
    1.1 %; alignment improves *when* a word was said (citations, cutting), not
    *what* was said. Still worth doing, but it does not move the headline.

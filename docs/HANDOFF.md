@@ -6,11 +6,12 @@ scripts, `brief` v2 (scene cuts, OCR lines, overlap spans), `query verify`,
 HTML `report`, `install-skill` for four harnesses, release workflow, dense
 frames, YuNet faces, YOLOS objects, a 200-line skill core, AOSC streaming
 diarization for long files (4/4 speakers on `fvhrk`, DER 6.40 %), an analysis
-cache, `query ask` evidence packs, and MoveNet body pose on keyframes.
+cache, `query ask` evidence packs, MoveNet body pose, and Florence-2 keyframe
+captions behind a multi-file model bundle.
 
 Read this first, then `docs/STATUS.md` (numbers), `docs/EVAL.md` (methods),
 `docs/BENCHMARK.md` (agent and head-to-head tests), `docs/MODELS.md` (licenses,
-caps), `docs/OCR.md`, `docs/SCHEMA.md` (1.5.0). Forward plans live outside the
+caps), `docs/OCR.md`, `docs/SCHEMA.md` (1.6.0). Forward plans live outside the
 repo: `/Users/neksand/.opencode/plan/sonolytica-skill-cost-2026-11-12.md`
 (closed), `sonolytica-ideal-night-2026-11-12.md` (night work), and
 `sonolytica-beat-all-2026-11-12.md` (category + launch).
@@ -26,14 +27,14 @@ OCR text, and provenance on every segment. Agents read it via
 
 | | |
 |---|---|
-| Rust | 20 974 lines, 7 crates: `providers` (5 681), `cli` (7 220), `engine` (2 638), `core` (2 158), `dsp` (1 360), `media` (1 226), `eval` (691) |
+| Rust | 21 768 lines, 7 crates: `providers` (6 167), `cli` (7 519), `engine` (2 638), `core` (2 167), `dsp` (1 360), `media` (1 226), `eval` (691) |
 | Binary | `sonolytica` (`sonolytica-cli`) |
 | SDK | `sonolytica-engine` (`Engine::analyze`) |
-| Schema | **1.5.0**, additive 1.0 → 1.5 |
-| Models | 13, SHA-256 pinned, in `~/.cache/sonolytica/models` |
+| Schema | **1.6.0**, additive 1.0 → 1.6 |
+| Models | 14, SHA-256 pinned, in `~/.cache/sonolytica/models` |
 | Commands | 17 query subcommands (brief … verify, ask, poses, help) + `report`, `install-skill`, `analyze`, `models`, `cache`, `doctor`, `inspect`, `schema` |
 | Skill | `skills/sonolytica/` (SKILL.md 200 lines + 5 references + 5 workflows) |
-| Tests | **164** model-free / **179** all-features |
+| Tests | **166** model-free / **181** all-features |
 
 Features: `sonolytica-cli --features full-metal` = whisper + silero + diarize +
 ocr + vision + align + metal. `cargo test --workspace` runs without
@@ -53,6 +54,8 @@ models/cmake/ORT.
 | Objects | YOLOS-tiny on keyframes: `person` 0.999 + `tie` 0.991 on a portrait, 0 false objects on 6 slide keyframes | local test |
 | Pose | MoveNet Multipose on a portrait: 1 person, 11 COCO keypoints above 0.3; on a face-only frame it invents 3 person-shaped boxes (0.41–0.62), so it is an observation, not a body-presence oracle | local test |
 | Cost | cache hit **0.01 s** vs 7.64 s on the 14.4 s fixture; `query ask` 978 B text vs 3 912 B for three equivalent queries | local test |
+| Captions | Florence-2-base-ft (MIT, 550 MB): portrait caption answered 6/8 visual-boundary questions, 0 unsupported; 16/16 caption-aware; slide captions can invent colours | local test |
+
 | Free agents | easy 8/8 / 18 224, hard 16/16 / 19 396, long 14/16 / 31 570, visual 16/16 refusal / 17 652 | clean dirs, `$0`, 2026-11-13 |
 
 | Throughput | **16.9×** on the 240 s hard fixture with the VAD gate (17.9× without; +0.8 s); 14.1× on the 155.6 s full audio pipeline before the gate | EVAL |
@@ -142,6 +145,13 @@ for skill runs vs 7 and 3**. Raw outputs: `docs/bench/2026-11-12/`.
 - **`query ask` is retrieval, not an answer.** It ranks existing segments,
   names absent terms and returns ranges; it never synthesises prose. The agent
   must still quote from the returned evidence and verify with `query verify`.
+- **Captions are model-generated observations.** Florence-2 text is not OCR,
+  not speech and not ground truth; it is bound to one keyframe, can invent a
+  colour or a detail, and must be cited as a caption at that instant. OCR stays
+  the authority for exact on-screen text. `--caption` is opt-in.
+- **A multi-file model is a bundle.** The registry pins every file separately
+  and a composite manifest digest; `ModelStore::require` returns the directory.
+  Never pin only the decoder and silently fetch a different tokenizer.
 - **Dense frames are opt-in**: scene keyframes first, stride fills the rest,
   `--max-frames` still caps. `brief` collapses consecutive identical OCR lines
   so a dense run does not turn the map into a contact sheet.
@@ -209,6 +219,13 @@ for skill runs vs 7 and 3**. Raw outputs: `docs/bench/2026-11-12/`.
 - **YuNet preprocessing is exact**: fixed 640×640 input, **BGR, 0..255 floats**,
   no mean subtraction, score `sqrt(cls*obj)`, NMS 0.3. Feeding 0..1 yields zero
   detections with no error — that cost one debug cycle.
+- **Florence-2 is four graphs, no KV cache.** 768×768 ImageNet-normalised
+  CHW → vision `image_features [1,577,768]`; prompt encoded **without** special
+  tokens; encoder input is image features followed by text embeddings; decoder
+  starts at `</s>` (2) and re-feeds the whole prefix each step; EOS is 2.
+  `decoder_model_merged` dead-ends and `decoder_with_past` is static-16-token;
+  use `decoder_model_int8`. The tokenizer has no `<CAPTION>` token — encode the
+  English rewrite.
 - **MoveNet output is keypoints-first, not box-first**: each of the 6 rows is
   `17 × (y, x, score)` followed by `[ymin, xmin, ymax, xmax, person_score]`.
   The input is `int32` RGB, 256×256 letterboxed; a `uint8` feed is rejected.
@@ -236,7 +253,7 @@ for skill runs vs 7 and 3**. Raw outputs: `docs/bench/2026-11-12/`.
   verse/chorus labels; novelty is normalised 0–1.
 - **Schema**: only additive changes, minor bumps, old documents stay readable.
   `1.1.0` artifacts, `1.2.0` text_overlay/text track, `1.3.0` align,
-  `1.4.0` music sections, `1.5.0` pose.
+  `1.4.0` music sections, `1.5.0` pose, `1.6.0` captions.
 
 ## 5. Environment (this machine)
 
@@ -246,7 +263,7 @@ verified on PIL-rendered slides and real keyframes. `whisper` CLI and
 `tesseract` **are installed** on PATH — the first benchmarks' baselines used
 them; the hard benchmark forbids them by instruction.
 
-Model store `~/.cache/sonolytica/models` (~2 GB, 13 models): silero_vad.onnx,
+Model store `~/.cache/sonolytica/models` (~2.6 GB, 14 models): silero_vad.onnx,
 ggml-tiny.en/base.en/small, wav2vec2-base-960h.onnx, segmentation-3.0.onnx,
 sortformer-4spk-v2.1.onnx, wespeaker CAM++, pp_ocrv5_det/rec.onnx,
 yunet_face_detection_2023mar.onnx, yolos_tiny.onnx. `models list` shows status.
@@ -267,8 +284,8 @@ cd /Users/neksand/orca/projects/SONOLYTICA
 git status                       # must be clean
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace           # 164, no models
-cargo test --workspace --all-features   # 179
+cargo test --workspace           # 166, no models
+cargo test --workspace --all-features   # 181
 
 # real models (macOS fixtures, ~10 s)
 SONOLYTICA_E2E=1 cargo test -p sonolytica-engine --features "full,metal" --test e2e_speech
@@ -286,7 +303,9 @@ python3 scripts/eval/der_voxconverse.py \
   --count 0 --min-speakers 2 --max-speakers 4 \
   --workdir /private/tmp/sono-eval/der-test2-final \
   --json-out /private/tmp/sono-eval/der-test2-final.json
-# cache, evidence pack, pose
+# cache, evidence pack, pose, captions
+./target/debug/sonolytica analyze /private/tmp/face.mp4 --out /tmp/cap.json --max-frames 1 --caption
+./target/debug/sonolytica query captions /tmp/cap.json --json
 ./target/debug/sonolytica cache
 ./target/debug/sonolytica query ask /private/tmp/bench-brief2/doc.json "budget" --json
 ./target/debug/sonolytica query poses /private/tmp/pose-test/face.json --json
@@ -381,9 +400,9 @@ Delivered in this cycle:
 
 Open, in priority order:
 
-1. **Opt-in local VLM** (`--vision local`): captions for keyframes, 2–4 GB
-   model, RAM warning, never silently enabled. Pose/faces/objects are
-   keyframe-bound; semantics is the remaining visual gap.
+1. **Free-form VQA tier** (SmolVLM2-500M, Apache-2.0): the Florence-2
+   caption tier is in; the next gap is arbitrary questions ("is he holding a
+   knife?") that a one-shot caption does not answer. Opt-in, RAM/license gate.
 2. **Music depth**: basic-pitch notes and technical highlight windows.
 3. **Distribution and launch**: external brew tap (needs a separate repo),
    Docker image, a second Gemini run when the quota resets, launch assets.
@@ -495,6 +514,10 @@ the analysis cache, `query ask` evidence packs and MoveNet pose.
   fingerprint and schema version are part of the key.
 - **A cached document is a record, not a new run.** Keep its `created_unix_ms`
   and run timings, rewrite the media path, and mark it `analysis_cached`.
+- **A caption is not sight.** Florence-2 described a portrait correctly
+  (tie, arms, flags, smile) and called a red slide background black on the same
+  run. Use captions for semantic navigation, OCR for exact text, and always say
+  which layer made the claim.
 - **AOSC fixed the count but removed the old overlap flags.** The old
   `fvhrk` document had eight S1 turns made of words that also sit inside S2
   sentences (`students`, `from`, …); the new streaming document has none. The
@@ -509,10 +532,11 @@ vision cycles are closed: **hard 16/16 / 14 773 median, easy 8/8 / 8 818, long
 16/16 / 13 443**; Gemini alone 14/16 vs 16/16 with the skill; TwelveLabs 10/16.
 The AOSC streaming cycle is closed on the DER axis: `fvhrk` 4/4 speakers,
 DER 6.40 % (was 2/4, 15.99 %), no regression on 1-4 speaker files. The free
-agent matrix is easy 8/8, hard 16/16, visual 16/16 refusal, long 14/16 — the
-long loss is the overlap question, not the count. Cost tooling is in: cache,
-`query ask`, and pose. The next objectives are **speaker-attributed ASR** and
-the **opt-in local VLM**, then music notes and distribution/launch.
+agent matrix is easy 8/8, hard 16/16, visual 16/16 refusal, visual+caption
+16/16, long 14/16 — the long loss is the overlap question, not the count.
+Cost tooling is in: cache, `query ask`, and pose. The first caption tier is in
+(Florence-2). The next objectives are **speaker-attributed ASR** and a
+**free-form VQA tier** (SmolVLM2), then music notes and distribution/launch.
 
 Do not re-litigate the rejected experiments (VAD gate at 0.45, merge tie-break,
 count heuristics), do not preload reference files, and quote medians + ranges

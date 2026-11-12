@@ -1,4 +1,4 @@
-# Document schema (v1.5.0)
+# Document schema (v1.6.0)
 
 One analysis produces one `Document`. It is designed for machine consumption:
 typed fields, stable names, explicit units, and no placeholders standing in for
@@ -10,7 +10,7 @@ unknown values.
 |---|---|
 | Timeline | `MediaTime` = integer **microseconds** from the start of the container |
 | Interval | `TimeRange { start, end }`, half-open `[start, end)` |
-| Modality | `Track.kind`: `speech`, `speaker_turn`, `music`, `acoustic`, `scene`, `text`, `object`, `face`, `pose` |
+| Modality | `Track.kind`: `speech`, `speaker_turn`, `music`, `acoustic`, `scene`, `text`, `object`, `face`, `pose`, `caption` |
 | Identity | `Track.id` and `Segment.id` equal their index in `tracks` / `segments` |
 | Hierarchy | `Segment.parent` points into another track (refinement, not grouping) |
 | Cross-modal facts | `relations[]` with typed `kind` |
@@ -26,7 +26,7 @@ validator enforces this (`segment_bounds`, `word_bounds`).
 
 ```jsonc
 {
-  "schema_version": "1.5.0",
+  "schema_version": "1.6.0",
   "generator": { "name": "sonolytica", "version": "0.1.0" },
   "created_unix_ms": 1794345592518,
 
@@ -167,12 +167,15 @@ can be moved together. A still image carries a point range (`start == end`).
 | `text_overlay` | `text`, `bbox` — an OCR line from one keyframe |
 | `object` | `class`, `bbox?` |
 | `pose` | `person` (slot within the frame), `bbox?`, `keypoints[]` — 17 COCO `name`, `x`, `y`, `score`, all normalised `0..1` |
+| `caption` | `text` — a model-generated description of one keyframe; not OCR, not speech, not ground truth |
 
 `scene` segments come from shot detection (2 fps frame signatures, adaptive
 threshold); `cut: true` marks a detected edit, the first scene has `cut: false`.
-They are technical boundaries, not topics. OCR, faces, objects and pose are
-keyframe-bound: one observation per sampled keyframe, no tracking and no claim
-about the frames in between. "Not detected" is not "absent".
+They are technical boundaries, not topics. OCR, faces, objects, pose and
+captions are keyframe-bound: one observation per sampled keyframe, no tracking
+and no claim about the frames in between. A caption is model-generated prose
+and can be wrong; cite it as an observation at one instant. "Not detected" is
+not "absent".
 
 `speaker` labels are stable within a document, not across recordings. There is
 no claim that `S1` in two files is the same person.
@@ -227,7 +230,8 @@ A capability with no provider does **not** create a failed run: it appears in
 - `1.1.0` adds `artifacts[]`; `1.2.0` adds `text_overlay` segments and the
   `text` track kind; `1.3.0` adds the `align` capability and `config.align_words`;
   `1.4.0` adds `music.sections`; `1.5.0` adds `pose` segments and the `pose`
-  track kind. Every older document stays readable.
+  track kind; `1.6.0` adds `caption` segments and the `caption` track kind.
+  Every older document stays readable.
 
 ## Query commands
 
@@ -243,6 +247,9 @@ sonolytica query ask doc.json "budget and pricing" --json
 
 # Body keypoints per person per keyframe
 sonolytica query poses doc.json --max 20 --json
+
+# Model-generated keyframe captions
+sonolytica query captions doc.json --json
 
 # Everything that happens between 00:12 and 00:30 (half-open window)
 sonolytica query timeline doc.json --from 00:00:12 --to 00:00:30
@@ -277,7 +284,7 @@ sonolytica query runs doc.json
 ```
 
 `--type` accepts `speech`, `speaker_turn`, `music_label`, `acoustic_event`,
-`scene`, `object`, `pose`, `text_overlay`.
+`scene`, `object`, `pose`, `caption`, `text_overlay`.
 
 Chapters are derived, not stored: `query chapters` boundaries on silence longer
 than `--min-gap` (default 1.2 s), a change of speaker, or a scene cut. The
