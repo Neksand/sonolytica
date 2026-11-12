@@ -13,6 +13,10 @@ provenance.
 3. **Model file → runtime.** ONNX/GGML weights execute native code paths.
 4. **Document → consumer.** JSON is plain data; consumers must still treat text
    fields as untrusted.
+5. **MCP client → local server.** Tools run the binary with the user's
+   permissions and accept local paths. The stdio server has no
+   authentication; expose it only to a trusted local client, never on a
+   network socket. Streamable HTTP is not implemented.
 
 ## Controls
 
@@ -72,6 +76,15 @@ weights; there is no unbounded frame buffer.
 - **Denial of service via output size.** A dense recording can produce large
   JSON. Consumers should apply their own size limits; the engine's limits bound
   input, not output.
+- **MCP is not a sandbox.** `analyze_media` and the query tools can read any
+  path the server process can read and write the requested output. Run the
+  server as an unprivileged user with the media directory mounted read-only
+  where possible.
+- **Docker runs as root by default.** Use `--user "$(id -u):$(id -g)"` and
+  mount media read-only for shared hosts.
+- **Captions and pose are not identity.** Florence captions and MoveNet
+  keypoints are model-generated observations; do not use them for identity,
+  emotion or safety decisions.
 
 ## Reporting
 

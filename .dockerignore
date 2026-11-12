@@ -1,0 +1,7 @@
+target/
+.planning/
+.git/
+.github/
+docs/bench/
+dist/
+*.sonolytica.json
