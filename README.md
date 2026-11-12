@@ -78,6 +78,7 @@ Every quote carries its range; warnings are shown, not hidden.
 | On-screen text | exact OCR lines with boxes | PP-OCRv5 |
 | Faces | count and boxes per keyframe, never identity | YuNet (opt-in `--faces`) |
 | Objects | 91 COCO classes with boxes and scores | YOLOS-tiny (opt-in `--objects`) |
+| Pose | 17 COCO body keypoints per person per keyframe | MoveNet Multipose (opt-in `--pose`) |
 | Music | tempo, key, triads, sections, loudness | local DSP |
 | Acoustics | silence, LRA, true peak | local DSP |
 
