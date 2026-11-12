@@ -7,6 +7,8 @@
 //! model store and macOS `say` for the fixtures. The assertions are functional
 //! (plumbing, timestamps, speaker separation), not accuracy claims.
 
+#![cfg(feature = "full")]
+
 use std::path::Path;
 use std::process::Command;
 
