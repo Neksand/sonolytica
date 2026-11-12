@@ -28,7 +28,7 @@ OCR text, and provenance on every segment. Agents read it via
 | Schema | **1.4.0**, additive 1.0 → 1.4 |
 | Models | 12, SHA-256 pinned, in `~/.cache/sonolytica/models` |
 | Commands | 15 query subcommands (brief … verify, help) + `report`, `install-skill`, `analyze`, `models`, `doctor`, `inspect`, `schema` |
-| Skill | `skills/sonolytica/` (SKILL.md 199 lines + 5 references + 5 workflows) |
+| Skill | `skills/sonolytica/` (SKILL.md 200 lines + 5 references + 5 workflows) |
 | Tests | **153** model-free / **168** all-features |
 
 Features: `sonolytica-cli --features full-metal` = whisper + silero + diarize +

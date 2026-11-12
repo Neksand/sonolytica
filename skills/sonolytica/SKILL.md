@@ -65,6 +65,7 @@ skip `analyze` and start at `query runs`.
    music/acoustic headlines. Most overview questions end here.
 2. Only the command the question needs (§5) — for an exact quote, a time
    window, a frame or the full speaker list.
+3. Visual questions: set `--ocr --objects --faces` at analyze time, not later.
 
 `brief` is a map, not a citation source: quote exact wording and ranges from
 `search`, `words` or `transcript`. Full speaker/chapter lists are
@@ -121,8 +122,7 @@ Rules of use:
   continuous speech).
 - `query at T` returning `(none)` is not measured silence; `acoustic.silence` is
   level-based and can appear inside a speech segment, so neither proves "nobody
-  spoke". If a word list starts after the text does, quote `speech.text` and say
-  the timing starts at the first token present.
+  spoke".
 
 Detail and edge cases: `references/citation-rules.md`.
 
@@ -147,8 +147,8 @@ Detail and edge cases: `references/citation-rules.md`.
 An empty `query search` is a fact about the transcript, not about the world.
 Say "В транскрипте нет слова X", then offer the nearest token as a
 **hypothesis** ("возможно, ASR расслышал его как Y, 00:00:03.140"), never as a
-quote and never as "не говорили". Numbers are normalised: search digits first.
-Full protocol: `references/citation-rules.md`.
+quote and never as "не говорили". Numbers are normalised: search digits first;
+full protocol in `references/citation-rules.md`.
 
 ## 10. Speech, music and video rules
 
