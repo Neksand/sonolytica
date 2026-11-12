@@ -133,6 +133,12 @@ for skill runs vs 7 and 3**. Raw outputs: `docs/bench/2026-11-12/`.
   detections; do not "fix" it back.
 - **Vision models look at sampled keyframes only.** "Not detected" is not "not
   present"; `--frame-stride N` is the tool for long static shots.
+- **Captions are model-generated observations, not sight.** `--caption` is
+  opt-in, one per keyframe, can invent a colour or a detail; never treat it as
+  OCR, as speech or as ground truth. Quote it as "caption at <time>".
+- **Multi-file models are pinned file by file plus a composite manifest
+  digest.** Never pin only the decoder and fetch a different tokenizer later;
+  `ModelStore::require` returns the verified bundle directory.
 - **Pose is detection-only and keyframe-bound.** 17 COCO keypoints per person,
   no tracking, no identity. A tight face crop can produce a plausible body
   below it; treat pose as an observation at one instant, never as proof that a
