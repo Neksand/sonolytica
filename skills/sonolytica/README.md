@@ -52,7 +52,7 @@ sonolytica models fetch silero-vad-v5 whisper-base.en \
   sortformer-4spk-v2.1 pyannote-segmentation-3.0 wespeaker-campplus
 # vision is opt-in per run: add these when using --ocr/--faces/--objects/--pose
 sonolytica models fetch pp-ocrv5-det pp-ocrv5-rec \
-  yunet-face-detection yolos-tiny movenet-multipose
+  yunet-face-detection yolos-tiny movenet-multipose florence-2-base-ft
 ```
 
 Models live in `~/.cache/sonolytica/models`; override with `--models-dir` or

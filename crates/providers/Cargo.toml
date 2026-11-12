@@ -19,7 +19,7 @@ diarize = ["dep:ort", "dep:ndarray", "dep:knf-rs", "dep:hound", "dep:rustfft"]
 # PP-OCRv5 text detection and recognition through ONNX Runtime.
 ocr = ["dep:ort", "dep:image"]
 # YuNet face detection (count and boxes only) through ONNX Runtime.
-vision = ["dep:ort", "dep:image"]
+vision = ["dep:ort", "dep:image", "dep:tokenizers"]
 # wav2vec2 CTC forced word alignment through ONNX Runtime.
 align = ["dep:ort"]
 # Everything, for a full local pipeline.
@@ -33,6 +33,7 @@ ndarray = { workspace = true, optional = true }
 ort = { workspace = true, optional = true }
 hound = { workspace = true, optional = true }
 image = { version = "0.25", default-features = false, features = ["jpeg"], optional = true }
+tokenizers = { version = "0.21.2", default-features = false, features = ["fancy-regex"], optional = true }
 knf-rs = { version = "0.3.2", optional = true }
 rustfft = { workspace = true, optional = true }
 serde = { workspace = true }

@@ -11,6 +11,7 @@
 
 pub mod align;
 pub mod face;
+pub mod florence;
 pub mod models;
 pub mod objects;
 pub mod ocr;

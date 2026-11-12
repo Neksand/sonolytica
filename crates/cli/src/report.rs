@@ -265,6 +265,13 @@ fn frames_section(out: &mut String, document: &Document, frames: &[(usize, Strin
         )
         .map(|segment| segment.range.start.micros())
         .collect();
+    let captions: Vec<(i64, String)> = document
+        .segments_of_kind("caption")
+        .filter_map(|segment| match &segment.kind {
+            SegmentKind::Caption { text } => Some((segment.range.start.micros(), text.clone())),
+            _ => None,
+        })
+        .collect();
     let poses: Vec<i64> = document
         .segments_of_kind("pose")
         .map(|segment| segment.range.start.micros())
@@ -327,6 +334,11 @@ fn frames_section(out: &mut String, document: &Document, frames: &[(usize, Strin
                     format!("{face_count} faces")
                 }
             );
+        }
+        for (caption_at, text) in &captions {
+            if *caption_at / 1000 == at / 1000 {
+                let _ = write!(out, "<p class=\"caption\">{}</p>", esc(text));
+            }
         }
         let pose_count = poses
             .iter()
@@ -493,6 +505,7 @@ figure{margin:0;background:#11141a;border:1px solid var(--line);border-radius:10
 figure img{display:block;width:100%;height:auto}
 figcaption{padding:8px 10px 0;color:var(--muted)}
 .ocr{margin:6px 10px 10px;font-size:13px}
+.caption{margin:6px 10px 10px;font-size:13px;color:var(--muted);font-style:italic}
 .turn{padding:10px 0;border-bottom:1px solid var(--line)}
 .turn:last-child{border-bottom:0}
 .turn p{margin:4px 0 0}

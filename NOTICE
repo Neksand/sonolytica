@@ -25,5 +25,15 @@ pinned artifact from the URL in `crates/providers/src/models.rs` after verifying
 its SHA-256. Anyone who redistributes a copy of the weights must include this
 notice and the license agreement.
 
+Other model weights downloaded at runtime
+---------------------------------------
+
+- MoveNet Multipose: Apache-2.0, Google; ONNX export by Xenova.
+- Florence-2-base-ft: MIT, Copyright (c) Microsoft Corporation; ONNX export by
+  onnx-community, revision e88a44eaf3791a35eae0c5a47b3dbcd36e67eb6f.
+- YuNet: MIT, OpenCV Zoo. YOLOS-tiny: Apache-2.0. Silero VAD: MIT.
+  Whisper: MIT. wav2vec2: Apache-2.0. pyannote segmentation: MIT.
+  WeSpeaker CAM++: Apache-2.0. PP-OCRv5: Apache-2.0.
+
 Evaluation datasets (VoxConverse, LibriSpeech) are not bundled either; their
 citations and licenses are recorded in `docs/EVAL.md`.

@@ -122,6 +122,8 @@ pub enum TrackKind {
     Face,
     /// Body pose keypoints, one segment per person per keyframe.
     Pose,
+    /// Model-generated description of one keyframe.
+    Caption,
     /// Text read from the picture (OCR), one segment per line.
     Text,
 }
@@ -174,6 +176,11 @@ pub enum SegmentKind {
         bbox: Option<BBox>,
         keypoints: Vec<Keypoint>,
     },
+    /// A model-generated description of one keyframe. Not OCR, not speech and
+    /// not ground truth: it can be wrong and must be cited as an observation.
+    Caption {
+        text: String,
+    },
     /// Text visible in the picture at one instant, as produced by OCR. The
     /// range is the keyframe's instant, not a claim about how long the text
     /// was on screen.
@@ -193,6 +200,7 @@ impl SegmentKind {
             Self::Scene { .. } => "scene",
             Self::Object { .. } => "object",
             Self::Pose { .. } => "pose",
+            Self::Caption { .. } => "caption",
             Self::TextOverlay { .. } => "text_overlay",
         }
     }
@@ -201,6 +209,7 @@ impl SegmentKind {
         match self {
             Self::Speech { text, .. }
             | Self::SpeakerTurn { text, .. }
+            | Self::Caption { text }
             | Self::TextOverlay { text, .. } => Some(text),
             _ => None,
         }

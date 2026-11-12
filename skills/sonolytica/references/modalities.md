@@ -9,6 +9,9 @@ Detail behind §10 of `SKILL.md`. Open only the section you need.
 - Sortformer tracks at most four speakers. When all four slots are used the
   document adds a `diarization_speaker_cap` warning: the count is a lower bound,
   so say "at least N", never an exact count for 5+ voices.
+- `--caption` adds a model-generated description per keyframe (Florence-2).
+  Treat it as an observation at that instant: it can be wrong, it is not OCR
+  and it is not a quote. Cite the keyframe time and say "caption".
 - `--pose` adds body keypoints from MoveNet Multipose: up to six people per
   keyframe, 17 COCO points, normalised `0..1` with a score. Detection only: no
   tracking, no identity, and no coverage between sampled keyframes. Say "not

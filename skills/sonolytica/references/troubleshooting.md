@@ -8,6 +8,7 @@
 | `warnings[code=diarization_vad_gated]` | the VAD gate removed diarizer turns that did not overlap speech | not an error; the removed time was music/noise |
 | `warnings[code=diarization_vad_gate_unavailable]` | the stricter gate pass failed | speaker turns are ungated; read the message |
 | `warnings[code=analysis_cached]` | this document came from a cached analysis of the same bytes and parameters | valid data; `--no-cache` only when a fresh run is required |
+| `warnings[code=caption_unavailable]` | caption model missing or build without `vision` | re-run with the model installed; do not describe the frame yourself |
 | `warnings[code=pose_unavailable]` | pose model missing or build without `vision` | re-run with the model installed; do not infer poses |
 | `warnings[code=diarization_speaker_cap]` | all four Sortformer slots are in use; 5+ voices may be merged | say "at least N" speakers; do not cite the count as exact |
 | `run.status = partial` | it ran but produced less than asked | read `reason`; re-run with the model installed |

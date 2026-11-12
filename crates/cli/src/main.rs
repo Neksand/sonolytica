@@ -167,6 +167,9 @@ struct AnalyzeArgs {
     /// detection only (no tracking or identity)
     #[arg(long)]
     pose: bool,
+    /// Describe each keyframe with Florence-2 (model-generated caption, not OCR)
+    #[arg(long)]
+    caption: bool,
     /// Re-run even when a cached analysis of the same bytes and parameters exists
     #[arg(long)]
     no_cache: bool,
@@ -302,6 +305,7 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                 faces: args.faces,
                 objects: args.objects,
                 pose: args.pose,
+                caption: args.caption,
                 no_frames: args.no_frames,
                 max_frames: args.max_frames,
                 frame_stride: args.frame_stride,
@@ -398,6 +402,22 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                         _ => eprintln!(
                             "warning: pose detection skipped; pass --out <file> so keyframes \
                              have a directory to live in"
+                        ),
+                    }
+                }
+            }
+
+            if args.caption {
+                if args.no_frames {
+                    eprintln!("warning: captions skipped because --no-frames was given");
+                } else {
+                    match args.out.as_deref() {
+                        Some(path) if path != Path::new("-") => {
+                            annotate_with_captions(&mut document, &store, path).await;
+                        }
+                        _ => eprintln!(
+                            "warning: captions skipped; pass --out <file> so keyframes have a \
+                             directory to live in"
                         ),
                     }
                 }
@@ -630,6 +650,9 @@ fn cacheable(document: &Document, config: &AnalysisConfig, args: &AnalyzeArgs) -
                 | "pose_failed"
                 | "pose_partial"
                 | "pose_invalid"
+                | "caption_unavailable"
+                | "caption_failed"
+                | "caption_partial"
         )
     })
 }
@@ -1404,6 +1427,151 @@ async fn annotate_with_pose(document: &mut Document, store: &ModelStore, out: &P
             .push(Warning::new("pose_partial", message).with_run(run));
     }
     eprintln!("pose: {people_count} person(s) on {frame_count} keyframe(s)");
+}
+
+/// Describe every extracted keyframe with Florence-2.
+///
+/// Model-generated text: an observation at one instant, not OCR and not
+/// ground truth. A missing model or a build without `vision` is a warning,
+/// never a failed run.
+async fn annotate_with_captions(document: &mut Document, store: &ModelStore, out: &Path) {
+    let parent = out.parent().unwrap_or_else(|| Path::new(""));
+    let frames: Vec<(PathBuf, TimeRange)> = document
+        .artifacts
+        .iter()
+        .filter(|artifact| artifact.kind == "keyframe")
+        .map(|artifact| (parent.join(&artifact.path), artifact.range))
+        .collect();
+    if frames.is_empty() {
+        eprintln!("warning: captions skipped; no keyframes were found");
+        return;
+    }
+    let frame_count = frames.len();
+    let threads = std::thread::available_parallelism()
+        .map_or(4, std::num::NonZeroUsize::get)
+        .min(8);
+    let store = store.clone();
+    let started_at = sonolytica_core::now_unix_ms();
+    let outcome = tokio::task::spawn_blocking(move || {
+        let provider = sonolytica_providers::florence::Florence2::load(&store, threads)?;
+        let mut captions: Vec<(TimeRange, String)> = Vec::new();
+        let mut failures: Vec<String> = Vec::new();
+        for (path, range) in frames {
+            let result = std::fs::read(&path)
+                .map_err(|error| {
+                    sonolytica_providers::ProviderError::Io(format!(
+                        "cannot read {}: {error}",
+                        path.display()
+                    ))
+                })
+                .and_then(|bytes| provider.describe_jpeg(&bytes));
+            match result {
+                Ok(text) => captions.push((range, text)),
+                Err(error) => failures.push(format!("{}: {error}", path.display())),
+            }
+        }
+        Ok::<_, sonolytica_providers::ProviderError>((provider.info(), captions, failures))
+    })
+    .await;
+
+    let (info, captions, failures) = match outcome {
+        Ok(Ok(result)) => result,
+        Ok(Err(error)) => {
+            eprintln!("warning: captions skipped: {error}");
+            document
+                .warnings
+                .push(Warning::new("caption_unavailable", error.to_string()));
+            return;
+        }
+        Err(error) => {
+            let message = format!("caption task did not finish: {error}");
+            eprintln!("warning: {message}");
+            document
+                .warnings
+                .push(Warning::new("caption_failed", message));
+            return;
+        }
+    };
+
+    let status = if failures.len() == frame_count {
+        RunStatus::Failed {
+            reason: failures
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "captioning failed on every keyframe".into()),
+        }
+    } else if failures.is_empty() {
+        RunStatus::Complete
+    } else {
+        RunStatus::Partial {
+            reason: format!(
+                "{} of {frame_count} keyframe(s) failed captioning",
+                failures.len()
+            ),
+        }
+    };
+    let run = document.runs.len() as u32;
+    document.runs.push(RunRecord {
+        id: run,
+        capability: Capability::Vision,
+        provider: info.name.to_string(),
+        model: info.models.last().cloned(),
+        params_sha256: document.config.params_sha256(),
+        device: info.device.to_string(),
+        started_at_unix_ms: started_at,
+        duration_ms: sonolytica_core::now_unix_ms().saturating_sub(started_at),
+        status,
+    });
+
+    let track = document.tracks.len() as u32;
+    document.tracks.push(Track {
+        id: track,
+        kind: TrackKind::Caption,
+        label: "captions".into(),
+        run,
+    });
+    let caption_count = captions.len();
+    for (range, text) in captions {
+        document.segments.push(Segment {
+            id: document.segments.len() as u32,
+            track,
+            range,
+            parent: None,
+            kind: SegmentKind::Caption { text },
+            confidence: None,
+            run,
+        });
+    }
+
+    let violations = document.validate();
+    if !violations.is_empty() {
+        let codes = violations
+            .iter()
+            .map(|violation| violation.code.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        document.segments.retain(|segment| segment.run != run);
+        document.tracks.retain(|track| track.run != run);
+        document.runs.retain(|record| record.id != run);
+        eprintln!("warning: caption output discarded, the document would be invalid: {codes}");
+        document.warnings.push(Warning::new(
+            "caption_invalid",
+            format!("caption output discarded: {codes}"),
+        ));
+        return;
+    }
+    if !failures.is_empty() {
+        let message = format!(
+            "{} of {frame_count} keyframe(s) failed captioning; first: {}",
+            failures.len(),
+            failures[0]
+        );
+        eprintln!("warning: {message}");
+        document
+            .warnings
+            .push(Warning::new("caption_partial", message).with_run(run));
+    }
+    eprintln!("captions: {caption_count} on {frame_count} keyframe(s)");
 }
 
 async fn annotate_with_ocr(document: &mut Document, store: &ModelStore, out: &Path) {

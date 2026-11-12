@@ -13,16 +13,30 @@ use sonolytica_core::{Capability, ModelRef};
 use crate::traits::ProviderError;
 use crate::traits::ProviderResult;
 
+/// One artifact in a multi-file model bundle.
 #[derive(Debug, Clone, Copy)]
-pub struct ModelSpec {
-    pub id: &'static str,
-    pub capability: Capability,
+pub struct ModelFile {
     pub filename: &'static str,
     pub url: &'static str,
     /// Lowercase hex SHA-256 of the artifact.
     pub sha256: &'static str,
+    pub approx_bytes: u64,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ModelSpec {
+    pub id: &'static str,
+    pub capability: Capability,
+    /// File name for a single-file model, directory name for a bundle.
+    pub filename: &'static str,
+    /// Empty for a bundle; every artifact lives in `files` instead.
+    pub url: &'static str,
+    /// Lowercase hex SHA-256 of the artifact, or the bundle manifest digest.
+    pub sha256: &'static str,
     pub license: &'static str,
     pub approx_bytes: u64,
+    /// Empty for a single-file model; otherwise the pinned bundle files.
+    pub files: &'static [ModelFile],
     pub notes: &'static str,
 }
 
@@ -48,6 +62,7 @@ pub const MODELS: &[ModelSpec] = &[
         sha256: "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
         license: "MIT",
         approx_bytes: 2_300_000,
+        files: &[],
         notes: "Voice activity detection, 16 kHz mono, 512-sample windows.",
     },
     ModelSpec {
@@ -58,6 +73,7 @@ pub const MODELS: &[ModelSpec] = &[
         sha256: "921e4cf8686fdd993dcd081a5da5b6c365bfde1162e72b08d75ac75289920b1f",
         license: "MIT",
         approx_bytes: 78_000_000,
+        files: &[],
         notes: "English-only, fastest. Useful for smoke tests, not production accuracy.",
     },
     ModelSpec {
@@ -68,6 +84,7 @@ pub const MODELS: &[ModelSpec] = &[
         sha256: "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002",
         license: "MIT",
         approx_bytes: 148_000_000,
+        files: &[],
         notes: "English-only baseline; good speed/accuracy trade-off on CPU.",
     },
     ModelSpec {
@@ -78,6 +95,7 @@ pub const MODELS: &[ModelSpec] = &[
         sha256: "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
         license: "MIT",
         approx_bytes: 488_000_000,
+        files: &[],
         notes: "Multilingual; the default for non-English audio.",
     },
     ModelSpec {
@@ -88,6 +106,7 @@ pub const MODELS: &[ModelSpec] = &[
         sha256: "e46614273f03ff4b87923a965e417fa72004825522cb007c9c25633b8475490d",
         license: "Apache-2.0",
         approx_bytes: 377_887_594,
+        files: &[],
         notes: "CTC emissions for forced word alignment; 16 kHz mono, 20 ms frames, \
                 32-class uppercase English vocabulary. English-only, 30 s per pass.",
     },
@@ -99,6 +118,7 @@ pub const MODELS: &[ModelSpec] = &[
         sha256: "cc5d606a5e9f6381c736d753bac34875c436bb27210d1ab0adc4ccb952c0062a",
         license: "NVIDIA Open Model License",
         approx_bytes: 474_630_246,
+        files: &[],
         notes: "Streaming 4-speaker diarization with the native Arrival-Order Speaker Cache: \
                  128-bin log-mel in, 80 ms activity out, 340-frame chunks and a 188-frame \
                  speaker cache. ONNX export of nvidia/diar_streaming_sortformer_4spk-v2.1 \
@@ -112,6 +132,7 @@ pub const MODELS: &[ModelSpec] = &[
         sha256: "b78fc48113bb46fd247ae6a9aea737079550c647638db961df7e0e1e9f4ba62e",
         license: "MIT",
         approx_bytes: 6_000_000,
+        files: &[],
         notes: "Local speaker change detection (powerset classes) on 10 s windows.",
     },
     ModelSpec {
@@ -122,6 +143,7 @@ pub const MODELS: &[ModelSpec] = &[
         sha256: "c46fad10b5f81e1aa4a60c162714208577093655076c5450f8c469e522ec54ef",
         license: "Apache-2.0",
         approx_bytes: 28_000_000,
+        files: &[],
         notes: "Speaker embedding model; clustering is done by SONOLYTICA.",
     },
     ModelSpec {
@@ -132,6 +154,7 @@ pub const MODELS: &[ModelSpec] = &[
         sha256: "a431985659dc921974177a95adcfbb90fd9e51989a5e04d70d0b75f597b6e61d",
         license: "Apache-2.0",
         approx_bytes: 4_826_518,
+        files: &[],
         notes: "PP-OCRv5 mobile text detection (DB), ONNX Runtime, CPU.",
     },
     ModelSpec {
@@ -142,6 +165,7 @@ pub const MODELS: &[ModelSpec] = &[
         sha256: "da72dc72ca4dc220df0dfde68c1dedc31c58d3e76a25871122e5056227d50092",
         license: "Apache-2.0",
         approx_bytes: 16_534_782,
+        files: &[],
         notes: "PP-OCRv5 mobile CTC recognition; 18383-character dictionary shipped with the crate.",
     },
     ModelSpec {
@@ -152,6 +176,7 @@ pub const MODELS: &[ModelSpec] = &[
         sha256: "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
         license: "MIT",
         approx_bytes: 232_589,
+        files: &[],
         notes: "YuNet face detection (OpenCV Zoo). Count and boxes only; no identity, no embeddings.",
     },
     ModelSpec {
@@ -162,8 +187,54 @@ pub const MODELS: &[ModelSpec] = &[
         sha256: "60f724a56f0119d22d2afcf530019db307c77d4ea598eb5bd53bb65afe93930d",
         license: "Apache-2.0",
         approx_bytes: 19_049_169,
+        files: &[],
         notes: "Body pose on extracted keyframes: up to 6 people, 17 COCO keypoints. \
                  Detection only; no tracking, identity or per-frame coverage.",
+    },
+    ModelSpec {
+        id: "florence-2-base-ft",
+        capability: Capability::Vision,
+        filename: "florence-2-base-ft",
+        url: "",
+        // SHA-256 of the sorted `filename:sha256` manifest; see `composite_sha256`.
+        sha256: "e0a65eb27b0f94c3795c1ac17efce246822b11e7b1c1b664e3fda154024cc092",
+        license: "MIT",
+        approx_bytes: 549_650_649,
+        files: &[
+            ModelFile {
+                filename: "vision_encoder.onnx",
+                url: "https://huggingface.co/onnx-community/Florence-2-base-ft/resolve/e88a44eaf3791a35eae0c5a47b3dbcd36e67eb6f/onnx/vision_encoder.onnx",
+                sha256: "d67258cdfdebfa21285dad9e7bd4bd99725236d0aaef9e474a1b24a6ec471351",
+                approx_bytes: 366_549_825,
+            },
+            ModelFile {
+                filename: "encoder_model_int8.onnx",
+                url: "https://huggingface.co/onnx-community/Florence-2-base-ft/resolve/e88a44eaf3791a35eae0c5a47b3dbcd36e67eb6f/onnx/encoder_model_int8.onnx",
+                sha256: "f4ad7a68f1fb875d3bcf735ea14a7021b7ba7e83baf7cf10289881b4ed6d9b85",
+                approx_bytes: 43_651_493,
+            },
+            ModelFile {
+                filename: "decoder_model_int8.onnx",
+                url: "https://huggingface.co/onnx-community/Florence-2-base-ft/resolve/e88a44eaf3791a35eae0c5a47b3dbcd36e67eb6f/onnx/decoder_model_int8.onnx",
+                sha256: "c529b26bafce2ee76f886f3a0e374bb646b07a6d8b7640fd8a50d7a48843dd67",
+                approx_bytes: 97_760_937,
+            },
+            ModelFile {
+                filename: "embed_tokens_int8.onnx",
+                url: "https://huggingface.co/onnx-community/Florence-2-base-ft/resolve/e88a44eaf3791a35eae0c5a47b3dbcd36e67eb6f/onnx/embed_tokens_int8.onnx",
+                sha256: "6b2258db1c8ee9b160576ccde3cd3814d83a2edaed0dd1c6ca9ff3c38fa62214",
+                approx_bytes: 39_390_433,
+            },
+            ModelFile {
+                filename: "tokenizer.json",
+                url: "https://huggingface.co/onnx-community/Florence-2-base-ft/resolve/e88a44eaf3791a35eae0c5a47b3dbcd36e67eb6f/tokenizer.json",
+                sha256: "d69dcdb2323e124ac4f800cb9863ddccea0d7bb11e16125e8df3bd60f2f8aeac",
+                approx_bytes: 2_297_961,
+            },
+        ],
+        notes: "Florence-2-base-ft ONNX bundle: detailed keyframe captions. fp32 vision encoder, \
+                 int8 text encoder/decoder/embeddings, tokenizer, no KV cache. MIT. \
+                 Detection-only vision layers stay separate.",
     },
     ModelSpec {
         id: "yolos-tiny",
@@ -173,6 +244,7 @@ pub const MODELS: &[ModelSpec] = &[
         sha256: "0dbdd37573fb6b6ed836aa980ab729c81b659deec900799f37b6a09a57762e88",
         license: "Apache-2.0",
         approx_bytes: 26_227_993,
+        files: &[],
         notes: "YOLOS-tiny COCO object detection (91 classes). Boxes and scores only; no tracking or attributes.",
     },
 ];
@@ -219,29 +291,50 @@ impl ModelStore {
     }
 
     pub fn is_present(&self, spec: &ModelSpec) -> bool {
-        self.path(spec).is_file()
+        if spec.files.is_empty() {
+            return self.path(spec).is_file();
+        }
+        let dir = self.path(spec);
+        spec.files
+            .iter()
+            .all(|file| dir.join(file.filename).is_file())
     }
 
-    /// Verify the artifact digest against the pinned value.
+    /// Verify every artifact digest against the pinned values.
     pub fn verify(&self, spec: &ModelSpec) -> ProviderResult<bool> {
-        let path = self.path(spec);
-        if !path.is_file() {
-            return Ok(false);
-        }
-        if spec.sha256.is_empty() {
+        if !spec.files.is_empty() && composite_sha256(spec.files) != spec.sha256 {
             return Err(ProviderError::Inference(format!(
-                "model `{}` has no pinned digest in this build; refusing to trust it",
+                "model `{}` has an inconsistent bundle manifest",
                 spec.id
             )));
         }
-        let actual = sha256_of(&path)?;
-        Ok(actual == spec.sha256)
+        if spec.files.is_empty() {
+            return self.verify_file(&self.path(spec), spec.sha256, spec.id);
+        }
+        for file in spec.files {
+            if !self.verify_file(&self.path(spec).join(file.filename), file.sha256, spec.id)? {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
+    fn verify_file(&self, path: &Path, sha256: &str, id: &str) -> ProviderResult<bool> {
+        if !path.is_file() {
+            return Ok(false);
+        }
+        if sha256.is_empty() {
+            return Err(ProviderError::Inference(format!(
+                "model `{id}` has no pinned digest in this build; refusing to trust it"
+            )));
+        }
+        Ok(sha256_of(path)? == sha256)
     }
 
     /// Path to a verified model, or a `ModelMissing` error naming the fix.
     pub fn require(&self, spec: &ModelSpec) -> ProviderResult<PathBuf> {
         let path = self.path(spec);
-        if !path.is_file() {
+        if !self.is_present(spec) {
             return Err(ProviderError::ModelMissing {
                 id: spec.id.to_string(),
                 hint: format!("run `sonolytica models fetch {}`", spec.id),
@@ -260,24 +353,58 @@ impl ModelStore {
         Ok(path)
     }
 
-    /// Download, verify, and atomically install a model.
+    /// Download, verify, and atomically install a model or a bundle.
     pub fn fetch(&self, spec: &ModelSpec) -> ProviderResult<PathBuf> {
-        if spec.sha256.is_empty() {
-            return Err(ProviderError::Inference(format!(
-                "model `{}` has no pinned digest; cannot verify a download",
-                spec.id
-            )));
-        }
-        let final_path = self.path(spec);
-        if final_path.is_file() && self.verify(spec).unwrap_or(false) {
+        if spec.files.is_empty() {
+            let final_path = self.path(spec);
+            if final_path.is_file() && self.verify(spec).unwrap_or(false) {
+                return Ok(final_path);
+            }
+            std::fs::create_dir_all(&self.dir).map_err(|e| ProviderError::Io(e.to_string()))?;
+            self.fetch_one(&self.dir, spec.filename, spec.url, spec.sha256, spec.id)?;
             return Ok(final_path);
         }
 
-        std::fs::create_dir_all(&self.dir).map_err(|e| ProviderError::Io(e.to_string()))?;
-        let partial = self.dir.join(format!("{}.partial", spec.filename));
+        let dir = self.path(spec);
+        if self.is_present(spec) && self.verify(spec).unwrap_or(false) {
+            return Ok(dir);
+        }
+        std::fs::create_dir_all(&dir).map_err(|e| ProviderError::Io(e.to_string()))?;
+        for file in spec.files {
+            let path = dir.join(file.filename);
+            if path.is_file()
+                && self
+                    .verify_file(&path, file.sha256, spec.id)
+                    .unwrap_or(false)
+            {
+                continue;
+            }
+            self.fetch_one(&dir, file.filename, file.url, file.sha256, spec.id)?;
+        }
+        Ok(dir)
+    }
 
-        tracing::info!(model = spec.id, url = spec.url, "downloading model");
-        let response = ureq::get(spec.url)
+    fn fetch_one(
+        &self,
+        dir: &Path,
+        filename: &str,
+        url: &str,
+        sha256: &str,
+        id: &str,
+    ) -> ProviderResult<()> {
+        if sha256.is_empty() {
+            return Err(ProviderError::Inference(format!(
+                "model `{id}` has no pinned digest; cannot verify a download"
+            )));
+        }
+        let final_path = dir.join(filename);
+        if final_path.is_file() && sha256_of(&final_path).ok().as_deref() == Some(sha256) {
+            return Ok(());
+        }
+
+        let partial = dir.join(format!("{filename}.partial"));
+        tracing::info!(model = id, url, "downloading model");
+        let response = ureq::get(url)
             .header("User-Agent", "sonolytica/0.1")
             .call()
             .map_err(|e| ProviderError::Io(format!("download failed: {e}")))?;
@@ -303,17 +430,22 @@ impl ModelStore {
         drop(file);
 
         let actual = format!("{:x}", hasher.finalize());
-        if actual != spec.sha256 {
+        if actual != sha256 {
             let _ = std::fs::remove_file(&partial);
             return Err(ProviderError::Inference(format!(
-                "digest mismatch for {}: expected {}, got {} (download discarded)",
-                spec.id, spec.sha256, actual
+                "digest mismatch for {id}/{filename}: expected {sha256}, got {actual} \
+                 (download discarded)"
             )));
         }
 
         std::fs::rename(&partial, &final_path).map_err(|e| ProviderError::Io(e.to_string()))?;
-        tracing::info!(model = spec.id, bytes = written, "model installed");
-        Ok(final_path)
+        tracing::info!(
+            model = id,
+            file = filename,
+            bytes = written,
+            "model installed"
+        );
+        Ok(())
     }
 
     /// `(spec, present, verified)` for every known model.
@@ -321,12 +453,25 @@ impl ModelStore {
         MODELS
             .iter()
             .map(|spec| {
-                let present = self.path(spec).is_file();
+                let present = self.is_present(spec);
                 let verified = present && self.verify(spec).unwrap_or(false);
                 (spec, present, verified)
             })
             .collect()
     }
+}
+
+/// Digest of the sorted `filename:sha256` manifest. It identifies a bundle
+/// without downloading it; individual files are still verified on fetch.
+fn composite_sha256(files: &[ModelFile]) -> String {
+    let mut entries: Vec<String> = files
+        .iter()
+        .map(|file| format!("{}:{}", file.filename, file.sha256))
+        .collect();
+    entries.sort();
+    let mut hasher = Sha256::new();
+    hasher.update(entries.join("\n").as_bytes());
+    format!("{:x}", hasher.finalize())
 }
 
 fn sha256_of(path: &Path) -> ProviderResult<String> {
@@ -355,7 +500,20 @@ mod tests {
         let mut seen = std::collections::BTreeSet::new();
         for spec in MODELS {
             assert!(seen.insert(spec.id), "duplicate model id {}", spec.id);
-            assert!(spec.filename.ends_with(".bin") || spec.filename.ends_with(".onnx"));
+            if spec.files.is_empty() {
+                assert!(
+                    spec.filename.ends_with(".bin") || spec.filename.ends_with(".onnx"),
+                    "{} is not a model file",
+                    spec.id
+                );
+            } else {
+                assert_eq!(
+                    composite_sha256(spec.files),
+                    spec.sha256,
+                    "{} bundle digest does not match its files",
+                    spec.id
+                );
+            }
         }
     }
 
@@ -369,6 +527,23 @@ mod tests {
             }
             other => panic!("expected ModelMissing, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn a_bundle_needs_every_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = ModelStore::new(dir.path());
+        let spec = MODELS
+            .iter()
+            .find(|spec| !spec.files.is_empty())
+            .expect("at least one bundle");
+        assert!(!store.is_present(spec));
+        std::fs::create_dir_all(store.path(spec)).unwrap();
+        for file in spec.files {
+            std::fs::write(store.path(spec).join(file.filename), b"x").unwrap();
+        }
+        assert!(store.is_present(spec));
+        assert!(!store.verify(spec).unwrap(), "wrong bytes must not verify");
     }
 
     #[test]

@@ -19,7 +19,7 @@ use sonolytica_core::{
 
 /// Segment kinds a document can contain. Kept explicit so `--type` rejects a
 /// typo instead of silently returning nothing.
-const SEGMENT_KINDS: [&str; 8] = [
+const SEGMENT_KINDS: [&str; 9] = [
     "speech",
     "speaker_turn",
     "music_label",
@@ -27,6 +27,7 @@ const SEGMENT_KINDS: [&str; 8] = [
     "scene",
     "object",
     "pose",
+    "caption",
     "text_overlay",
 ];
 
@@ -166,6 +167,23 @@ pub enum QueryCommand {
         #[arg(long)]
         json: bool,
     },
+    /// Model-generated captions per keyframe
+    Captions {
+        /// Document produced by `sonolytica analyze`
+        doc: PathBuf,
+        /// Only captions at or after this instant
+        #[arg(long)]
+        from: Option<String>,
+        /// Only captions at or before this instant
+        #[arg(long)]
+        to: Option<String>,
+        /// Return at most this many captions
+        #[arg(long)]
+        max: Option<usize>,
+        /// Emit typed JSON on stdout instead of a table
+        #[arg(long)]
+        json: bool,
+    },
     /// Body pose keypoints per keyframe person
     Poses {
         /// Document produced by `sonolytica analyze`
@@ -272,6 +290,13 @@ pub fn run(command: QueryCommand) -> Result<()> {
             max,
             json,
         ),
+        QueryCommand::Captions {
+            doc,
+            from,
+            to,
+            max,
+            json,
+        } => captions(&load(&doc)?, from.as_deref(), to.as_deref(), max, json),
         QueryCommand::Poses {
             doc,
             from,
@@ -1438,6 +1463,28 @@ fn ask(doc: &Document, question: &str, budget: usize, max: usize, json: bool) ->
         }
     }
 
+    for segment in doc.segments_of_kind("caption") {
+        let SegmentKind::Caption { text } = &segment.kind else {
+            continue;
+        };
+        let (score, hits) = score_text(text, &terms);
+        if hits > 0 {
+            evidence.push(AskEvidence {
+                kind: "caption",
+                start_us: segment.range.start.micros(),
+                end_us: segment.range.end.micros(),
+                speaker: None,
+                text: Some(text),
+                label: None,
+                segment: Some(segment.id),
+                frame: keyframe_at(doc, segment.range.start),
+                // Model-generated prose: useful, but weaker than speech or OCR.
+                score: score * 0.7,
+                hits,
+            });
+        }
+    }
+
     for segment in doc.segments_of_kind("object") {
         let SegmentKind::Object { class, .. } = &segment.kind else {
             continue;
@@ -1616,6 +1663,19 @@ fn ask_line(item: &AskEvidence<'_>) -> String {
 }
 
 #[derive(Debug, Serialize)]
+struct CaptionsOutput<'a> {
+    count: usize,
+    captions: Vec<CaptionView<'a>>,
+}
+
+#[derive(Debug, Serialize)]
+struct CaptionView<'a> {
+    id: u32,
+    start_us: i64,
+    text: &'a str,
+}
+
+#[derive(Debug, Serialize)]
 struct PosesOutput<'a> {
     count: usize,
     poses: Vec<PoseView<'a>>,
@@ -1679,6 +1739,50 @@ struct AskEvidence<'a> {
 struct AskAbsence {
     term: String,
     occurrences: usize,
+}
+
+fn captions(
+    doc: &Document,
+    from: Option<&str>,
+    to: Option<&str>,
+    max: Option<usize>,
+    json: bool,
+) -> Result<()> {
+    let from = from.map(parse_time).transpose()?.unwrap_or(MediaTime::ZERO);
+    let to = to.map(parse_time).transpose()?;
+    let mut views: Vec<CaptionView<'_>> = doc
+        .segments_of_kind("caption")
+        .filter_map(|segment| {
+            if segment.range.start < from || to.is_some_and(|end| segment.range.end > end) {
+                return None;
+            }
+            let SegmentKind::Caption { text } = &segment.kind else {
+                return None;
+            };
+            Some(CaptionView {
+                id: segment.id,
+                start_us: segment.range.start.micros(),
+                text,
+            })
+        })
+        .collect();
+    views.sort_by_key(|view| view.start_us);
+    views.truncate(max.unwrap_or(usize::MAX));
+
+    if json {
+        return emit(&CaptionsOutput {
+            count: views.len(),
+            captions: views,
+        });
+    }
+    if views.is_empty() {
+        println!("(none)");
+        return Ok(());
+    }
+    for view in &views {
+        println!("{}  {}", MediaTime::from_micros(view.start_us), view.text);
+    }
+    Ok(())
 }
 
 fn poses(
@@ -1811,6 +1915,7 @@ fn brief(doc: &Document, json: bool) -> Result<()> {
         .take(BRIEF_SCENE_CUTS)
         .collect();
     let poses = doc.segments_of_kind("pose").count();
+    let captions = doc.segments_of_kind("caption").count();
     let faces = doc
         .segments_of_kind("object")
         .filter(
@@ -1825,6 +1930,7 @@ fn brief(doc: &Document, json: bool) -> Result<()> {
         .count();
     let video = BriefVideo {
         poses,
+        captions,
         scenes: scene_segments.len(),
         keyframes: doc
             .artifacts
@@ -2053,6 +2159,12 @@ fn brief(doc: &Document, json: bool) -> Result<()> {
             println!(
                 "poses      {}",
                 count_label(video.poses, "person", "people")
+            );
+        }
+        if video.captions > 0 {
+            println!(
+                "captions   {}",
+                count_label(video.captions, "keyframe", "keyframes")
             );
         }
         if video.faces > 0 {
@@ -2405,7 +2517,9 @@ fn label_of(kind: &SegmentKind) -> Option<String> {
             "{:.0}x{:.0} at {:.0},{:.0}",
             bbox.width, bbox.height, bbox.x, bbox.y
         )),
-        SegmentKind::Speech { .. } | SegmentKind::SpeakerTurn { .. } => None,
+        SegmentKind::Speech { .. }
+        | SegmentKind::SpeakerTurn { .. }
+        | SegmentKind::Caption { .. } => None,
     }
 }
 
@@ -2693,6 +2807,8 @@ struct BriefOverlap {
 struct BriefVideo {
     /// Pose detections across keyframes; each is one person at one instant.
     poses: usize,
+    /// Model-generated keyframe captions.
+    captions: usize,
     scenes: usize,
     keyframes: usize,
     text_overlays: usize,

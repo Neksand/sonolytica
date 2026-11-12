@@ -47,7 +47,7 @@ sonolytica report doc.json --out report.html  # human page: chapters, quotes, fr
 
 `--ocr` runs on the keyframes at analyze time: pass it whenever the media may
 have on-screen text — it cannot be added later without re-running. The same is
-true for `--faces`, `--objects` and `--pose`.
+true for `--faces`, `--objects`, `--pose` and `--caption`.
 `analyze` prints the document to stdout unless `--out` is given; `--summary`
 goes to stderr; `--strict` (or `--profile ultra`) exits 2 when a stage failed or
 a requested capability never ran. A missing model disables one capability.
@@ -69,9 +69,12 @@ skip `analyze` and start at `query runs`.
    `query ask doc "..." --json` **before** `search`: it ranks speech and OCR
    and names absent terms in one call. Use `timeline` for a time window,
    `speakers` for totals, `words` for exact onsets.
-3. Visual questions: set `--ocr --objects --faces --pose` at analyze time, not
-   later. `--pose` stores 17 COCO body keypoints per person per keyframe
-   (detection only; no tracking or identity).
+3. Visual questions: set `--ocr --objects --faces --pose --caption` at analyze
+   time, not later. `--pose` stores 17 COCO body keypoints per person per
+   keyframe (detection only; no tracking or identity). `--caption` stores a
+   model-generated description per keyframe: use it as an observation, never as
+   OCR or as a quote from a person, and say it is model-generated when it
+   matters.
 4. Budget: no `--help`, `doctor`, `models list` or `runs` once `brief` shows the
    stages. Aim for ≤6 commands on a clip, ≤10 on a meeting.
 
@@ -101,6 +104,7 @@ answering — never answer from half a document.
 | keyframe images for a window | `query frames doc --from 00:12:00 --to 00:13:00 --max 8` |
 | text on screen (after `--ocr`) | `query timeline doc --type text_overlay` |
 | body pose keypoints (after `--pose`) | `query poses doc --max 20 --json` |
+| model-generated keyframe captions (after `--caption`) | `query captions doc --json` |
 | find a word, with its timestamp | `query search doc pricing` |
 | who spoke most, how long | `query speakers doc` |
 | what are the chapters | `query chapters doc` |
