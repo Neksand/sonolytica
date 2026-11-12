@@ -79,6 +79,24 @@ fn write_document(dir: &Path) -> PathBuf {
         Confidence::new(0.9),
         text,
     );
+    let object_run = builder.add_run(run_record(Capability::Vision, "yunet"));
+    let object_track = builder.add_track(TrackKind::Object, "faces", object_run);
+    builder.add_segment(
+        object_track,
+        TimeRange::empty(MediaTime::from_secs_f64(2.0)),
+        SegmentKind::Object {
+            class: "face".into(),
+            bbox: Some(BBox {
+                x: 10.0,
+                y: 10.0,
+                width: 50.0,
+                height: 50.0,
+            }),
+        },
+        Confidence::new(0.9),
+        object_run,
+    );
+
     for (path, at) in [
         ("doc.json.artifacts/frames/frame_0001.jpg", 2.0),
         ("other/frame_0001.jpg", 4.0),
@@ -126,6 +144,7 @@ fn report_is_self_contained_and_escapes_text() {
         "<h2>Frames and on-screen text</h2>",
         "S1",
         "QUARTERLY REVENUE",
+        "1 face",
         "&lt;script&gt;alert(&#39;x&#39;)&lt;/script&gt;",
         "report.html.artifacts/frames/00000-frame_0001.jpg",
     ] {

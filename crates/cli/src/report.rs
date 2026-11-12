@@ -258,6 +258,13 @@ fn frames_section(out: &mut String, document: &Document, frames: &[(usize, Strin
             _ => None,
         })
         .collect();
+    let faces: Vec<i64> = document
+        .segments_of_kind("object")
+        .filter(
+            |segment| matches!(&segment.kind, SegmentKind::Object { class, .. } if class == "face"),
+        )
+        .map(|segment| segment.range.start.micros())
+        .collect();
     if frames.is_empty() && overlays.is_empty() {
         return;
     }
@@ -278,6 +285,21 @@ fn frames_section(out: &mut String, document: &Document, frames: &[(usize, Strin
             if *overlay_at / 1000 == at / 1000 {
                 let _ = write!(out, "<p class=\"ocr\">{}</p>", esc(text));
             }
+        }
+        let face_count = faces
+            .iter()
+            .filter(|face_at| **face_at / 1000 == at / 1000)
+            .count();
+        if face_count > 0 {
+            let _ = write!(
+                out,
+                "<p class=\"note\">{} detected</p>",
+                if face_count == 1 {
+                    "1 face".to_string()
+                } else {
+                    format!("{face_count} faces")
+                }
+            );
         }
         out.push_str("</figure>\n");
     }
