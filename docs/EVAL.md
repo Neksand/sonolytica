@@ -446,6 +446,13 @@ spans were word-duplication artifacts. Real overlap attribution needs an
 independently annotated corpus; protocol in [`bench/overlap.md`](bench/overlap.md).
 Do not tune to the old spans.
 
+The hard 4-minute fixture is a real overlap: S3 and S4 speak simultaneously at
+130.0–131.4. Parakeet TDT multitalker with a **reference** S4 mask recovered
+the missing line ("The budget also covers the partner webinar in November",
+129.84–134.24), but the AOSC document's S4 activity in 126–134 s is at most
+0.011, so its mask is empty. The blocker is overlap-aware diarization, not ASR;
+Parakeet is not integrated until the mask problem is solved.
+
 
 ## Vision: keyframe observations
 

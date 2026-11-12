@@ -427,7 +427,10 @@ Open, in priority order:
    overlapping speech (AMI), not on `fvhrk`. Research: Parakeet TDT 0.6B v3
    multitalker (CC-BY-4.0, ~2.6 GB, `parakeet-rs` with the same `ort`),
    7–10 days; the deterministic per-turn baseline is 2–3 days but cannot split
-   simultaneous words. Add an AMI overlap fixture before integrating it:
+   simultaneous words. The hard fixture proves the mask is the blocker: with
+   a reference S4 mask Parakeet recovered the missing 130–131.4 line, but AOSC
+   S4 activity there is ≤0.011. Add an overlap-aware diarizer (old offline v2,
+   Nemotron-3, or separation) before integrating Parakeet; protocol in
    [`docs/bench/overlap.md`](bench/overlap.md).
 2. **Free-form VQA tier** (SmolVLM2-500M, Apache-2.0): the Florence-2
    caption tier is in; the next gap is arbitrary questions ("is he holding a

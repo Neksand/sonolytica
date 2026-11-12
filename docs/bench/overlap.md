@@ -55,6 +55,22 @@ non-overlap WER regresses by ≤0.5 absolute; RSS ≤3.5 GB; a 1 h two-speaker f
 finishes in ≤10 min. If the deterministic baseline moves recall by <10 points,
 its ceiling is too low; go to the multitalker model.
 
+## Hard-fixture finding (2026-11-13)
+
+The 4-minute synthetic hard meeting has a real 1.4 s overlap at 130.0–131.4:
+S3 says the marketing-budget line and S4 says "The budget also covers the
+partner webinar in November." The old `bench-brief2` document had an **empty**
+S2 overlap turn at 130.0–131.28; the new AOSC document has no overlap and
+assigns only the tail ("week .") to S4.
+
+A Parakeet TDT multitalker pass with the **reference** S4 mask recovered the
+whole line with word times 129.84–134.24. With masks from the AOSC document it
+cannot: the model's per-frame S4 activity in 126–134 s is at most 0.011, so
+the mask is empty. The gap is the **diarizer's overlap sensitivity**, not the
+ASR model. Do not integrate Parakeet alone; it needs an overlap-aware mask
+(old offline v2, Nemotron-3-Diarization, or separation). This is the next
+quality cycle and a launch caveat.
+
 ## Why not just lower the diarization threshold
 
 The old spans were **not** missed simultaneous speech: the words were already

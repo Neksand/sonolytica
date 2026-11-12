@@ -111,12 +111,14 @@ makes the agent **honest and citable**, not more perceptive.
    work is speaker-attributed ASR for overlapping turns, not the count.
 2. **One-fixture benchmark.** Ten questions, synthetic media. Real interviews,
    meetings, music and long videos are untested.
-3. **Overlap attribution still needs a real fixture.** The AOSC `fvhrk`
+3. **Overlap attribution still needs an overlap-aware mask.** The AOSC `fvhrk`
    document has no overlapping turns, and the RTTM confirms only `spk02` in the
    questioned window; the old spans were merge artifacts. The free run is
    16/16 after correcting Q4. A genuinely overlapping corpus (AMI) is needed
-   before claiming an overlap score; speaker-attributed ASR remains the
-   capability gap, not a VoxConverse regression.
+   before claiming an overlap score. On the hard fixture Parakeet recovered
+   the missing 130.0–131.4 line with a reference mask, but AOSC S4 activity
+   there is ≤0.011; the blocker is the diarizer, not ASR. Speaker-attributed
+   ASR remains the capability gap, not a VoxConverse regression.
 4. **Music is shallow**: tempo, key, triads, sections and loudness. No notes,
    bass or instruments.
 5. **Alignment is English-only**: word timings are aligned with wav2vec2 CTC
