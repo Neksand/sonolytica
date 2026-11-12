@@ -378,18 +378,80 @@ embeddings. The count needs either a model trained for it (Sortformer) or a
 clustering criterion that accounts for cluster mass and overlap — not a
 spectrum over 1.5 s chunks.
 
+### AOSC streaming for long files (2026-11-12)
+
+The 300 s window path and its 10-minute warning are gone. The provider is now
+the v2.1 streaming export (`soniqo/Sortformer-Diarization-4spk-ONNX`, 475 MB,
+NVIDIA Open Model License; see `docs/MODELS.md`) driven by the model's native
+Arrival-Order Speaker Cache: 30.48 s chunks (340 core frames, 1 left, 40 right),
+a 40-frame FIFO, and a 188-frame speaker cache compressed by log-activity scores
+with per-speaker boosts and 12 silence slots. No seam label matching, no
+duration-dependent warning.
+
+Gate: `fvhrk` (20 min, 4 reference speakers) must report at least 3 speakers
+and DER at most 11.8 %. Reproduce:
+
+```bash
+python3 scripts/eval/der_voxconverse.py \
+  --parquet /private/tmp/sono-eval/voxconverse-test2.parquet \
+  --count 0 --min-speakers 4 --max-speakers 4 \
+  --workdir /private/tmp/sono-eval/der-aosc-test2 \
+  --json-out /private/tmp/sono-eval/der-aosc-test2.json
+```
+
+| file | speakers ref/hyp | DER | JER | missed | false alarm | confusion |
+|---|---|---|---|---|---|---|
+| `fvhrk` | **4/4** | **6.40 %** | 6.29 % | 4.60 % | 1.80 % | **0.00 %** |
+
+Before the change the `fvhrk` document scored 2/4 speakers, DER 15.99 %, JER
+15.78 %, confusion 6.45 %. The four hypothesis durations track the reference
+(S2 846 s vs 818, S3 238 vs 239, S1 54 vs 50, S4 18.4 vs 18.5); the excess is
+ASR padding clamped to the diarized turn.
+
+No regression on 1-4 speaker files (same pipeline, collar 0.25 s, document-level
+DER; the speaker-turn ranges are ASR utterances clamped to the diarized turn):
+
+| file | speakers ref/hyp | DER before | DER now |
+|---|---|---|---|
+| `bxcfq` | 2/2 | 1.66 % | 1.68 % |
+| `dxbbt` | 3/3 | 10.89 % | **5.66 %** |
+| `kmunk` | 2/2 | 4.33 % | 4.44 % |
+| `lubpm` | 2/2 | 4.27 % | 4.27 % |
+| `xtdcl` | 2/2 | 10.99 % | 10.63 % |
+| `gwloo` | 1/1 | 5.56 % | 5.49 % |
+| `uicid` | 1/1 | 9.45 % | 9.10 % |
+
+Every count is exact. `dxbbt` loses its 5.24 % confusion; the +0.02 and +0.11
+changes on `bxcfq`/`kmunk` are within ASR-boundary noise. The VAD gate stays:
+it was not the cause of the long-file failure (the ungated run scored the same
+6.40 % on `fvhrk`), and it still trims false alarm on noisy single-speaker
+recordings.
+
+The cache does the work, so the implementation detail that mattered was the
+silence-pad decode: top-k flat indices must be reduced modulo `n + 3`, not `n`.
+Decoding modulo `n` turned the reserved silence slots into frames 0-2 and
+disabled most of the cache; the first Rust run reported 3 speakers on `fvhrk`
+instead of 4 and 8.07 % instead of 6.40 %. The unit test
+`compression_keeps_speech_frames_and_exactly_twelve_silence_slots` pins it.
+
+Caveat: one document per file, one machine; `fvhrk` is the only 4-speaker file
+in that shard. The gate is met at 4 speakers and 6.40 %, not at the model's
+ceiling — the remaining error is dominated by missed speech at ASR boundaries,
+not confusion.
+
+
 ## What the numbers say to do next
 
 The planned order was forced alignment, then diarization. The measurements
 argue for swapping that:
 
-1. **Diarization: the count is solved for 2-4 speakers, not for long files.**
-   Sortformer gets five of six counts right on a freshly seen shard and, with
-   the 0.70 VAD gate, false alarm on noisy real recordings is down to 0.5–5.7 %
-   (test-00003 weighted DER 11.02 → 9.95 %, JER 10.74 → 9.85 %). The remaining
-   error is under-segmentation on a 20-minute four-speaker file, so the next
-   change is the model's native streaming cache, not another similarity cut.
-   Until then the document warns `diarization_speaker_cap` above 10 minutes.
+1. **Diarization: the long-file count is fixed; overlap attribution is next.**
+   AOSC streaming gets 4/4 speakers on `fvhrk` at 6.40 % DER and does not
+   regress any 1-4 speaker file. The remaining diarization error is missed
+   speech at ASR boundaries and one merged ASR stream for overlapping turns;
+   the next change is speaker-attributed ASR, not another count heuristic.
+   The 4-speaker model cap remains: a document that fills all four slots carries
+   `diarization_speaker_cap` and its count is a lower bound.
 2. **Alignment second.** WER 6.05 % is near the model ceiling and deletions are
    1.1 %; alignment improves *when* a word was said (citations, cutting), not
    *what* was said. Still worth doing, but it does not move the headline.

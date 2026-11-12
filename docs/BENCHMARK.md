@@ -325,9 +325,10 @@ solid and the exact percentages as single runs.
 Caveat: one long session per skill version, manual scoring, one model. The
 20-minute fixture is VoxConverse `fvhrk` (CC BY 4.0): a real 4-speaker debate
 (RTTM), 4 annotated speakers, one participant speaking 18.5 s, no overlap
-annotation. The document reports 2 speaker labels with a
-`diarization_speaker_cap` warning — the known long-file failure, not an agent
-error.
+annotation. Those sessions used the old window-based document, which reported
+2 speaker labels with a `diarization_speaker_cap` warning — the long-file
+failure, not an agent error. The AOSC build now reports **4/4 at 6.40 % DER**
+(`docs/EVAL.md`); the agent sessions have not been rerun on it.
 
 ## Head-to-head: Gemini (Antigravity) and TwelveLabs Pegasus (2026-11-12)
 
@@ -389,11 +390,11 @@ Reading it:
   between 00:07 and 00:09 and halved the dominant speaker's time), on long
   10/16 with an invented 20:32 duration and summarised "chapters" that are not
   in the media document.
-- **The long fixture exposes our real gap.** TwelveLabs reported **4 speakers**
-  on the 20-minute debate; our Sortformer document reports 2 labels with a
-  `diarization_speaker_cap` warning. The skill forces the honest "at least 2,
-  may be more", but the underlying count is worse. AOSC streaming is the fix,
-  not a prompt.
+- **The long fixture exposed our real gap.** TwelveLabs reported **4 speakers**
+  on the 20-minute debate; the then-current Sortformer document reported 2
+  labels with a `diarization_speaker_cap` warning. The skill forced the honest
+  "at least 2, may be more", but the underlying count was worse. AOSC streaming
+  fixed it after the run: 4/4 at 6.40 % DER, not a prompt change.
 - **No free lunch on quotas.** Antigravity exhausted its credits mid-baseline;
   TwelveLabs' free plan is metered in minutes. Local SONOLYTICA has neither
   failure mode.

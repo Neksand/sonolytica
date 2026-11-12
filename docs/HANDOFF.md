@@ -1,10 +1,11 @@
-# Handoff — SONOLYTICA after the vision and skill-cost cycles
+# Handoff — SONOLYTICA after the AOSC streaming cycle
 
 Last updated: 2026-11-12. Branch `main`, working tree clean, **no remote
 configured** (the user pushes). Since `1960e26`: reproducible benchmark + token
 scripts, `brief` v2 (scene cuts, OCR lines, overlap spans), `query verify`,
 HTML `report`, `install-skill` for four harnesses, release workflow, dense
-frames, YuNet faces, YOLOS objects, and a 200-line skill core.
+frames, YuNet faces, YOLOS objects, a 200-line skill core, and AOSC streaming
+diarization for long files (4/4 speakers on `fvhrk`, DER 6.40 %).
 
 Read this first, then `docs/STATUS.md` (numbers), `docs/EVAL.md` (methods),
 `docs/BENCHMARK.md` (agent and head-to-head tests), `docs/MODELS.md` (licenses,
@@ -42,7 +43,7 @@ models/cmake/ORT.
 | Area | Result | Where |
 |---|---|---|
 | ASR | WER **6.05 %**, CER 2.25 % — LibriSpeech test-clean, 100 utts, `whisper-base.en` | EVAL |
-| Diarization | AHC pilots: DER **11.81 % dev / 17.46 % test**; Sortformer 4spk with the 0.70 VAD gate: **11.08 % weighted / 7.76 % unweighted** on `test-00002`, **9.95 % / 7.49 %** on fresh `test-00003`; JER **9.85 % / 7.34 %** there; counts **6/6 exact** | EVAL |
+| Diarization | AHC pilots: DER **11.81 % dev / 17.46 % test**; Sortformer 4spk with the 0.70 VAD gate: **11.08 % weighted / 7.76 % unweighted** on `test-00002`, **9.95 % / 7.49 %** on fresh `test-00003`; JER **9.85 % / 7.34 %** there; counts **6/6 exact**. AOSC streaming v2.1 on the 20-minute `fvhrk`: **4/4 speakers, DER 6.40 %** (was 2/4, 15.99 %); no regression on 1-4 speaker files | EVAL |
 | Alignment | wav2vec2 CTC, 20 ms frames, English; **median 110 ms** vs Whisper, 88 % ≤600 ms; Whisper itself is 300–950 ms early on JFK | EVAL |
 | OCR | PP-OCRv5 det+rec; 12/12 lines exact on the 6-slide fixture; 7/7 CJK terminal | OCR |
 | Music | 120.3 BPM for a 120 BPM click; C major triad correct; A–B–A section boundaries within 80/160 ms | EVAL |
@@ -89,8 +90,9 @@ took easy from 21 021 to **9 150** on the next run, same 8/8.
 
 Head-to-head (same prompts): Gemini via Antigravity **14/16 alone, 16/16 with
 the skill, 6.6× faster**; TwelveLabs Pegasus 1.5 **10/16 hard, 3/8 easy,
-10/16 long**, and it got the 20-minute speaker count right (4) where Sortformer
-reports 2 — the AOSC case. A blind judge (Codex, anonymised) kept the ranking:
+10/16 long**, and it got the 20-minute speaker count right (4) where the old
+Sortformer document reported 2 — the case AOSC streaming later fixed. A blind
+judge (Codex, anonymised) kept the ranking:
 Gemini 10, skill 16, TwelveLabs 7, DeepSeek+skill 15, with **19 valid citations
 for skill runs vs 7 and 3**. Raw outputs: `docs/bench/2026-11-12/`.
 
@@ -106,8 +108,9 @@ for skill runs vs 7 and 3**. Raw outputs: `docs/bench/2026-11-12/`.
 - Diarization runs a **dedicated VAD gate pass at threshold 0.70**; the
   configured 0.45 pass belongs to ASR and must not be tightened to gate. A gate
   failure warns `diarization_vad_gate_unavailable` and leaves turns ungated.
-- Sortformer files longer than 10 minutes carry `diarization_speaker_cap`; an
-  agent must say "at least N" there, never an exact count.
+- A Sortformer hypothesis that fills all four slots carries
+  `diarization_speaker_cap`; an agent must say "at least N" there, never an
+  exact count. Long files no longer trigger it by duration alone.
 - Skill cost/quality baseline (medians): hard **16/16 / 14 773 fresh** (13 517–
   27 235, n=3), easy **8/8 / 8 818** (7 517–21 021, n=5), long **16/16 / 13 443**
   (11 308–15 578, n=2). Cost is dominated by agent behaviour: one `--help` or
@@ -142,12 +145,15 @@ for skill runs vs 7 and 3**. Raw outputs: `docs/bench/2026-11-12/`.
 - **Language**: pass `--language`; English → `whisper-base.en`, others →
   `whisper-small --language xx`. Auto-detect mislabelled English as Italian
   twice. Never infer language from the user's prompt.
-- **Diarization (default)**: Sortformer 4spk v2 ONNX, 128-bin log-mel with no
-  normalisation, 80 ms activity. Overlap becomes two simultaneous turns. It
-  caps at 4 speakers; crowded audio collapses into four voices. Files longer
-  than 300 s are processed in overlapping windows and speaker channels are
-  matched by activity co-occurrence. 469 MB on disk, ~2.8 GB peak RSS on a
-  4-minute file.
+- **Diarization (default)**: Sortformer 4spk v2.1 streaming ONNX, 128-bin
+  log-mel with no normalisation, 80 ms activity, native AOSC state: 340-frame
+  chunks (1 left, 40 right), 40-frame FIFO, 188-frame speaker cache compressed
+  by log-activity scores with per-speaker boosts and 12 silence slots. Overlap
+  becomes two simultaneous turns; labels are stable for the whole file, no
+  per-window re-matching. It caps at 4 speakers; crowded audio collapses into
+  four voices. 475 MB on disk, **2.07 GB peak RSS and 45 s for a 20-minute
+  file** (26.0x realtime with whisper-base.en). The silence-pad decode must use
+  `n + 3` as the modulus; using `n` silently disables most of the cache.
 - **Diarization (fallback)**: pyannote 3.0 + WeSpeaker, 1.5 s chunks,
   average-linkage AHC, threshold 0.45, `max_speakers=12`. Over-segments crowded
   audio (4 voices → 7 labels on the hard fixture); overlap is flagged but not
@@ -216,7 +222,7 @@ them; the hard benchmark forbids them by instruction.
 
 Model store `~/.cache/sonolytica/models` (~2 GB, 12 models): silero_vad.onnx,
 ggml-tiny.en/base.en/small, wav2vec2-base-960h.onnx, segmentation-3.0.onnx,
-sortformer-4spk-v2.onnx, wespeaker CAM++, pp_ocrv5_det/rec.onnx,
+sortformer-4spk-v2.1.onnx, wespeaker CAM++, pp_ocrv5_det/rec.onnx,
 yunet_face_detection_2023mar.onnx, yolos_tiny.onnx. `models list` shows status.
 
 Fixtures under `/private/tmp` (not committed; regenerate):
@@ -254,6 +260,12 @@ python3 scripts/eval/der_voxconverse.py \
   --count 0 --min-speakers 2 --max-speakers 4 \
   --workdir /private/tmp/sono-eval/der-test2-final \
   --json-out /private/tmp/sono-eval/der-test2-final.json
+# AOSC gate: the only 4-speaker file in that shard
+python3 scripts/eval/der_voxconverse.py \
+  --parquet /private/tmp/sono-eval/voxconverse-test2.parquet \
+  --count 0 --min-speakers 4 --max-speakers 4 \
+  --workdir /private/tmp/sono-eval/der-aosc-test2 \
+  --json-out /private/tmp/sono-eval/der-aosc-test2.json
 python3 scripts/eval/der_voxconverse.py \
   --parquet /private/tmp/sono-eval/voxconverse-test3.parquet \
   --count 0 --min-speakers 2 --max-speakers 4 \
@@ -339,16 +351,17 @@ Delivered in this cycle:
 
 Open, in priority order:
 
-1. **AOSC streaming** for >10-minute files. `fvhrk` (20 min, 4 speakers) still
-   reports 2 labels with a warning; TwelveLabs got 4. Check the NVIDIA Open
-   Model License first; if disallowed, keep the warning.
-2. **Opt-in local VLM** (`--vision local`): captions for keyframes, 2–4 GB
+1. **Opt-in local VLM** (`--vision local`): captions for keyframes, 2–4 GB
    model, RAM warning, never silently enabled.
-3. **Music depth**: basic-pitch notes and technical highlight windows.
-4. **Distribution and launch**: external brew tap (needs a separate repo),
+2. **Music depth**: basic-pitch notes and technical highlight windows.
+3. **Distribution and launch**: external brew tap (needs a separate repo),
    Docker image, a second Gemini run when the quota resets, launch assets.
-5. **Easy fixed cost**: median 8 818 vs 8 000; the remaining cost is the
+4. **Easy fixed cost**: median 8 818 vs 8 000; the remaining cost is the
    harness prompt, the skill read and the agent's own loop.
+
+AOSC streaming shipped (2026-11-12): license reviewed, `fvhrk` 4/4 speakers at
+DER 6.40 % / JER 6.29 % (gate ≥3 / ≤11.8 %), no regression on the 1-4 speaker
+files. Full numbers in `docs/EVAL.md`.
 
 ### Capability roadmap after the skill cycle (by payoff)
 
@@ -356,15 +369,11 @@ Do these only after the skill-cost cycle, unless the user explicitly reprioritis
 Each needs its own measurement and one local commit; when a gate fails, revert
 and record it in `docs/EVAL.md`.
 
-1. **AOSC streaming for long files.** The current 300 s windows collapse
-   `fvhrk` (18 min, 4 speakers) into 2 voices; files >10 min already warn
-   `diarization_speaker_cap`. The fix is the model's native streaming cache:
-   `soniqo/Sortformer-Diarization-4spk-ONNX` v2.1 / NeMo AOSC (score/top-k,
-   silence embed, FIFO→cache, eviction; 30.4 s chunks, 80 ms frames).
-   **Check the license first** — NVIDIA Open Model License, not CC-BY. If the
-   project policy does not allow it, do not add it; keep the warning and the
-   documented cap. Gate: `fvhrk` hypothesis ≥3 speakers and DER ≤11.8 %, no
-   regression on 2–4 speaker files; otherwise revert.
+1. **AOSC streaming for long files — delivered 2026-11-12.** The 300 s windows
+   and their 10-minute warning are gone; the v2.1 streaming export with the
+   native speaker cache gets `fvhrk` 4/4 at DER 6.40 % (gate ≥3 / ≤11.8 %).
+   License: NVIDIA Open Model License, attribution in `NOTICE`. No regression
+   on the 1-4 speaker files (see `docs/EVAL.md`).
 2. **Multitalker ASR for overlap.** Sortformer returns two simultaneous turns,
    but Whisper still emits one merged line; a missing overlapped line is an ASR
    limitation. Add a speaker-attributed pass and measure JER plus word
@@ -443,10 +452,9 @@ and record it in `docs/EVAL.md`.
 Start with `git status`, this file, `docs/STATUS.md`, then §7. The skill and
 vision cycles are closed: **hard 16/16 / 14 773 median, easy 8/8 / 8 818, long
 16/16 / 13 443**; Gemini alone 14/16 vs 16/16 with the skill; TwelveLabs 10/16.
-The first objective is **AOSC streaming** for long files — it is the one
-measured quality gap the skill cannot fix (2 labels vs 4 real speakers on
-`fvhrk`). Check the license before writing code. After that: opt-in VLM, music
-notes, then distribution/launch.
+The AOSC streaming cycle is closed: `fvhrk` 4/4 speakers, DER 6.40 % (was 2/4,
+15.99 %), no regression on 1-4 speaker files. The next objective is the
+**opt-in local VLM**, then music notes, then distribution/launch.
 
 Do not re-litigate the rejected experiments (VAD gate at 0.45, merge tie-break,
 count heuristics), do not preload reference files, and quote medians + ranges
