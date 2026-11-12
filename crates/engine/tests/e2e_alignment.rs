@@ -9,6 +9,8 @@
 //! without the wav2vec2 model, the test skips with a message rather than
 //! failing: alignment is an optional refinement of ASR output.
 
+#![cfg(feature = "full")]
+
 use std::path::Path;
 use std::process::Command;
 
