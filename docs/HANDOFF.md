@@ -25,7 +25,7 @@ OCR text, and provenance on every segment. Agents read it via
 
 | | |
 |---|---|
-| Rust | 18 894 lines, 7 crates: `providers` (5.1k), `cli` (5.8k), `engine` (2.6k), `core` (2.1k), `dsp` (1.4k), `media` (1.2k), `eval` (0.7k) |
+| Rust | 19 099 lines, 7 crates: `providers` (5 330), `cli` (5 774), `engine` (2 638), `core` (2 080), `dsp` (1 360), `media` (1 226), `eval` (691) |
 | Binary | `sonolytica` (`sonolytica-cli`) |
 | SDK | `sonolytica-engine` (`Engine::analyze`) |
 | Schema | **1.4.0**, additive 1.0 → 1.4 |

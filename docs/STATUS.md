@@ -16,7 +16,7 @@ runtime, no GPL.
 
 | | |
 |---|---|
-| Rust | 17 161 lines across 7 crates (`providers` 4 347, `cli` 4 826, `engine` 2 631, `core` 2 080, `dsp` 1 360, `media` 1 226, `eval` 691) |
+| Rust | 19 099 lines across 7 crates (`providers` 5 330, `cli` 5 774, `engine` 2 638, `core` 2 080, `dsp` 1 360, `media` 1 226, `eval` 691) |
 | Query commands | 15 (`brief`, `timeline`, `at`, `search`, `transcript`, `words`, `speakers`, `chapters`, `frames`, `music`, `acoustic`, `runs`, `summary`, `verify`, `help`) |
 | CLI | `analyze`, `query`, `report` (HTML), `install-skill` (4 harnesses), `models fetch --set core\|full`, `doctor`, `inspect`, `schema` |
 | Models | 12, all SHA-256 pinned: Silero VAD, whisper tiny/base/small, wav2vec2 aligner, Sortformer 4spk, pyannote segmentation, WeSpeaker, PP-OCRv5 det/rec, YuNet face detection, YOLOS-tiny object detection |
