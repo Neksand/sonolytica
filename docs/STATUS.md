@@ -16,7 +16,7 @@ runtime, no GPL.
 
 | | |
 |---|---|
-| Rust | 20 910 lines across 7 crates (`providers` 5 681, `cli` 7 156, `engine` 2 638, `core` 2 158, `dsp` 1 360, `media` 1 226, `eval` 691) |
+| Rust | 20 974 lines across 7 crates (`providers` 5 681, `cli` 7 220, `engine` 2 638, `core` 2 158, `dsp` 1 360, `media` 1 226, `eval` 691) |
 | Query commands | 17 (`brief`, `ask`, `timeline`, `at`, `search`, `transcript`, `words`, `speakers`, `chapters`, `frames`, `poses`, `music`, `acoustic`, `runs`, `summary`, `verify`, `help`) |
 | CLI | `analyze`, `query`, `report` (HTML), `install-skill` (4 harnesses), `models fetch --set core\|full`, `doctor`, `inspect`, `schema` |
 | Models | 13, all SHA-256 pinned: Silero VAD, whisper tiny/base/small, wav2vec2 aligner, Sortformer 4spk streaming, pyannote segmentation, WeSpeaker, PP-OCRv5 det/rec, YuNet face detection, YOLOS-tiny object detection, MoveNet Multipose |
@@ -28,8 +28,8 @@ runtime, no GPL.
 
 | Check | Result |
 |---|---|
-| `cargo test --workspace` | 163 passed, 0 failed |
-| with `full,metal` | 178 passed, 0 failed |
+| `cargo test --workspace` | 164 passed, 0 failed |
+| with `full,metal` | 179 passed, 0 failed |
 | `cargo clippy -D warnings` | clean (default and full) |
 | `cargo fmt --check` | clean |
 | Model-free build | tests pass with no models, no cmake, no ONNX runtime |

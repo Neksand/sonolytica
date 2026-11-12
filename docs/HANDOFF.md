@@ -26,14 +26,14 @@ OCR text, and provenance on every segment. Agents read it via
 
 | | |
 |---|---|
-| Rust | 20 910 lines, 7 crates: `providers` (5 681), `cli` (7 156), `engine` (2 638), `core` (2 158), `dsp` (1 360), `media` (1 226), `eval` (691) |
+| Rust | 20 974 lines, 7 crates: `providers` (5 681), `cli` (7 220), `engine` (2 638), `core` (2 158), `dsp` (1 360), `media` (1 226), `eval` (691) |
 | Binary | `sonolytica` (`sonolytica-cli`) |
 | SDK | `sonolytica-engine` (`Engine::analyze`) |
 | Schema | **1.5.0**, additive 1.0 → 1.5 |
 | Models | 13, SHA-256 pinned, in `~/.cache/sonolytica/models` |
 | Commands | 17 query subcommands (brief … verify, ask, poses, help) + `report`, `install-skill`, `analyze`, `models`, `cache`, `doctor`, `inspect`, `schema` |
 | Skill | `skills/sonolytica/` (SKILL.md 200 lines + 5 references + 5 workflows) |
-| Tests | **163** model-free / **178** all-features |
+| Tests | **164** model-free / **179** all-features |
 
 Features: `sonolytica-cli --features full-metal` = whisper + silero + diarize +
 ocr + vision + align + metal. `cargo test --workspace` runs without
@@ -265,8 +265,8 @@ cd /Users/neksand/orca/projects/SONOLYTICA
 git status                       # must be clean
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace           # 163, no models
-cargo test --workspace --all-features   # 178
+cargo test --workspace           # 164, no models
+cargo test --workspace --all-features   # 179
 
 # real models (macOS fixtures, ~10 s)
 SONOLYTICA_E2E=1 cargo test -p sonolytica-engine --features "full,metal" --test e2e_speech
