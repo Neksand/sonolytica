@@ -74,7 +74,7 @@ Every quote carries its range; warnings are shown, not hidden.
 | Speech | words, ranges, confidence, language | Whisper (whisper.cpp) |
 | Speakers | turns, overlap spans, speaking time | Sortformer 4spk, pyannote fallback |
 | Alignment | word boundaries, ~110 ms median drift | wav2vec2 CTC (English) |
-| Video | shots, cuts, keyframes on the timeline | FFmpeg signatures (2 fps) |
+| Video | shots, cuts, keyframes (dense with `--frame-stride`) | FFmpeg signatures (2 fps) |
 | On-screen text | exact OCR lines with boxes | PP-OCRv5 |
 | Music | tempo, key, triads, sections, loudness | local DSP |
 | Acoustics | silence, LRA, true peak | local DSP |

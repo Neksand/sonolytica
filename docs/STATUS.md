@@ -28,8 +28,8 @@ runtime, no GPL.
 
 | Check | Result |
 |---|---|
-| `cargo test --workspace` | 143 passed, 0 failed |
-| with `full,metal` | 158 passed, 0 failed |
+| `cargo test --workspace` | 147 passed, 0 failed |
+| with `full,metal` | 162 passed, 0 failed |
 | `cargo clippy -D warnings` | clean (default and full) |
 | `cargo fmt --check` | clean |
 | Model-free build | tests pass with no models, no cmake, no ONNX runtime |

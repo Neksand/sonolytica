@@ -29,7 +29,7 @@ OCR text, and provenance on every segment. Agents read it via
 | Models | 10, SHA-256 pinned, in `~/.cache/sonolytica/models` |
 | Commands | 15 query subcommands (brief … verify, help) + `report`, `install-skill`, `analyze`, `models`, `doctor`, `inspect`, `schema` |
 | Skill | `skills/sonolytica/` (SKILL.md 199 lines + 5 references + 5 workflows) |
-| Tests | **143** model-free / **158** all-features |
+| Tests | **147** model-free / **162** all-features |
 
 Features: `sonolytica-cli --features full-metal` = whisper + silero + diarize +
 ocr + align + metal. `cargo test --workspace` runs without models/cmake/ORT.

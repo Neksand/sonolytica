@@ -1048,6 +1048,11 @@ fn brief_ocr(doc: &Document) -> Vec<BriefOcr> {
         let SegmentKind::TextOverlay { text, .. } = &segment.kind else {
             continue;
         };
+        // Dense frame sampling repeats the same slide; keep the first instant
+        // of a run so `brief` stays a map, not a contact sheet.
+        if by_instant.values().next_back().map(String::as_str) == Some(text.as_str()) {
+            continue;
+        }
         by_instant
             .entry(segment.range.start.micros())
             .or_insert_with(|| truncate(text));
@@ -2078,6 +2083,46 @@ mod tests {
                 "parsing `{input}`"
             );
         }
+    }
+
+    #[test]
+    fn brief_ocr_collapses_consecutive_identical_lines() {
+        use sonolytica_core::{Track, TrackKind};
+        let media = sonolytica_core::MediaInfo {
+            path: "/tmp/ocr.mp4".into(),
+            duration: Some(MediaTime::from_secs_f64(5.0)),
+            ..sonolytica_core::MediaInfo::default()
+        };
+        let mut document = Document::new(media, AnalysisConfig::default());
+        document.tracks.push(Track {
+            id: 0,
+            kind: TrackKind::Text,
+            label: "ocr".into(),
+            run: 0,
+        });
+        for (at, text) in [(1.0, "SAME"), (2.0, "SAME"), (3.0, "OTHER"), (4.0, "SAME")] {
+            document.segments.push(sonolytica_core::Segment {
+                id: document.segments.len() as u32,
+                track: 0,
+                range: TimeRange::empty(MediaTime::from_secs_f64(at)),
+                parent: None,
+                kind: SegmentKind::TextOverlay {
+                    text: text.into(),
+                    bbox: sonolytica_core::BBox {
+                        x: 0.0,
+                        y: 0.0,
+                        width: 1.0,
+                        height: 1.0,
+                    },
+                },
+                confidence: None,
+                run: 0,
+            });
+        }
+        let lines = brief_ocr(&document);
+        let texts: Vec<&str> = lines.iter().map(|line| line.text.as_str()).collect();
+        assert_eq!(texts, vec!["SAME", "OTHER", "SAME"]);
+        assert_eq!(lines[0].start_us, 1_000_000);
     }
 
     #[test]

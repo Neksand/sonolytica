@@ -42,6 +42,10 @@ Detail behind §10 of `SKILL.md`. Open only the section you need.
   `query timeline DOC --type scene` returns scene segments: `index` is the shot
   number, `cut` is true when the scene starts at a detected cut. `brief` lists
   the cut instants and one OCR line per keyframe.
+- One keyframe per scene by default. `analyze --frame-stride N` adds a frame
+  every N seconds (scene cuts stay first, `--max-frames` still caps the total);
+  use it for long static slides or screencasts. Consecutive identical OCR lines
+  are collapsed in `brief`; the full list is `timeline --type text_overlay`.
 - `analyze --out doc.json` also writes **keyframe images** next to the document
   (`doc.json.artifacts/frames/`) and registers them in `artifacts`.
   `query frames DOC --from T --to T --max 8` returns absolute paths. If

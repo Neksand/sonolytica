@@ -135,6 +135,10 @@ struct AnalyzeArgs {
     /// Maximum number of keyframes to extract
     #[arg(long, default_value_t = 40)]
     max_frames: usize,
+    /// Also sample a keyframe every N seconds (dense coverage for long static
+    /// shots); scene cuts are always sampled first
+    #[arg(long)]
+    frame_stride: Option<f32>,
     /// Run OCR on the extracted keyframes (needs --out and the pp-ocrv5 models)
     #[arg(long)]
     ocr: bool,
@@ -278,6 +282,7 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                             path,
                             &args.file,
                             args.max_frames,
+                            args.frame_stride.unwrap_or(0.0),
                         )
                         .await;
                     }
@@ -640,8 +645,10 @@ fn summarize(document: &Document) -> String {
 }
 
 /// One keyframe per scene: a second after the cut, or the midpoint of a short
-/// scene. Evenly capped at `max` across the whole recording.
-fn keyframe_times(document: &Document, max: usize) -> Vec<f32> {
+/// scene. With `stride > 0`, add a dense sample every `stride` seconds; scene
+/// cuts stay first so a long static shot cannot hide them. Evenly capped at
+/// `max` across the whole recording.
+fn keyframe_times(document: &Document, max: usize, stride: f32) -> Vec<f32> {
     let mut scenes: Vec<_> = document
         .segments
         .iter()
@@ -661,6 +668,21 @@ fn keyframe_times(document: &Document, max: usize) -> Vec<f32> {
         })
         .collect();
     times.dedup_by(|a, b| (*a - *b).abs() < 0.2);
+
+    if stride.is_finite() && stride > 0.0 {
+        let duration = document.duration().as_secs_f64() as f32;
+        let mut sample = stride;
+        while sample < duration {
+            if max > 0 && times.len() >= max {
+                break;
+            }
+            if !times.iter().any(|existing| (existing - sample).abs() < 0.2) {
+                times.push(sample);
+            }
+            sample += stride;
+        }
+        times.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    }
 
     if max > 0 && times.len() > max {
         let step = times.len() as f64 / max as f64;
@@ -683,8 +705,14 @@ fn has_scenes(document: &Document) -> bool {
 /// Paths are stored relative to the document, so the JSON and the images can be
 /// moved together. A failure is a warning, never a failed analysis: the
 /// document is valid without images.
-async fn extract_document_keyframes(document: &mut Document, out: &Path, media: &Path, max: usize) {
-    let times = keyframe_times(document, max);
+async fn extract_document_keyframes(
+    document: &mut Document,
+    out: &Path,
+    media: &Path,
+    max: usize,
+    stride: f32,
+) {
+    let times = keyframe_times(document, max, stride);
     if times.is_empty() {
         return;
     }
@@ -935,7 +963,7 @@ fn schema_example() -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sonolytica_core::MediaInfo;
+    use sonolytica_core::{DocumentBuilder, MediaInfo};
 
     #[test]
     fn profiles_expand_to_the_expected_capabilities() {
@@ -1025,5 +1053,65 @@ mod tests {
             ..AnalysisConfig::default()
         };
         assert!(!is_degraded(&document, &nothing_requested));
+    }
+
+    fn scene_document(duration_secs: f64, scenes: &[(f64, f64)]) -> Document {
+        let media = MediaInfo {
+            path: "/tmp/frames.mp4".into(),
+            duration: Some(MediaTime::from_secs_f64(duration_secs)),
+            ..MediaInfo::default()
+        };
+        let mut builder = DocumentBuilder::new(media, AnalysisConfig::default());
+        let run = builder.add_run(run_record_for_test(Capability::Scene));
+        let track = builder.add_track(TrackKind::Scene, "scenes", run);
+        for (index, (start, end)) in scenes.iter().enumerate() {
+            builder.add_segment(
+                track,
+                TimeRange::from_secs(*start, *end),
+                SegmentKind::Scene {
+                    index: index as u32,
+                    cut: index > 0,
+                },
+                None,
+                run,
+            );
+        }
+        builder.finish().expect("scene fixture must be valid")
+    }
+
+    fn run_record_for_test(capability: Capability) -> RunRecord {
+        RunRecord {
+            id: 0,
+            capability,
+            provider: "test".into(),
+            model: None,
+            params_sha256: "0".repeat(64),
+            device: "cpu".into(),
+            started_at_unix_ms: 0,
+            duration_ms: 1,
+            status: RunStatus::Complete,
+        }
+    }
+
+    #[test]
+    fn keyframes_are_one_per_scene_without_a_stride() {
+        let document = scene_document(30.0, &[(0.0, 10.0), (10.0, 20.0), (20.0, 30.0)]);
+        let times = keyframe_times(&document, 40, 0.0);
+        assert_eq!(times, vec![1.0, 11.0, 21.0]);
+    }
+
+    #[test]
+    fn stride_adds_dense_frames_but_keeps_scene_samples() {
+        let document = scene_document(30.0, &[(0.0, 10.0), (10.0, 20.0), (20.0, 30.0)]);
+        let times = keyframe_times(&document, 40, 5.0);
+        assert_eq!(times, vec![1.0, 5.0, 10.0, 11.0, 15.0, 20.0, 21.0, 25.0]);
+        assert!(times.contains(&1.0) && times.contains(&11.0) && times.contains(&21.0));
+    }
+
+    #[test]
+    fn stride_respects_the_frame_cap() {
+        let document = scene_document(30.0, &[(0.0, 10.0), (10.0, 20.0), (20.0, 30.0)]);
+        let times = keyframe_times(&document, 4, 1.0);
+        assert_eq!(times.len(), 4);
     }
 }
