@@ -639,8 +639,8 @@ impl DiarizationProvider for SortformerDiarizer {
             let reported = CHUNK_FRAMES.min(total_frames - start);
             let valid_mel = if start == 0 {
                 // The first window has no history: one zero left-context frame.
-                let valid = MEL_INPUT_FRAMES.min((total_frames + 1) * SUB_FACTOR);
-                let audio_mel = (valid - SUB_FACTOR).min(total_mel);
+                let audio_mel = total_mel.min(MEL_INPUT_FRAMES - SUB_FACTOR);
+                let valid = SUB_FACTOR + audio_mel;
                 chunk_mel[SUB_FACTOR * N_MELS..(SUB_FACTOR + audio_mel) * N_MELS]
                     .copy_from_slice(&mel[..audio_mel * N_MELS]);
                 valid

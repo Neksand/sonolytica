@@ -172,7 +172,8 @@ Reading it:
 - Limits: at most four speakers; 300 s windows with 10 s overlap and
   activity-based label matching across windows; 469 MB on disk, ~2.8 GB peak
   RSS on a 4-minute file (5.9 s for the forward pass). Past 10 minutes a
-  `diarization_speaker_cap` warning marks the count as approximate.
+  `diarization_speaker_cap` warning marks the count as approximate. This window
+  path was replaced by AOSC streaming; the numbers above are the v2 baseline.
 
 Caveat: one fresh shard, six files, one machine. The numbers are a pilot for
 direction, not a leaderboard entry.
