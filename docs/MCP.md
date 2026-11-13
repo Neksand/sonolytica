@@ -28,6 +28,20 @@ Claude Desktop uses `claude_desktop_config.json`; Cursor and other clients use
 their own MCP settings file with the same `command` / `args` shape. If the
 binary is not on the client's `PATH`, use its absolute path.
 
+On Windows, use `sonolytica.exe` (or the absolute path with escaped
+backslashes):
+
+```json
+{
+  "mcpServers": {
+    "sonolytica": {
+      "command": "C:\\Users\\you\\AppData\\Local\\sonolytica\\bin\\sonolytica.exe",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
 Test it without a client:
 
 ```bash

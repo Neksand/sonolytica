@@ -20,7 +20,7 @@ bin_dir=${SONOLYTICA_BIN_DIR:-$HOME/.local/bin}
 case "$(uname -s)" in
     Darwin) os=apple-darwin ;;
     Linux) os=unknown-linux-gnu ;;
-    *) echo "unsupported OS: $(uname -s); build from source instead" >&2; exit 1 ;;
+    *) echo "unsupported OS: $(uname -s); Windows uses install.ps1; otherwise build from source" >&2; exit 1 ;;
 esac
 case "$(uname -m)" in
     arm64 | aarch64) arch=aarch64 ;;

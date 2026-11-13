@@ -10,7 +10,7 @@ use sonolytica_core::{
     RunStatus, Segment, SegmentKind, TimeRange, Track, TrackKind, Warning,
 };
 use sonolytica_engine::Engine;
-use sonolytica_providers::{ModelStore, default_model_dir, find_model, models::MODELS};
+use sonolytica_providers::{ModelStore, default_model_dir, find_model, home_dir, models::MODELS};
 use tracing_subscriber::EnvFilter;
 
 mod cache;
@@ -713,7 +713,7 @@ fn default_cache_dir() -> PathBuf {
     if let Some(dir) = std::env::var_os("SONOLYTICA_CACHE_DIR") {
         return PathBuf::from(dir);
     }
-    let home = std::env::var_os("HOME").map_or_else(|| PathBuf::from("."), PathBuf::from);
+    let home = home_dir().unwrap_or_else(|| PathBuf::from("."));
     home.join(".cache").join("sonolytica").join("cache")
 }
 

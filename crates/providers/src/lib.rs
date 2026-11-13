@@ -41,6 +41,18 @@ mod diarize;
 #[cfg(feature = "diarize")]
 mod sortformer;
 
+use std::path::PathBuf;
+
+/// The user's home directory: `$HOME` on Unix, `%USERPROFILE%` on Windows.
+///
+/// `HOME` stays first so Unix-style shells, CI and tests keep working; native
+/// Windows shells normally set only `USERPROFILE`.
+pub fn home_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
+}
+
 pub use align::{LazyWav2Vec2Aligner, Wav2Vec2Aligner};
 pub use models::{MODELS, ModelSpec, ModelStore, default_model_dir, find_model};
 pub use registry::{Registry, Unavailable};

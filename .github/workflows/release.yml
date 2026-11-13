@@ -22,6 +22,9 @@ jobs:
           - runner: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
             features: full
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            features: full
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -30,22 +33,40 @@ jobs:
           toolchain: "1.99.0"
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
-      - name: Native toolchain
+      - name: Native toolchain (Unix)
+        if: runner.os != 'Windows'
         run: |
           if [ "$RUNNER_OS" = "macOS" ]; then brew install cmake ffmpeg; else sudo apt-get update && sudo apt-get install -y cmake libasound2-dev clang libclang-dev; fi
+      - name: Native toolchain (Windows)
+        if: runner.os == 'Windows'
+        run: choco install cmake llvm -y --no-progress
       - name: Build
+        shell: bash
         run: |
           if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
             export GGML_NATIVE=OFF GGML_CPU_ARM_ARCH=armv8.2-a+fp16
           fi
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            export LIBCLANG_PATH='C:\Program Files\LLVM\bin'
+          fi
           cargo build --release -p sonolytica-cli --features ${{ matrix.features }}
           cargo build --release -p sonolytica-eval
-      - name: Package
+      - name: Package (Unix)
+        if: runner.os != 'Windows'
         run: |
           mkdir -p dist
           tar czf dist/sonolytica-${{ matrix.target }}.tar.gz \
             -C target/release sonolytica sonolytica-eval
           (cd dist && shasum -a 256 sonolytica-${{ matrix.target }}.tar.gz > sonolytica-${{ matrix.target }}.tar.gz.sha256)
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          $name = "sonolytica-${{ matrix.target }}.zip"
+          Compress-Archive -Path target/release/sonolytica.exe,target/release/sonolytica-eval.exe -DestinationPath "dist/$name"
+          $hash = (Get-FileHash "dist/$name" -Algorithm SHA256).Hash.ToLower()
+          "$hash  $name" | Out-File -Encoding ascii "dist/$name.sha256"
       - uses: actions/upload-artifact@v4
         with:
           name: sonolytica-${{ matrix.target }}

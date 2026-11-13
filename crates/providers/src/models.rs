@@ -257,12 +257,13 @@ pub fn models_for(capability: Capability) -> impl Iterator<Item = &'static Model
     MODELS.iter().filter(move |m| m.capability == capability)
 }
 
-/// Default location: `$SONOLYTICA_MODEL_DIR` or `$HOME/.cache/sonolytica/models`.
+/// Default location: `$SONOLYTICA_MODEL_DIR` or `$HOME/.cache/sonolytica/models`
+/// (`%USERPROFILE%\.cache\sonolytica\models` on Windows).
 pub fn default_model_dir() -> PathBuf {
     if let Some(dir) = std::env::var_os("SONOLYTICA_MODEL_DIR") {
         return PathBuf::from(dir);
     }
-    let home = std::env::var_os("HOME").map_or_else(|| PathBuf::from("."), PathBuf::from);
+    let home = crate::home_dir().unwrap_or_else(|| PathBuf::from("."));
     home.join(".cache").join("sonolytica").join("models")
 }
 

@@ -47,6 +47,29 @@ jobs:
       # Run them locally with:
       #   SONOLYTICA_E2E=1 cargo test -p sonolytica-engine --features "full,metal" --test e2e_speech
 
+  windows:
+    name: windows x64 (full build)
+    runs-on: windows-latest
+    env:
+      LIBCLANG_PATH: C:\Program Files\LLVM\bin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.99.0"
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Install FFmpeg, CMake and LLVM
+        run: choco install ffmpeg cmake llvm -y --no-progress
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Test without any model feature
+        run: cargo test --workspace
+      - name: Build full pipeline
+        run: cargo build --release -p sonolytica-cli --features full
+      # Model-backed tests are opt-in and use macOS `say`; the Windows job
+      # proves the full provider stack compiles and links.
+
   licenses:
     name: licenses and sources
     runs-on: ubuntu-latest

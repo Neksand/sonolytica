@@ -8,8 +8,8 @@ Local, typed, timestamped. Speech with word timings and speaker turns, shots and
 keyframes, on-screen text, faces, objects, pose, captions and music — one
 timeline, provenance on every fact, no cloud.
 
-**v0.2.0** — stable local release; models are opt-in, digest-pinned and never
-uploaded.
+**v0.2.1** — stable local release; models are opt-in, digest-pinned and never
+uploaded. macOS arm64, Linux x86_64/arm64, and Windows 10/11 x64.
 
 [![ci](https://github.com/neksand/sonolytica/actions/workflows/ci.yml/badge.svg)](https://github.com/neksand/sonolytica/actions/workflows/ci.yml)
 [![release](https://img.shields.io/github/v/release/neksand/sonolytica?display_name=tag)](https://github.com/neksand/sonolytica/releases)
@@ -19,6 +19,7 @@ uploaded.
 [![schema](https://img.shields.io/badge/schema-1.6.0-purple.svg)](docs/SCHEMA.md)
 [![MCP](https://img.shields.io/badge/MCP-14%20tools-6f42c1.svg)](docs/MCP.md)
 [![docker](https://img.shields.io/badge/docker-790%20MB-2496ed.svg)](docs/DOCKER.md)
+[![windows](https://img.shields.io/badge/windows-10%2F11%20x64-0078d4.svg)](#platforms)
 
 </div>
 
@@ -93,6 +94,9 @@ whisper.cpp, so the model-free build and test suite work anywhere.
 ## Install
 
 ```bash
+# Windows 10/11 x64 (PowerShell 5.1+)
+irm https://raw.githubusercontent.com/neksand/sonolytica/main/install.ps1 | iex
+
 # macOS (arm64) / Linux (x86_64/arm64) release binary
 curl -fsSL https://raw.githubusercontent.com/neksand/sonolytica/main/install.sh | sh
 
@@ -102,14 +106,34 @@ cargo build --release -p sonolytica-cli --features full         # CPU only
 ```
 
 Requirements: FFmpeg 7+ on `PATH`; `cmake` when building the speech pipeline.
-Models are downloaded on demand and verified by digest.
+On Windows: `winget install Gyan.FFmpeg` (or `choco install ffmpeg`), then a
+new terminal. Models are downloaded on demand and verified by digest.
 
 ```bash
 sonolytica setup                  # doctor, core models (~1.5 GB), agent skill
 sonolytica setup --full           # + OCR, faces, objects, pose, Florence captions
 sonolytica doctor                 # what this machine can actually run
-sonolytica completions bash       # or zsh / fish
+sonolytica completions bash       # or zsh / fish / powershell
 ```
+
+## Platforms
+
+| Platform | Support | Artifact |
+|---|---|---|
+| **Windows 11 x64** | supported | `sonolytica-x86_64-pc-windows-msvc.zip` |
+| **Windows 10 x64** (22H2) | supported | the **same** Windows zip |
+| Windows 8 / 8.1 | not supported | — |
+| Windows on ARM, 32-bit Windows | not supported | — |
+| macOS 14+ arm64 | supported | `sonolytica-aarch64-apple-darwin.tar.gz` |
+| Linux x86_64 | supported | `sonolytica-x86_64-unknown-linux-gnu.tar.gz` |
+| Linux arm64 | supported | `sonolytica-aarch64-unknown-linux-gnu.tar.gz` |
+
+Windows 10 and 11 share the same x64 Win32 ABI, so there is **one** binary, not
+two byte-identical downloads. It is built and tested on GitHub's Windows
+runners and uses the native MSVC toolchain. Windows 8/8.1 is end-of-life and is
+not supported by the current Rust/MSVC, ONNX Runtime and FFmpeg toolchains; no
+separate legacy build is shipped. Details and manual install:
+[`docs/WINDOWS.md`](docs/WINDOWS.md).
 
 `setup` is idempotent: existing models are verified and skipped, and the skill
 is installed into Claude Code, Codex, OpenCode and Cursor. Use `--no-models` or
@@ -425,6 +449,7 @@ cargo fmt --all -- --check
 
 Design: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/adr/`](docs/adr/).
 Benchmark protocol: [`docs/BENCHMARK.md`](docs/BENCHMARK.md). Release notes:
+[`docs/RELEASE-0.2.1.md`](docs/RELEASE-0.2.1.md) (Windows) and
 [`docs/RELEASE-0.2.0.md`](docs/RELEASE-0.2.0.md). Launch brief:
 [`docs/LAUNCH.md`](docs/LAUNCH.md).
 

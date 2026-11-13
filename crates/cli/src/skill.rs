@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use clap::ValueEnum;
+use sonolytica_providers::home_dir as user_home;
 
 /// Directory name and skill id.
 const NAME: &str = "sonolytica";
@@ -184,9 +185,9 @@ fn base_dir(target: Target, home: &Path, project: bool) -> PathBuf {
 }
 
 fn home_dir() -> Result<PathBuf> {
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .context("HOME is not set; pass --project to install into the current directory")
+    user_home().context(
+        "HOME or USERPROFILE is not set; pass --project to install into the current directory",
+    )
 }
 
 fn write_file(path: &Path, contents: &str, dry_run: bool) -> Result<()> {
