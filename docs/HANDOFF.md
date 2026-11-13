@@ -1,8 +1,9 @@
 # Handoff — SONOLYTICA after the AOSC streaming cycle
 
 Last updated: 2026-11-13. Branch `main`, working tree clean. Public repo:
-<https://github.com/Neksand/sonolytica>; `v0.2.0` is tagged and released
-(macOS arm64, Linux x86_64/arm64), Docker is public on GHCR, CI is green.
+<https://github.com/Neksand/sonolytica>; `v0.2.1` adds native Windows 10/11 x64
+to the macOS arm64 and Linux x86_64/arm64 release, Docker is public on GHCR,
+CI is green.
 Since `1960e26`: reproducible benchmark + token
 scripts, `brief` v2 (scene cuts, OCR lines, overlap spans), `query verify`,
 HTML `report`, `install-skill` for four harnesses, release workflow, dense

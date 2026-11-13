@@ -96,9 +96,10 @@ There is no free-form VQA model yet.
 - [x] Dockerfile + GHCR workflow; image verified on arm64 (790 MB)
 - [x] agent skill for Claude Code, Codex, OpenCode, Cursor
 - [x] measured benchmark, eval methods, model licences, `NOTICE`
-- [x] tag `v0.2.0` + public GitHub release:
-      <https://github.com/Neksand/sonolytica/releases/tag/v0.2.0>
+- [x] tag `v0.2.1` + public GitHub release, including native Windows 10/11 x64:
+      <https://github.com/Neksand/sonolytica/releases/tag/v0.2.1>
 - [x] public GHCR image (`linux/amd64`; arm64 builds locally)
+- [x] Windows zip + checksummed `install.ps1`; Windows 8/8.1 explicitly unsupported
 - [ ] brew tap (needs a separate repository)
 - [ ] 2-minute demo video and three example documents
 - [ ] MCP directory listings (Claude/Cursor) and a launch post
@@ -107,7 +108,8 @@ There is no free-form VQA model yet.
 ## What to say / not say
 
 Say: local, citable, exact ranges, 4/4 on the 20-minute meeting, 16/16 on the
-hard and easy structured tasks, $0 after models, MCP/Docker/one-command setup.
+hard and easy structured tasks, $0 after models, MCP/Docker/one-command setup,
+native Windows 10/11 x64 (one binary, same evidence).
 
 Do not say: "beats Gemini at vision", "unlimited speakers", "solves overlapping
 speech", or "works for every language". The honest edge is **structured media
