@@ -30,7 +30,9 @@ Models live in `~/.cache/sonolytica/models` (override with `--models-dir` or
 1. `query acoustic` — is there measured silence for most of the file?
 2. `query runs` — did `vad` and `transcribe` run, and with which model?
 3. A `.en` model on non-English audio yields confident nonsense: check
-   `config.asr_model` and pass `--language` with a multilingual model.
+   `config.asr_model` and pass `--language`; non-English requests prefer
+   `whisper-small` automatically. Use `--model whisper-small` for English
+   quality.
 4. Check `speech_ratio`: if it is very low, the VAD threshold or the input gain
    is the suspect.
 

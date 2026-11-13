@@ -163,13 +163,13 @@ fn fixture() -> Document {
     builder.add_analysis(AnalysisBlock::Music(MusicSummary {
         bpm: Some(Bpm {
             value: 98.0,
-            confidence: Confidence::clamped(0.31),
+            confidence: Confidence::clamped(0.62),
         }),
         beats: vec![MediaTime::ZERO, MediaTime::from_millis(612)],
         key: Some(KeyEstimate {
             tonic: PitchClass::FSharp,
             mode: Mode::Minor,
-            confidence: Confidence::clamped(0.12),
+            confidence: Confidence::clamped(0.42),
         }),
         chords: vec![Chord {
             range: TimeRange::from_secs(0.0, 2.0),

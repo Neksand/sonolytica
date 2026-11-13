@@ -155,7 +155,9 @@ struct AnalyzeArgs {
     /// Preferred language (ISO 639-1)
     #[arg(long)]
     language: Option<String>,
-    /// Explicit ASR model id (see `sonolytica models list`)
+    /// Explicit ASR model id, or `auto` (see `sonolytica models list`).
+    /// Default policy: English uses whisper-base.en; other languages prefer
+    /// whisper-small when installed.
     #[arg(long)]
     model: Option<String>,
     /// Translate speech to English
@@ -648,6 +650,16 @@ async fn run(cli: Cli) -> Result<ExitCode> {
             println!("model directory: {}", store.dir().display());
             let engine = Engine::discover(store.clone());
             let registry = engine.registry();
+            if let Some(asr) = registry.asr_for_request(None, None) {
+                let info = asr.info();
+                let model = info
+                    .models
+                    .first()
+                    .map_or("unknown", |model| model.id.as_str());
+                println!(
+                    "asr default: {model} (English; non-English prefers whisper-small; --model overrides)"
+                );
+            }
             let infos = registry.provider_infos();
             if infos.is_empty() {
                 println!("providers: none available");
@@ -868,28 +880,35 @@ fn summarize(document: &Document) -> String {
             }
             AnalysisBlock::Music(music) => {
                 out.push_str("music        ");
-                if let Some(bpm) = &music.bpm {
-                    out.push_str(&format!("{:.1} BPM (score {}) ", bpm.value, bpm.confidence));
-                }
-                if let Some(key) = &music.key {
+                if music.is_present() {
+                    if let Some(bpm) = &music.bpm {
+                        out.push_str(&format!("{:.1} BPM (score {}) ", bpm.value, bpm.confidence));
+                    }
+                    if let Some(key) = &music.key {
+                        out.push_str(&format!(
+                            "{} {} ",
+                            key.tonic.name(),
+                            if key.mode == sonolytica_core::Mode::Major {
+                                "major"
+                            } else {
+                                "minor"
+                            }
+                        ));
+                    }
+                    if let Some(loudness) = &music.loudness {
+                        out.push_str(&format!("{:.1} LUFS ", loudness.integrated_lufs));
+                    }
                     out.push_str(&format!(
-                        "{} {} ",
-                        key.tonic.name(),
-                        if key.mode == sonolytica_core::Mode::Major {
-                            "major"
-                        } else {
-                            "minor"
-                        }
+                        "· {} chords · {} beats",
+                        music.chords.len(),
+                        music.beats.len()
                     ));
+                } else {
+                    out.push_str("not detected");
+                    if let Some(loudness) = &music.loudness {
+                        out.push_str(&format!(" · {:.1} LUFS", loudness.integrated_lufs));
+                    }
                 }
-                if let Some(loudness) = &music.loudness {
-                    out.push_str(&format!("{:.1} LUFS ", loudness.integrated_lufs));
-                }
-                out.push_str(&format!(
-                    "· {} chords · {} beats",
-                    music.chords.len(),
-                    music.beats.len()
-                ));
                 out.push('\n');
             }
             AnalysisBlock::Acoustic(acoustic) => {

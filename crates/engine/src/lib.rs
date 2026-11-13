@@ -149,16 +149,8 @@ impl Engine {
             ));
         }
 
-        for unavailable in &self.registry.unavailable {
-            if config.wants(unavailable.capability) {
-                builder.warn(Warning::new(
-                    "provider_unavailable",
-                    format!(
-                        "{} ({}) is unavailable: {}",
-                        unavailable.provider, unavailable.capability, unavailable.reason
-                    ),
-                ));
-            }
+        for warning in unavailable_warnings(&self.registry, &config) {
+            builder.warn(warning);
         }
 
         if inspection_only {
@@ -351,13 +343,17 @@ impl Engine {
         // --- ASR -----------------------------------------------------------
         let mut asr_output: Option<sonolytica_providers::AsrOutput> = None;
         if config.wants(Capability::Transcribe)
-            && self.registry.asr_for(config.asr_model.as_deref()).is_some()
+            && self
+                .registry
+                .asr_for_request(config.asr_model.as_deref(), config.language.as_deref())
+                .is_some()
         {
             if let Some(audio) = speech_audio.take() {
                 let registry = Arc::clone(&self.registry);
                 let model_preference = config.asr_model.clone();
+                let language = config.language.clone();
                 let asr_config = AsrConfig {
-                    language: config.language.clone(),
+                    language: language.clone(),
                     translate_to_english: config.translate_to_english,
                     threads: 4,
                     regions: if vad_regions.is_empty() {
@@ -367,11 +363,13 @@ impl Engine {
                     },
                 };
                 let provider_info = registry
-                    .asr_for(model_preference.as_deref())
+                    .asr_for_request(model_preference.as_deref(), language.as_deref())
                     .map(|p| p.info());
                 let started = (now_unix_ms(), Instant::now());
                 let (audio, outcome) = blocking(move || {
-                    let result = match registry.asr_for(model_preference.as_deref()) {
+                    let result = match registry
+                        .asr_for_request(model_preference.as_deref(), language.as_deref())
+                    {
                         Some(provider) => provider.transcribe(&audio, &asr_config),
                         None => Err(ProviderError::Unsupported(
                             "no ASR provider available".into(),
@@ -1155,43 +1153,60 @@ fn map_pitch(class: u8) -> PitchClass {
 }
 
 fn map_music(features: &sonolytica_dsp::MusicFeatures) -> MusicSummary {
-    let bpm = features.tempo.as_ref().and_then(|tempo| {
-        tempo.bpm.is_finite().then_some(Bpm {
-            value: tempo.bpm,
-            confidence: Confidence::clamped(tempo.confidence),
+    let present = features.present();
+    let bpm = present
+        .then(|| {
+            features.tempo.as_ref().and_then(|tempo| {
+                tempo.bpm.is_finite().then_some(Bpm {
+                    value: tempo.bpm,
+                    confidence: Confidence::clamped(tempo.confidence),
+                })
+            })
         })
-    });
-    let beats = features
-        .tempo
-        .as_ref()
-        .map(|tempo| {
-            tempo
-                .beats_s
-                .iter()
-                .filter(|b| b.is_finite() && **b >= 0.0)
-                .map(|b| MediaTime::from_secs_f64(f64::from(*b)))
-                .collect()
+        .flatten();
+    let beats = if present {
+        features
+            .tempo
+            .as_ref()
+            .map(|tempo| {
+                tempo
+                    .beats_s
+                    .iter()
+                    .filter(|b| b.is_finite() && **b >= 0.0)
+                    .map(|b| MediaTime::from_secs_f64(f64::from(*b)))
+                    .collect()
+            })
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let key = present
+        .then(|| {
+            features.key.map(|key| KeyEstimate {
+                tonic: map_pitch(key.tonic),
+                mode: if key.major { Mode::Major } else { Mode::Minor },
+                confidence: Confidence::clamped(key.confidence),
+            })
         })
-        .unwrap_or_default();
-    let key = features.key.map(|key| KeyEstimate {
-        tonic: map_pitch(key.tonic),
-        mode: if key.major { Mode::Major } else { Mode::Minor },
-        confidence: Confidence::clamped(key.confidence),
-    });
-    let chords: Vec<Chord> = features
-        .chords
-        .iter()
-        .filter(|chord| chord.end_s > chord.start_s)
-        .map(|chord| Chord {
-            range: TimeRange::from_secs(f64::from(chord.start_s), f64::from(chord.end_s)),
-            root: map_pitch(chord.root),
-            quality: match chord.quality {
-                sonolytica_dsp::music::ChordQuality::Major => ChordQuality::Major,
-                sonolytica_dsp::music::ChordQuality::Minor => ChordQuality::Minor,
-            },
-            confidence: Confidence::clamped(chord.confidence),
-        })
-        .collect();
+        .flatten();
+    let chords: Vec<Chord> = if present {
+        features
+            .chords
+            .iter()
+            .filter(|chord| chord.end_s > chord.start_s)
+            .map(|chord| Chord {
+                range: TimeRange::from_secs(f64::from(chord.start_s), f64::from(chord.end_s)),
+                root: map_pitch(chord.root),
+                quality: match chord.quality {
+                    sonolytica_dsp::music::ChordQuality::Major => ChordQuality::Major,
+                    sonolytica_dsp::music::ChordQuality::Minor => ChordQuality::Minor,
+                },
+                confidence: Confidence::clamped(chord.confidence),
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
     let loudness = features.loudness.and_then(|loud| {
         loud.integrated_lufs
             .filter(|v| v.is_finite())
@@ -1202,18 +1217,22 @@ fn map_music(features: &sonolytica_dsp::MusicFeatures) -> MusicSummary {
             })
     });
 
-    let sections = features
-        .sections
-        .iter()
-        .filter(|section| section.end_s > section.start_s)
-        .map(|section| sonolytica_core::Section {
-            range: TimeRange::new(
-                MediaTime::from_secs_f64(f64::from(section.start_s)),
-                MediaTime::from_secs_f64(f64::from(section.end_s)),
-            ),
-            novelty: section.novelty,
-        })
-        .collect();
+    let sections = if present {
+        features
+            .sections
+            .iter()
+            .filter(|section| section.end_s > section.start_s)
+            .map(|section| sonolytica_core::Section {
+                range: TimeRange::new(
+                    MediaTime::from_secs_f64(f64::from(section.start_s)),
+                    MediaTime::from_secs_f64(f64::from(section.end_s)),
+                ),
+                novelty: section.novelty,
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
     MusicSummary {
         bpm,
         beats,
@@ -1239,6 +1258,34 @@ fn map_acoustic(features: &sonolytica_dsp::AcousticFeatures) -> AcousticSummary 
     }
 }
 
+/// Warnings for a requested capability that has no provider at all.
+///
+/// A missing fallback (pyannote when Sortformer is present) is not a document
+/// defect; it stays visible in `sonolytica doctor` but does not clutter every
+/// run. If nothing covers the capability, exactly one warning is emitted.
+fn unavailable_warnings(registry: &Registry, config: &AnalysisConfig) -> Vec<Warning> {
+    let mut warnings = Vec::new();
+    let mut seen: Vec<Capability> = Vec::new();
+    for unavailable in &registry.unavailable {
+        let capability = unavailable.capability;
+        if !config.wants(capability)
+            || registry.has_provider(capability)
+            || seen.contains(&capability)
+        {
+            continue;
+        }
+        seen.push(capability);
+        warnings.push(Warning::new(
+            "provider_unavailable",
+            format!(
+                "no provider for {}: {} is unavailable: {}",
+                capability, unavailable.provider, unavailable.reason
+            ),
+        ));
+    }
+    warnings
+}
+
 /// Convenience entry point using the default model store and tools.
 pub async fn analyze(path: &Path, config: &AnalysisConfig) -> Result<Document, EngineError> {
     Engine::discover(ModelStore::default())
@@ -1249,6 +1296,113 @@ pub async fn analyze(path: &Path, config: &AnalysisConfig) -> Result<Document, E
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sonolytica_core::DiarizationConfig;
+    use sonolytica_providers::{
+        DiarizationOutput, DiarizationProvider, ProviderInfo, ProviderResult, registry::Unavailable,
+    };
+
+    struct FakeDiarizer;
+
+    impl DiarizationProvider for FakeDiarizer {
+        fn info(&self) -> ProviderInfo {
+            ProviderInfo {
+                name: "fake-diarizer",
+                capability: Capability::Diarize,
+                device: "cpu",
+                models: Vec::new(),
+                notes: "test provider",
+            }
+        }
+
+        fn diarize(
+            &self,
+            _audio: &Audio,
+            _cfg: &DiarizationConfig,
+        ) -> ProviderResult<DiarizationOutput> {
+            Ok(DiarizationOutput::default())
+        }
+    }
+
+    #[test]
+    fn missing_fallback_does_not_warn_when_primary_is_present() {
+        let config = AnalysisConfig {
+            modules: vec![Capability::Diarize],
+            ..AnalysisConfig::default()
+        };
+        let missing = Unavailable {
+            provider: "pyannote-3.0",
+            capability: Capability::Diarize,
+            reason: "models unavailable".into(),
+        };
+
+        let mut registry = Registry::empty();
+        registry.unavailable.push(missing.clone());
+        assert_eq!(
+            unavailable_warnings(&registry, &config).len(),
+            1,
+            "no provider at all must warn"
+        );
+
+        registry.diarizers.push(Box::new(FakeDiarizer));
+        assert!(
+            unavailable_warnings(&registry, &config).is_empty(),
+            "a missing optional fallback must not warn"
+        );
+    }
+
+    #[test]
+    fn low_confidence_speech_does_not_map_to_music() {
+        let features = sonolytica_dsp::MusicFeatures {
+            tempo: Some(sonolytica_dsp::TempoEstimate {
+                bpm: 111.9,
+                confidence: 0.0008,
+                beats_s: vec![0.5, 1.0],
+            }),
+            key: Some(sonolytica_dsp::KeyEstimate {
+                tonic: 6,
+                major: true,
+                confidence: 0.94,
+            }),
+            chords: vec![sonolytica_dsp::ChordEvent {
+                start_s: 0.0,
+                end_s: 2.0,
+                root: 1,
+                quality: sonolytica_dsp::music::ChordQuality::Major,
+                confidence: 0.79,
+            }],
+            sections: vec![sonolytica_dsp::Section {
+                start_s: 0.0,
+                end_s: 2.0,
+                novelty: 1.0,
+            }],
+            ..sonolytica_dsp::MusicFeatures::default()
+        };
+
+        let summary = map_music(&features);
+        assert!(!summary.is_present());
+        assert!(summary.bpm.is_none());
+        assert!(summary.key.is_none());
+        assert!(summary.chords.is_empty());
+        assert!(summary.beats.is_empty());
+        assert!(summary.sections.is_empty());
+    }
+
+    #[test]
+    fn rhythmic_features_map_to_music() {
+        let features = sonolytica_dsp::MusicFeatures {
+            tempo: Some(sonolytica_dsp::TempoEstimate {
+                bpm: 120.0,
+                confidence: 0.8,
+                beats_s: vec![0.5, 1.0],
+            }),
+            ..sonolytica_dsp::MusicFeatures::default()
+        };
+
+        let summary = map_music(&features);
+        assert!(summary.is_present());
+        assert!(summary.bpm.is_some());
+        assert_eq!(summary.beats.len(), 2);
+    }
 
     #[test]
     fn union_of_ranges_counts_overlap_once() {

@@ -1583,7 +1583,7 @@ checksum = "149309498a5f7334b12ddae0cad8aba81ce785fe91755068867e017cf98fee46"
 
 [[package]]
 name = "sonolytica-cli"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -1602,7 +1602,7 @@ dependencies = [
 
 [[package]]
 name = "sonolytica-core"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -1612,7 +1612,7 @@ dependencies = [
 
 [[package]]
 name = "sonolytica-dsp"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "ebur128",
  "hound",
@@ -1624,7 +1624,7 @@ dependencies = [
 
 [[package]]
 name = "sonolytica-engine"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "serde_json",
  "sonolytica-core",
@@ -1639,7 +1639,7 @@ dependencies = [
 
 [[package]]
 name = "sonolytica-eval"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -1650,7 +1650,7 @@ dependencies = [
 
 [[package]]
 name = "sonolytica-media"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -1664,7 +1664,7 @@ dependencies = [
 
 [[package]]
 name = "sonolytica-providers"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "hound",
  "image",

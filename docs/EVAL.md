@@ -539,6 +539,26 @@ argue for swapping that:
    threshold and `test-00003` for its final number; both have been seen. The
    next diarization number needs `test-00004`.
 
+## Direct eval commands
+
+```bash
+# Per-stage timings from a document
+sonolytica-eval report DOC.json
+
+# File inputs (plain text or a SONOLYTICA JSON document)
+sonolytica-eval wer --reference ref.txt --hypothesis DOC.json
+
+# Raw strings, useful for a quick sanity check
+sonolytica-eval wer --reference-text "hello world" --hypothesis-text "hello word"
+
+# stdin; use on one side only
+cat ref.txt | sonolytica-eval wer --reference - --hypothesis DOC.json
+```
+
+`--document` is still accepted as a deprecated alias for the positional
+`report` path. `--reference` and `--hypothesis` are paths; use the `-text`
+variants for inline strings.
+
 ## Reproduce
 
 ```bash
@@ -554,6 +574,25 @@ python3 scripts/eval/der_voxconverse.py \
     --parquet /tmp/sono-eval/voxconverse/dev-00000-of-00005.parquet \
     --count 5 --json-out /tmp/sono-eval/der.json
 ```
+
+## 0.2.2 real-media fixes
+
+Hands-on dogfood on Apple Silicon found three trust issues; all now have
+regression tests:
+
+- Clean speech (11-second JFK excerpt) previously reported
+  `113.9 BPM (score 0.000)`, `F# major`, one chord and 21 beats. The DSP gate
+  now returns no musical evidence; loudness remains. A click track and a
+  sustained C-major triad still pass.
+- Tempo confidence is now a normalized cross-correlation. It no longer reports
+  `0.000` for a clear click track or leaves a meaningless BPM visible.
+- A missing pyannote fallback no longer emits `provider_unavailable` when
+  Sortformer covers diarization; `doctor` still lists the missing model.
+- `sonolytica-eval report DOCUMENT` is positional again; `wer` accepts raw
+  `--reference-text`/`--hypothesis-text` and `-` for stdin.
+
+The 0.00 % WER on JFK is a clean-fixture sanity check, not a general accuracy
+claim; the honest ASR number remains 6.05 % WER on LibriSpeech test-clean.
 
 ## What these numbers do not say
 

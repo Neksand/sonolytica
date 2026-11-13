@@ -943,6 +943,11 @@ fn music(doc: &Document, json: bool) -> Result<()> {
 }
 
 fn print_music(summary: &MusicSummary) {
+    if !summary.is_present() {
+        println!("music     not detected");
+        print_music_loudness(summary);
+        return;
+    }
     match &summary.bpm {
         Some(bpm) => println!(
             "tempo     {:.1} BPM (score {:.3})",
@@ -963,19 +968,7 @@ fn print_music(summary: &MusicSummary) {
         ),
         None => println!("key       not estimated"),
     }
-    match &summary.loudness {
-        Some(loudness) => {
-            print!("loudness  {:.1} LUFS", loudness.integrated_lufs);
-            if let Some(range) = loudness.loudness_range_lu {
-                print!(" · LRA {range:.1} LU");
-            }
-            if let Some(peak) = loudness.true_peak_dbtp {
-                print!(" · true peak {peak:.1} dBTP");
-            }
-            println!();
-        }
-        None => println!("loudness  not measured"),
-    }
+    print_music_loudness(summary);
     println!(
         "chords    {} · beats {}",
         summary.chords.len(),
@@ -994,6 +987,22 @@ fn print_music(summary: &MusicSummary) {
         if !changes.is_empty() {
             println!("changes   {}", changes.join(", "));
         }
+    }
+}
+
+fn print_music_loudness(summary: &MusicSummary) {
+    match &summary.loudness {
+        Some(loudness) => {
+            print!("loudness  {:.1} LUFS", loudness.integrated_lufs);
+            if let Some(range) = loudness.loudness_range_lu {
+                print!(" · LRA {range:.1} LU");
+            }
+            if let Some(peak) = loudness.true_peak_dbtp {
+                print!(" · true peak {peak:.1} dBTP");
+            }
+            println!();
+        }
+        None => println!("loudness  not measured"),
     }
 }
 
@@ -1943,20 +1952,32 @@ fn brief(doc: &Document, json: bool) -> Result<()> {
         scene_cuts,
         ocr: brief_ocr(doc),
     };
-    let music = analysis_music(doc).map(|music| BriefMusic {
-        bpm: music.bpm.as_ref().map(|bpm| bpm.value),
-        key: music.key.as_ref().map(|key| {
-            format!(
-                "{} {}",
-                key.tonic.name(),
-                if key.mode == sonolytica_core::Mode::Major {
-                    "major"
-                } else {
-                    "minor"
-                }
-            )
-        }),
-        section_count: music.sections.len(),
+    let music = analysis_music(doc).map(|music| {
+        let present = music.is_present();
+        BriefMusic {
+            present,
+            bpm: if present {
+                music.bpm.as_ref().map(|bpm| bpm.value)
+            } else {
+                None
+            },
+            key: if present {
+                music.key.as_ref().map(|key| {
+                    format!(
+                        "{} {}",
+                        key.tonic.name(),
+                        if key.mode == sonolytica_core::Mode::Major {
+                            "major"
+                        } else {
+                            "minor"
+                        }
+                    )
+                })
+            } else {
+                None
+            },
+            section_count: if present { music.sections.len() } else { 0 },
+        }
     });
     let acoustic = analysis_acoustic(doc).map(|acoustic| BriefAcoustic {
         peak_dbfs: acoustic.peak_dbfs,
@@ -2191,14 +2212,18 @@ fn brief(doc: &Document, json: bool) -> Result<()> {
         }
     }
     if let Some(music) = &music {
-        println!(
-            "music      {} · {} · {}",
-            music
-                .bpm
-                .map_or_else(|| "tempo ?".to_string(), |bpm| format!("{bpm:.1} BPM")),
-            music.key.as_deref().unwrap_or("key ?"),
-            count_label(music.section_count, "section", "sections")
-        );
+        if music.present {
+            println!(
+                "music      {} · {} · {}",
+                music
+                    .bpm
+                    .map_or_else(|| "tempo ?".to_string(), |bpm| format!("{bpm:.1} BPM")),
+                music.key.as_deref().unwrap_or("key ?"),
+                count_label(music.section_count, "section", "sections")
+            );
+        } else {
+            println!("music      not detected");
+        }
     }
     if let Some(acoustic) = &acoustic {
         println!(
@@ -2596,6 +2621,7 @@ pub(crate) struct SpeakerView<'a> {
 #[derive(Debug, Serialize)]
 struct MusicView<'a> {
     available: bool,
+    present: bool,
     bpm: Option<&'a Bpm>,
     key: Option<&'a KeyEstimate>,
     chords: &'a [Chord],
@@ -2606,20 +2632,23 @@ struct MusicView<'a> {
 
 impl<'a> MusicView<'a> {
     fn new(summary: &'a MusicSummary) -> Self {
+        let present = summary.is_present();
         Self {
             available: true,
-            bpm: summary.bpm.as_ref(),
-            key: summary.key.as_ref(),
-            chords: &summary.chords,
-            sections: &summary.sections,
+            present,
+            bpm: if present { summary.bpm.as_ref() } else { None },
+            key: if present { summary.key.as_ref() } else { None },
+            chords: if present { &summary.chords } else { &[] },
+            sections: if present { &summary.sections } else { &[] },
             loudness: summary.loudness.as_ref(),
-            beat_count: summary.beats.len(),
+            beat_count: if present { summary.beats.len() } else { 0 },
         }
     }
 
     fn empty() -> Self {
         Self {
             available: false,
+            present: false,
             bpm: None,
             key: None,
             chords: &[],
@@ -2830,6 +2859,7 @@ struct BriefOcr {
 
 #[derive(Debug, Serialize)]
 struct BriefMusic {
+    present: bool,
     bpm: Option<f32>,
     key: Option<String>,
     section_count: usize,
@@ -2862,6 +2892,35 @@ struct Counts {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn music_view_hides_low_confidence_evidence() {
+        let summary = MusicSummary {
+            bpm: Some(Bpm {
+                value: 113.9,
+                confidence: sonolytica_core::Confidence::clamped(0.0008),
+            }),
+            key: Some(KeyEstimate {
+                tonic: sonolytica_core::PitchClass::from_index(6),
+                mode: sonolytica_core::Mode::Major,
+                confidence: sonolytica_core::Confidence::clamped(0.94),
+            }),
+            chords: vec![Chord {
+                range: TimeRange::from_secs(0.0, 2.0),
+                root: sonolytica_core::PitchClass::from_index(1),
+                quality: sonolytica_core::ChordQuality::Major,
+                confidence: sonolytica_core::Confidence::clamped(0.79),
+            }],
+            beats: vec![MediaTime::from_secs_f64(1.0)],
+            ..MusicSummary::default()
+        };
+        let view = MusicView::new(&summary);
+        assert!(!view.present);
+        assert!(view.bpm.is_none());
+        assert!(view.key.is_none());
+        assert!(view.chords.is_empty());
+        assert_eq!(view.beat_count, 0);
+    }
 
     #[test]
     fn parses_every_documented_form() {

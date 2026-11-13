@@ -8,3 +8,7 @@
 *.jpeg binary
 *.webp binary
 *.woff2 binary
+*.wav binary
+*.mp3 binary
+*.mp4 binary
+*.mov binary

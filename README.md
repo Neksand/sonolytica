@@ -8,13 +8,13 @@ Local, typed, timestamped. Speech with word timings and speaker turns, shots and
 keyframes, on-screen text, faces, objects, pose, captions and music — one
 timeline, provenance on every fact, no cloud.
 
-**v0.2.1** — stable local release; models are opt-in, digest-pinned and never
+**v0.2.2** — stable local release; models are opt-in, digest-pinned and never
 uploaded. macOS arm64, Linux x86_64/arm64, and Windows 10/11 x64.
 
 [![ci](https://github.com/neksand/sonolytica/actions/workflows/ci.yml/badge.svg)](https://github.com/neksand/sonolytica/actions/workflows/ci.yml)
 [![release](https://img.shields.io/github/v/release/neksand/sonolytica?display_name=tag)](https://github.com/neksand/sonolytica/releases)
 [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
-[![tests](https://img.shields.io/badge/tests-173%20model--free%20%C2%B7%20188%20all--features-brightgreen.svg)](#development)
+[![tests](https://img.shields.io/badge/tests-184%20model--free%20%C2%B7%20201%20all--features-brightgreen.svg)](#development)
 [![models](https://img.shields.io/badge/models-14%20pinned%20%C2%B7%20SHA--256-blue.svg)](docs/MODELS.md)
 [![schema](https://img.shields.io/badge/schema-1.6.0-purple.svg)](docs/SCHEMA.md)
 [![MCP](https://img.shields.io/badge/MCP-14%20tools-6f42c1.svg)](docs/MCP.md)
@@ -66,12 +66,16 @@ document once, locally, and answers from it.
 | Objects | 91 COCO classes, boxes and scores | YOLOS-tiny (opt-in `--objects`) |
 | Pose | 17 COCO body keypoints per person per keyframe | MoveNet Multipose (opt-in `--pose`) |
 | Captions | model-generated description of each keyframe | Florence-2-base-ft (opt-in `--caption`) |
-| Music | tempo, key, triads, sections, loudness | local DSP |
+| Music | tempo, key, triads, sections, loudness — gated by evidence | local DSP |
 | Acoustics | silence, LRA, true peak | local DSP |
 
 Every fact carries a `run`: provider, model digest, license, status and device.
 The document passes `Document::validate` before it is written. Missing facts are
 `null`; a failed stage is a warning or `partial`, never silent.
+
+Music is evidence-gated: `bpm`, `key`, `chords`, `beats` and `sections` are
+`null`/empty on speech or silence, while loudness remains measured. Query JSON
+carries `music.present`; do not report a BPM from a document where it is false.
 
 ## How it works
 
@@ -210,7 +214,7 @@ The image is 790 MB, carries the CLI and FFmpeg 7, and keeps models/cache in a
 | `--profile structure\|standard\|ultra` | structure (no transcript) / everything / everything + align + strict |
 | `--modules vad,transcribe,diarize,...` | explicit stage list |
 | `--language xx` | preferred language; pass it whenever you know it |
-| `--model <id>` | explicit ASR model |
+| `--model <id>` | explicit ASR model; default: English `whisper-base.en`, non-English prefers `whisper-small`, `auto` follows that policy |
 | `--align` | wav2vec2 forced word alignment (English) |
 | `--ocr` | PP-OCRv5 on keyframes |
 | `--faces` | YuNet face boxes, no identity |
@@ -431,8 +435,8 @@ and overlapping words may be merged into one ASR stream.
 ## Development
 
 ```bash
-cargo test --workspace                 # 173 tests, no models, no cmake, no ONNX runtime
-cargo test --workspace --all-features  # 188 tests, every provider compiled in
+cargo test --workspace                 # 184 tests, no models, no cmake, no ONNX runtime
+cargo test --workspace --all-features  # 201 tests, every provider compiled in
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all -- --check
 ```
@@ -449,6 +453,7 @@ cargo fmt --all -- --check
 
 Design: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/adr/`](docs/adr/).
 Benchmark protocol: [`docs/BENCHMARK.md`](docs/BENCHMARK.md). Release notes:
+[`docs/RELEASE-0.2.2.md`](docs/RELEASE-0.2.2.md) (trust fixes),
 [`docs/RELEASE-0.2.1.md`](docs/RELEASE-0.2.1.md) (Windows) and
 [`docs/RELEASE-0.2.0.md`](docs/RELEASE-0.2.0.md). Launch brief:
 [`docs/LAUNCH.md`](docs/LAUNCH.md).

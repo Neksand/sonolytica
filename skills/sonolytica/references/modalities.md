@@ -32,6 +32,8 @@ Detail behind §10 of `SKILL.md`. Open only the section you need.
 
 ## Music
 
+- Check `music.present` (query output). If false, the document has loudness
+  but no music evidence; do not infer BPM, key or chords from empty fields.
 - BPM and key are heuristic scores, not calibrated probabilities.
 - Chords are triads from a template, with no inversions or extensions.
 - `beats` are beat positions, not bars; do not infer time signatures.

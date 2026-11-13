@@ -57,7 +57,8 @@ also part of the provenance hash (`runs[].params_sha256`).
 - Music file, question about tempo/key/chords → `standard` or `structure`; the
   music stage does not need ASR.
 - English speech → the default `whisper-base.en`; other languages →
-  `whisper-small` **with** `--language xx`. Auto-detection on short or clean
+  `whisper-small` automatically when installed, **with** `--language xx`.
+  Use `--model whisper-small` for English quality. Auto-detection on short or clean
   audio can mislabel English and ruin the transcript.
 - The user says "полный транскрипт", "дословно", "для монтажа" → `standard`
   today; say that word-precise alignment is not available yet if they need

@@ -88,7 +88,11 @@ async fn dsp_only_analysis_produces_a_valid_document() {
         "integrated loudness {} is implausible",
         loudness.integrated_lufs
     );
-    assert!(music.key.is_some(), "a pure tone still has a pitch class");
+    assert!(
+        !music.is_present(),
+        "a single steady tone is not enough musical evidence"
+    );
+    assert!(music.key.is_none(), "gated music must not publish a key");
 
     let acoustic = document
         .analyses

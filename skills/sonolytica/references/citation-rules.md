@@ -122,7 +122,8 @@ Only these, and only from the document:
 - media duration, size, container, stream parameters;
 - segment counts, speaker count, word count;
 - speech duration and ratio;
-- BPM, key, loudness, LRA, true peak, silence regions;
+- BPM, key, loudness, LRA, true peak, silence regions, and `music.present`;
+  when `present=false`, do not state a BPM or key;
 - run durations (machine speed, not media content).
 
 Anything else is inference: label it.

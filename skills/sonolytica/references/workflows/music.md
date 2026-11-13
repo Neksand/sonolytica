@@ -18,6 +18,7 @@ ASR and still runs the music and acoustic stages.
 
 | Field | What it is | What it is not |
 |---|---|---|
+| `present` | evidence gate from `query brief`/`query music` | if false, do not report BPM/key/chords |
 | `bpm.value` | tempo estimate from onset autocorrelation | not a beat grid for editing |
 | `bpm.confidence` | autocorrelation strength | not a probability |
 | `key.tonic` / `key.mode` | Krumhansl profile match | not a guarantee for ambiguous material |
@@ -42,6 +43,9 @@ ASR and still runs the music and acoustic stages.
 
 ## Rules
 
+- Check `music.present` first. If it is false, say "no music evidence" and do
+  not repeat empty BPM/key/chords fields as if they were estimates. Loudness
+  is still valid.
 - Never claim a genre, mood, instrument or artist. The document has none.
 - Do not infer time signature from BPM.
 - A low key confidence is information: report it.

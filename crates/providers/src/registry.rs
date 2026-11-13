@@ -209,6 +209,46 @@ impl Registry {
         self.diarizers.first().map(AsRef::as_ref)
     }
 
+    /// Whether at least one loaded provider covers `capability`.
+    ///
+    /// Missing optional fallbacks should not produce document warnings when a
+    /// primary provider already covers the stage.
+    pub fn has_provider(&self, capability: Capability) -> bool {
+        self.provider_infos()
+            .iter()
+            .any(|info| info.capability == capability)
+    }
+
+    /// Pick the ASR provider for an explicit model or a language hint.
+    ///
+    /// `whisper-base.en` is the fast English default; non-English requests
+    /// prefer the multilingual `whisper-small` when it is installed. An
+    /// explicit model id (including `auto`) wins over the language policy.
+    pub fn asr_for_request(
+        &self,
+        model_id: Option<&str>,
+        language: Option<&str>,
+    ) -> Option<&dyn AsrProvider> {
+        if let Some(model_id) = model_id.filter(|id| !id.eq_ignore_ascii_case("auto")) {
+            return self.asr_for(Some(model_id));
+        }
+        if let Some(language) = language {
+            let english = language.trim().to_ascii_lowercase().starts_with("en");
+            if !english {
+                if let Some(provider) = self.asrs.iter().find(|provider| {
+                    provider
+                        .info()
+                        .models
+                        .iter()
+                        .any(|model| model.id == "whisper-small")
+                }) {
+                    return Some(provider.as_ref());
+                }
+            }
+        }
+        self.asr_for(None)
+    }
+
     pub fn provider_infos(&self) -> Vec<ProviderInfo> {
         let mut out: Vec<ProviderInfo> = Vec::new();
         out.extend(self.vads.iter().map(|p| p.info()));
@@ -222,5 +262,80 @@ impl Registry {
             .into_iter()
             .flat_map(|info| info.models)
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::traits::{AsrConfig, AsrOutput, ProviderResult};
+
+    struct FakeAsr(&'static str);
+
+    impl AsrProvider for FakeAsr {
+        fn info(&self) -> ProviderInfo {
+            ProviderInfo {
+                name: "fake-asr",
+                capability: Capability::Transcribe,
+                device: "cpu",
+                models: vec![ModelRef::new(self.0)],
+                notes: "test provider",
+            }
+        }
+
+        fn transcribe(
+            &self,
+            _audio: &sonolytica_core::Audio,
+            _cfg: &AsrConfig,
+        ) -> ProviderResult<AsrOutput> {
+            Ok(AsrOutput::default())
+        }
+    }
+
+    fn registry() -> Registry {
+        let mut registry = Registry::empty();
+        registry.asrs.push(Box::new(FakeAsr("whisper-base.en")));
+        registry.asrs.push(Box::new(FakeAsr("whisper-small")));
+        registry
+    }
+
+    #[test]
+    fn english_defaults_to_base_and_other_languages_to_small() {
+        let registry = registry();
+        let model = |provider: Option<&dyn AsrProvider>| {
+            provider
+                .and_then(|provider| provider.info().models.first().map(|m| m.id.clone()))
+                .unwrap_or_default()
+        };
+        assert_eq!(
+            model(registry.asr_for_request(None, Some("en"))),
+            "whisper-base.en"
+        );
+        assert_eq!(
+            model(registry.asr_for_request(None, Some("ru"))),
+            "whisper-small"
+        );
+        assert_eq!(
+            model(registry.asr_for_request(None, None)),
+            "whisper-base.en"
+        );
+    }
+
+    #[test]
+    fn explicit_model_wins_and_auto_uses_language_policy() {
+        let registry = registry();
+        let model = |provider: Option<&dyn AsrProvider>| {
+            provider
+                .and_then(|provider| provider.info().models.first().map(|m| m.id.clone()))
+                .unwrap_or_default()
+        };
+        assert_eq!(
+            model(registry.asr_for_request(Some("whisper-small"), Some("en"))),
+            "whisper-small"
+        );
+        assert_eq!(
+            model(registry.asr_for_request(Some("auto"), Some("ru"))),
+            "whisper-small"
+        );
     }
 }

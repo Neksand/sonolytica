@@ -53,8 +53,10 @@ goes to stderr; `--strict` (or `--profile ultra`) exits 2 when a stage failed or
 a requested capability never ran. A missing model disables one capability.
 
 **Language and model:** pass `--language` whenever you know it. English →
-`--model whisper-base.en` (default); anything else → `whisper-small` **with**
-`--language xx`. Auto-detection can label English as another language and turn
+`whisper-base.en` (default); anything else → `whisper-small` automatically
+when installed, with `--language xx`. Use `--model whisper-small` explicitly
+for English quality when speed is less important. Auto-detection can label
+English as another language and turn
 the transcript into garbage. Judge the media, not the user's prompt: a Russian
 question about an English recording is normal. If a document already exists,
 skip `analyze` and start at `query runs`.

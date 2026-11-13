@@ -130,6 +130,31 @@ pub struct MusicSummary {
     pub loudness: Option<Loudness>,
 }
 
+impl MusicSummary {
+    /// True when the document contains actual musical evidence.
+    ///
+    /// Loudness alone is not music: a speech-only document may still carry an
+    /// integrated LUFS measurement. The engine clears BPM, key, chords, beats
+    /// and sections when no evidence passes the DSP gate. The thresholds here
+    /// mirror `sonolytica-dsp::music` so old 0.2.1 documents are also queried
+    /// conservatively.
+    pub fn is_present(&self) -> bool {
+        let rhythmic = self
+            .bpm
+            .as_ref()
+            .is_some_and(|bpm| bpm.confidence.get() >= 0.45);
+        let tonal = self
+            .key
+            .as_ref()
+            .is_some_and(|key| key.confidence.get() >= 0.15)
+            && self.chords.iter().any(|chord| {
+                chord.confidence.get() >= 0.85
+                    && chord.range.end.as_secs_f64() - chord.range.start.as_secs_f64() >= 1.0
+            });
+        rhythmic || tonal
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AcousticSummary {
     /// Detected silence, as measured on the analysis signal.
@@ -167,4 +192,35 @@ pub enum AnalysisBlock {
     Speech(SpeechSummary),
     Music(MusicSummary),
     Acoustic(AcousticSummary),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::document::Confidence;
+
+    #[test]
+    fn loudness_alone_is_not_music() {
+        let summary = MusicSummary {
+            loudness: Some(Loudness {
+                integrated_lufs: -15.4,
+                loudness_range_lu: Some(3.3),
+                true_peak_dbtp: Some(0.8),
+            }),
+            ..MusicSummary::default()
+        };
+        assert!(!summary.is_present());
+    }
+
+    #[test]
+    fn low_confidence_bpm_is_not_music() {
+        let summary = MusicSummary {
+            bpm: Some(Bpm {
+                value: 113.9,
+                confidence: Confidence::clamped(0.0008),
+            }),
+            ..MusicSummary::default()
+        };
+        assert!(!summary.is_present());
+    }
 }

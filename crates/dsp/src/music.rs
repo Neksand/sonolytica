@@ -69,6 +69,46 @@ pub struct MusicFeatures {
     pub frames: usize,
 }
 
+/// Minimum tempo confidence for a rhythmic music presence.
+///
+/// These are heuristic floors, not calibrated probabilities. The speech
+/// fixture in `tests/music_presence.rs` is the guard: clean speech reports
+/// `0.000` tempo confidence, while a click track and triads clear the floors.
+pub const MUSIC_TEMPO_CONFIDENCE: f32 = 0.45;
+/// Minimum key confidence, used only together with a sustained chord.
+pub const MUSIC_KEY_CONFIDENCE: f32 = 0.15;
+/// Minimum confidence for a sustained chord to count as music.
+///
+/// The speech fixture reaches ~0.79 on accidental vowel triads but never a
+/// sustained chord this clean; a real synthetic triad is ~0.997. The gap is
+/// what keeps speech from being called F# major.
+pub const MUSIC_CHORD_CONFIDENCE: f32 = 0.85;
+/// A chord must last at least this long to count as tonal music.
+pub const MUSIC_CHORD_MIN_SECONDS: f32 = 1.0;
+
+impl MusicFeatures {
+    /// Whether this recording contains enough musical evidence to report
+    /// BPM/key/chords. Loudness remains valid even when this is false.
+    ///
+    /// A steady pulse is the strongest cheap signal. For beatless material we
+    /// require both a tonal centre and a sustained triad, which keeps speech
+    /// from becoming a false "F# major" merely because vowels have harmonics.
+    pub fn present(&self) -> bool {
+        let rhythmic = self
+            .tempo
+            .as_ref()
+            .is_some_and(|tempo| tempo.confidence >= MUSIC_TEMPO_CONFIDENCE);
+        let tonal = self
+            .key
+            .is_some_and(|key| key.confidence >= MUSIC_KEY_CONFIDENCE)
+            && self.chords.iter().any(|chord| {
+                chord.confidence >= MUSIC_CHORD_CONFIDENCE
+                    && chord.end_s - chord.start_s >= MUSIC_CHORD_MIN_SECONDS
+            });
+        rhythmic || tonal
+    }
+}
+
 /// Autocorrelation tempo estimation plus DP beat tracking.
 pub fn estimate_tempo(
     onset: &[f32],
@@ -100,25 +140,34 @@ pub fn estimate_tempo(
         return None;
     }
 
-    let ac_zero: f64 = x.iter().map(|v| v * v).sum();
-    let mut best = (0.0_f64, lag_min);
+    let mut best = (0.0_f64, lag_min, 0.0_f64);
     let mut scores = Vec::with_capacity(lag_max - lag_min + 1);
 
     for lag in lag_min..=lag_max {
         let mut acc = 0.0_f64;
+        let mut left_energy = 0.0_f64;
+        let mut right_energy = 0.0_f64;
         for i in 0..n - lag {
             acc += x[i] * x[i + lag];
+            left_energy += x[i] * x[i];
+            right_energy += x[i + lag] * x[i + lag];
         }
-        acc /= (n - lag) as f64;
+        // Normalised cross-correlation: comparable across sparse clicks and
+        // dense speech, unlike the old raw-autocorrelation ratio.
+        let correlation = if left_energy > f64::EPSILON && right_energy > f64::EPSILON {
+            acc / (left_energy.sqrt() * right_energy.sqrt())
+        } else {
+            0.0
+        };
 
         let bpm = 60.0 * f64::from(frame_rate) / lag as f64;
         // Prefer plausible tempi: one standard deviation is about 0.7 octave.
         let octaves = (bpm / 120.0).log2() / 0.7;
         let prior = (-0.5 * octaves * octaves).exp();
-        let weighted = acc * prior;
+        let weighted = correlation * prior;
         scores.push(weighted);
         if weighted > best.0 {
-            best = (weighted, lag);
+            best = (weighted, lag, correlation);
         }
     }
 
@@ -141,11 +190,10 @@ pub fn estimate_tempo(
     };
 
     let bpm = 60.0 * f64::from(frame_rate) / refined;
-    let confidence = if ac_zero > f64::EPSILON {
-        (best.0 / ac_zero).clamp(0.0, 1.0)
-    } else {
-        0.0
-    };
+    // Use the raw normalised correlation at the selected lag, not the
+    // tempo-prior-weighted score: the prior is for choosing a plausible
+    // tempo, not for claiming confidence.
+    let confidence = best.2.clamp(0.0, 1.0);
 
     let beats_s = track_beats(onset, frame_rate, bpm as f32);
 
@@ -620,6 +668,8 @@ mod tests {
             tempo.bpm
         );
         assert!(tempo.beats_s.len() >= 8, "should find most beats");
+        let features = analyze_music(&samples, 32_000, cfg).unwrap();
+        assert!(features.present(), "a click track must be music");
     }
 
     #[test]
@@ -629,6 +679,7 @@ mod tests {
         let key = features.key.expect("a clear triad must yield a key");
         assert_eq!(key.tonic, 0, "C should be the tonic");
         assert!(key.major, "C major, not C minor");
+        assert!(features.present(), "a sustained C major triad is music");
     }
 
     #[test]
@@ -683,5 +734,6 @@ mod tests {
         assert!(features.key.is_none());
         assert!(features.chords.is_empty());
         assert!(features.tempo.is_none());
+        assert!(!features.present(), "silence is not music");
     }
 }
