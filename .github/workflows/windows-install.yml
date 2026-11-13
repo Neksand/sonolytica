@@ -14,8 +14,6 @@ permissions:
 jobs:
   install:
     runs-on: windows-latest
-    env:
-      SONOLYTICA_BIN_DIR: ${{ runner.temp }}\sonolytica-bin
     steps:
       - uses: actions/checkout@v4
       - name: Install FFmpeg
@@ -24,6 +22,7 @@ jobs:
         shell: pwsh
         env:
           SONOLYTICA_VERSION: ${{ inputs.version }}
+          SONOLYTICA_BIN_DIR: ${{ runner.temp }}\sonolytica-bin
         run: |
           Set-ExecutionPolicy -Scope Process Bypass
           ./install.ps1
