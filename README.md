@@ -471,13 +471,14 @@ edge-ai · on-device · Rust · Rust-CLI · Whisper · whisper.cpp · Silero ·
 Sortformer · NVIDIA-Sortformer · pyannote · WeSpeaker · PP-OCRv5 · PaddleOCR ·
 YuNet · YOLOS · MoveNet · Florence-2 · VLM · vision-language-model ·
 timestamped-transcript · citation · provenance · JSON-schema · SQLite-free ·
-no-cloud · self-hosted · Docker
+no-cloud · self-hosted · Docker · Windows · Windows-10 · Windows-11 · PowerShell
 </sub>
 
 <!-- Suggested GitHub repository topics:
 media-analysis, video-understanding, audio-transcription, speech-to-text,
 speaker-diarization, ocr, rag, llm-agents, mcp, local-ai, rust, whisper,
-sortformer, florence-2, offline-ai, privacy, docker
+sortformer, florence-2, offline-ai, privacy, docker, windows, windows-10,
+windows-11
 -->
 
 ## License

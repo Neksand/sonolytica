@@ -144,8 +144,12 @@ To persist it, write the output to your PowerShell profile.
 
 ## Build from source
 
-Requirements: Rust 1.85+, Visual Studio 2022 Build Tools (Desktop development
-with C++), CMake, LLVM/libclang, FFmpeg.
+Runtime: **Microsoft Visual C++ Redistributable 2015–2022 (x64)** is normally
+already present on Windows 10/11; if a model stage reports a missing runtime,
+install it with `winget install Microsoft.VCRedist.2015+.x64`.
+
+Build requirements: Rust 1.85+, Visual Studio 2022 Build Tools (Desktop
+development with C++), CMake, LLVM/libclang, FFmpeg.
 
 ```powershell
 choco install cmake llvm ffmpeg -y

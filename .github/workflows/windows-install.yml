@@ -1,0 +1,32 @@
+name: windows-install
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release tag to install
+        required: true
+        default: v0.2.1
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    runs-on: windows-latest
+    env:
+      SONOLYTICA_BIN_DIR: ${{ runner.temp }}\sonolytica-bin
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install FFmpeg
+        run: choco install ffmpeg -y --no-progress
+      - name: Install from the published release and smoke test
+        shell: pwsh
+        env:
+          SONOLYTICA_VERSION: ${{ inputs.version }}
+        run: |
+          Set-ExecutionPolicy -Scope Process Bypass
+          ./install.ps1
+          & "$env:SONOLYTICA_BIN_DIR\sonolytica.exe" --version
+          $env:Path = "$env:SONOLYTICA_BIN_DIR;$env:Path"
+          & "$env:SONOLYTICA_BIN_DIR\sonolytica.exe" doctor
