@@ -11,6 +11,8 @@ timeline, provenance on every fact, no cloud.
 **v0.2.2** — stable local release; models are opt-in, digest-pinned and never
 uploaded. macOS arm64, Linux x86_64/arm64, and Windows 10/11 x64.
 
+**Latest:** [v0.2.2 — real-media trust fixes](https://github.com/neksand/sonolytica/releases/tag/v0.2.2) · [release notes](docs/RELEASE-0.2.2.md)
+
 [![ci](https://github.com/neksand/sonolytica/actions/workflows/ci.yml/badge.svg)](https://github.com/neksand/sonolytica/actions/workflows/ci.yml)
 [![release](https://img.shields.io/github/v/release/neksand/sonolytica?display_name=tag)](https://github.com/neksand/sonolytica/releases)
 [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
