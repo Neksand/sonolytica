@@ -1,0 +1,10 @@
+# Keep text LF on every platform: pinned vocabulary/model digests are byte
+# contracts, and Windows checkout must not rewrite them to CRLF.
+* text=auto eol=lf
+
+# Binary artifacts stay untouched.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.woff2 binary
