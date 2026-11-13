@@ -48,7 +48,7 @@ jobs:
       #   SONOLYTICA_E2E=1 cargo test -p sonolytica-engine --features "full,metal" --test e2e_speech
 
   windows:
-    name: windows x64 (full build)
+    name: windows 11-era x64 (full build)
     runs-on: windows-latest
     env:
       LIBCLANG_PATH: C:\Program Files\LLVM\bin
@@ -67,8 +67,40 @@ jobs:
         run: cargo test --workspace
       - name: Build full pipeline
         run: cargo build --release -p sonolytica-cli --features full
+      - name: Smoke test
+        run: |
+          .\target\release\sonolytica.exe --version
+          .\target\release\sonolytica.exe --help | Select-Object -First 3
+      - name: Parse installer
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path $PWD 'install.ps1'), [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_ }
+            exit 1
+          }
       # Model-backed tests are opt-in and use macOS `say`; the Windows job
       # proves the full provider stack compiles and links.
+
+  windows-2022:
+    name: windows 10-era x64 (compatibility)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.99.0"
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Install FFmpeg
+        run: choco install ffmpeg -y --no-progress
+      - run: cargo fmt --all -- --check
+      - name: Test without any model feature
+        run: cargo test --workspace
 
   licenses:
     name: licenses and sources

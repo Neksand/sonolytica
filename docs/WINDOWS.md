@@ -2,8 +2,12 @@
 
 SONOLYTICA ships one native **x64** build for **Windows 10 and Windows 11**.
 Both share the same Win32 ABI; separate binaries would be byte-identical and
-only create two support surfaces. The release is built with the MSVC toolchain
-and tested on GitHub's Windows runners.
+only create two support surfaces. The release is built with the MSVC toolchain.
+
+CI runs the model-free suite on `windows-2022` (the Windows 10-era Server
+kernel) and the full provider build on `windows-latest` (the Windows 11-era
+Server kernel). These are the closest GitHub-hosted proxies for the two desktop
+generations; there is no separate Windows 10 or 11 binary.
 
 ## Supported
 
@@ -153,7 +157,8 @@ cargo build --release -p sonolytica-eval
 
 The full build uses ONNX Runtime (downloaded by `ort` for
 `x86_64-pc-windows-msvc`), whisper.cpp (CMake) and Kaldi fbank. The release job
-does exactly this in `.github/workflows/release.yml`.
+does exactly this in `.github/workflows/release.yml`; CI also runs the built
+`sonolytica.exe --version` and parses `install.ps1` on Windows.
 
 ## Troubleshooting
 
