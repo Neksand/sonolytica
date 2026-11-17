@@ -4,7 +4,8 @@
 #   scripts/demo.sh talk.mp4
 #   SONOLYTICA_BIN=./target/debug/sonolytica scripts/demo.sh talk.mp4
 #
-# Run `sonolytica setup` first; the demo does not download models.
+# Run `sonolytica setup --full` first for OCR and captions (or `setup` for
+# speech-only; missing vision models become warnings, not failures).
 
 set -euo pipefail
 

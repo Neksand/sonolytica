@@ -4,6 +4,15 @@ The skill is this directory: `SKILL.md` plus `references/`. It is plain
 Markdown; any agent that can read a skill directory and run `sonolytica` can
 use it.
 
+Two front doors, one document:
+
+- **Human-facing** — `sonolytica analyze` then `sonolytica report`; the user
+  gets an HTML page.
+- **Agent-facing** — `sonolytica mcp` or `query`; the agent gets cited answers.
+  The skill tells the agent which mode to use.
+
+Full copy-paste onboarding: [`../../docs/START-HERE.md`](../../docs/START-HERE.md).
+
 ## 1. Build the binary
 
 ```bash

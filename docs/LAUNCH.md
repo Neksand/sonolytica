@@ -96,8 +96,9 @@ There is no free-form VQA model yet.
 - [x] Dockerfile + GHCR workflow; image verified on arm64 (790 MB)
 - [x] agent skill for Claude Code, Codex, OpenCode, Cursor
 - [x] measured benchmark, eval methods, model licences, `NOTICE`
-- [x] tag `v0.2.2` + public GitHub release, including native Windows 10/11 x64:
-      <https://github.com/Neksand/sonolytica/releases/tag/v0.2.2>
+- [x] tag `v0.2.3` + public GitHub release, including native Windows 10/11 x64:
+      <https://github.com/Neksand/sonolytica/releases/tag/v0.2.3>
+- [x] two front doors: human HTML report and agent MCP path in `docs/START-HERE.md`
 - [x] public GHCR image (`linux/amd64`; arm64 builds locally)
 - [x] Windows zip + checksummed `install.ps1`; Windows 8/8.1 explicitly unsupported
 - [x] real-media trust fixes: music evidence gate, fallback warning, eval CLI,

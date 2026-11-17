@@ -8,10 +8,10 @@ Local, typed, timestamped. Speech with word timings and speaker turns, shots and
 keyframes, on-screen text, faces, objects, pose, captions and music — one
 timeline, provenance on every fact, no cloud.
 
-**v0.2.2** — stable local release; models are opt-in, digest-pinned and never
+**v0.2.3** — stable local release; models are opt-in, digest-pinned and never
 uploaded. macOS arm64, Linux x86_64/arm64, and Windows 10/11 x64.
 
-**Latest:** [v0.2.2 — real-media trust fixes](https://github.com/neksand/sonolytica/releases/tag/v0.2.2) · [release notes](docs/RELEASE-0.2.2.md)
+**Latest:** [v0.2.3 — two front doors](https://github.com/neksand/sonolytica/releases/tag/v0.2.3) · [release notes](docs/RELEASE-0.2.3.md)
 
 [![ci](https://github.com/neksand/sonolytica/actions/workflows/ci.yml/badge.svg)](https://github.com/neksand/sonolytica/actions/workflows/ci.yml)
 [![release](https://img.shields.io/github/v/release/neksand/sonolytica?display_name=tag)](https://github.com/neksand/sonolytica/releases)
@@ -37,6 +37,16 @@ $ sonolytica query ask meeting.json "did anyone mention a budget cut?" --json
 
 Agents answer from `meeting.json` with exact quotes and ranges, or say the fact
 is absent. They never guess, and every claim is checkable.
+
+## Two ways in
+
+| If you are… | Use | You get |
+|---|---|---|
+| **A person** reviewing a recording | `sonolytica analyze` + `sonolytica report` | one HTML page with chapters, quotes, keyframes and OCR |
+| **An AI agent** answering questions | `sonolytica mcp` + the skill | cited answers and checked absences |
+
+Both paths share the same document and cache. The 5-minute, copy-paste setup for
+each is in **[`docs/START-HERE.md`](docs/START-HERE.md)**.
 
 ## Why SONOLYTICA
 
@@ -455,6 +465,7 @@ cargo fmt --all -- --check
 
 Design: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/adr/`](docs/adr/).
 Benchmark protocol: [`docs/BENCHMARK.md`](docs/BENCHMARK.md). Release notes:
+[`docs/RELEASE-0.2.3.md`](docs/RELEASE-0.2.3.md) (two front doors),
 [`docs/RELEASE-0.2.2.md`](docs/RELEASE-0.2.2.md) (trust fixes),
 [`docs/RELEASE-0.2.1.md`](docs/RELEASE-0.2.1.md) (Windows) and
 [`docs/RELEASE-0.2.0.md`](docs/RELEASE-0.2.0.md). Launch brief:

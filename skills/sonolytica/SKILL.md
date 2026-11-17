@@ -16,6 +16,21 @@ document, say so.
 told to — do not preload them. Aim for `brief` plus 1–3 targeted queries per
 question; for an absence claim, search the word once and its stem once.
 
+## Two modes — pick before you run
+
+- **Human-facing request:** "make me a report", "give me notes", "I want to
+  watch the result". Analyze if needed, then `sonolytica report doc.json
+  --out report.html` and give the path. Do not paste JSON instead of the report.
+- **Agent-facing question:** "who said X", "find the moment", "did they mention
+  Y". Stay in `query`: `brief` → `ask`/`search` → `words`/`verify`; answer with
+  quotes and ranges, not a JSON dump.
+- **Both:** analyze once; the same document feeds the HTML report and every
+  query/MCP tool. Never run `analyze` twice for two front doors.
+
+If the user only says "analyze this", default to the human path: analyze, write
+the report, then offer targeted queries. If they say "answer from this", use the
+agent path.
+
 ## 1. The one-minute model
 
 `analyze FILE` writes one document; `query COMMAND` answers one question from
