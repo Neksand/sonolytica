@@ -1,7 +1,9 @@
-//! `sonolytica report` writes a human HTML report without network or JS.
+//! `sonolytica report` writes a self-contained human HTML report with inline
+//! search/seek helpers and no network dependencies.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use sonolytica_core::{
     AnalysisConfig, Artifact, BBox, Capability, Confidence, DocumentBuilder, MediaInfo, MediaTime,
@@ -27,7 +29,9 @@ fn run_record(capability: Capability, model: &str) -> RunRecord {
 }
 
 fn fixture_dir() -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("sonolytica-report-{}", std::process::id()));
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    let dir = std::env::temp_dir().join(format!("sonolytica-report-{}-{n}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("doc.json.artifacts/frames")).unwrap();
     std::fs::write(
@@ -168,13 +172,36 @@ fn report_is_self_contained_and_escapes_text() {
         assert!(html.contains(needle), "missing `{needle}` in report");
     }
     assert!(
-        !html.contains("<script>"),
-        "report must not emit raw script tags"
+        html.contains("id=\"transcript-search\"") && html.contains("data-seek"),
+        "report must expose transcript search and seek/copy controls"
+    );
+    assert!(
+        !html.contains("<script>alert") && !html.contains("<script src="),
+        "document text must stay escaped and scripts must be inline only"
     );
     assert!(
         !html.contains("http://") && !html.contains("https://"),
         "a report must not depend on the network"
     );
+    let with_media = dir.join("with-media.html");
+    let output = Command::new(binary())
+        .args([
+            "report",
+            doc.to_str().unwrap(),
+            "--out",
+            with_media.to_str().unwrap(),
+            "--media",
+            "/tmp/report-fixture.mp4",
+        ])
+        .output()
+        .expect("run sonolytica report with media");
+    assert!(output.status.success());
+    let html = std::fs::read_to_string(&with_media).unwrap();
+    assert!(
+        html.contains("id=\"sono-player\"") && html.contains("/tmp/report-fixture.mp4"),
+        "requested media must be embedded for click-to-seek"
+    );
+
     let frames_dir = dir.join("report.html.artifacts/frames");
     assert!(
         frames_dir.join("00000-frame_0001.jpg").exists()
@@ -195,5 +222,51 @@ fn report_is_self_contained_and_escapes_text() {
         !frames_dir.join("secret.jpg").exists(),
         "path traversal must be refused"
     );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn export_writes_srt_and_markdown_views() {
+    let dir = fixture_dir();
+    let doc = write_document(&dir);
+    let srt = dir.join("doc.srt");
+    let output = Command::new(binary())
+        .args([
+            "export",
+            doc.to_str().unwrap(),
+            "--format",
+            "srt",
+            "--out",
+            srt.to_str().unwrap(),
+        ])
+        .output()
+        .expect("run sonolytica export");
+    assert!(
+        output.status.success(),
+        "export failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let srt_text = std::fs::read_to_string(&srt).unwrap();
+    assert!(srt_text.contains("00:00:01,000 --> 00:00:04,000"));
+    assert!(srt_text.contains("Hello <script>"));
+
+    let md = dir.join("doc.md");
+    let output = Command::new(binary())
+        .args([
+            "export",
+            doc.to_str().unwrap(),
+            "--format",
+            "markdown",
+            "--speakers",
+            "--ocr",
+            "--out",
+            md.to_str().unwrap(),
+        ])
+        .output()
+        .expect("run markdown export");
+    assert!(output.status.success());
+    let md_text = std::fs::read_to_string(&md).unwrap();
+    assert!(md_text.contains("**S1**"));
+    assert!(md_text.contains("QUARTERLY REVENUE"));
     let _ = std::fs::remove_dir_all(&dir);
 }

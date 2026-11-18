@@ -20,7 +20,9 @@ question; for an absence claim, search the word once and its stem once.
 
 - **Human-facing request:** "make me a report", "give me notes", "I want to
   watch the result". Analyze if needed, then `sonolytica report doc.json
-  --out report.html` and give the path. Do not paste JSON instead of the report.
+  --out report.html --media media.mp4` (media optional) and give the path. If
+  they ask for subtitles or notes, use `sonolytica export doc.json --format
+  srt|vtt|markdown`. Do not paste JSON instead of the report.
 - **Agent-facing question:** "who said X", "find the moment", "did they mention
   Y". Stay in `query`: `brief` → `ask`/`search` → `words`/`verify`; answer with
   quotes and ranges, not a JSON dump.

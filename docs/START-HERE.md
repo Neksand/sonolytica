@@ -53,9 +53,25 @@ Use this when you want to watch, skim, share or print the analysis yourself.
 
 ```bash
 sonolytica analyze talk.mp4 --out talk.json --profile standard --ocr --caption --summary
-sonolytica report talk.json --out talk.html
+sonolytica report talk.json --out talk.html --media talk.mp4
 open talk.html                  # macOS; use `start talk.html` on Windows
 ```
+
+`--media` is optional: when supplied, the report gets a player and clicking a
+turn's range seeks to that moment and copies the exact range. Without it, the
+report still has transcript search and copyable ranges.
+
+Need subtitles or notes for an editor?
+
+```bash
+sonolytica export talk.json --format srt --out talk.srt
+sonolytica export talk.json --format vtt --out talk.vtt
+sonolytica export talk.json --format markdown --speakers --ocr --out talk.md
+```
+
+`--speakers` prefixes cues with the diarized speaker; `--ocr` adds on-screen
+text to Markdown. The export is a view over the same document, not a new
+analysis.
 
 The report contains:
 

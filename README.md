@@ -8,15 +8,15 @@ Local, typed, timestamped. Speech with word timings and speaker turns, shots and
 keyframes, on-screen text, faces, objects, pose, captions and music — one
 timeline, provenance on every fact, no cloud.
 
-**v0.2.3** — stable local release; models are opt-in, digest-pinned and never
+**v0.2.4** — stable local release; models are opt-in, digest-pinned and never
 uploaded. macOS arm64, Linux x86_64/arm64, and Windows 10/11 x64.
 
-**Latest:** [v0.2.3 — two front doors](https://github.com/neksand/sonolytica/releases/tag/v0.2.3) · [release notes](docs/RELEASE-0.2.3.md)
+**Latest:** [v0.2.4 — human editing layer](https://github.com/neksand/sonolytica/releases/tag/v0.2.4) · [release notes](docs/RELEASE-0.2.4.md)
 
 [![ci](https://github.com/neksand/sonolytica/actions/workflows/ci.yml/badge.svg)](https://github.com/neksand/sonolytica/actions/workflows/ci.yml)
 [![release](https://img.shields.io/github/v/release/neksand/sonolytica?display_name=tag)](https://github.com/neksand/sonolytica/releases)
 [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
-[![tests](https://img.shields.io/badge/tests-184%20model--free%20%C2%B7%20201%20all--features-brightgreen.svg)](#development)
+[![tests](https://img.shields.io/badge/tests-187%20model--free%20%C2%B7%20204%20all--features-brightgreen.svg)](#development)
 [![models](https://img.shields.io/badge/models-14%20pinned%20%C2%B7%20SHA--256-blue.svg)](docs/MODELS.md)
 [![schema](https://img.shields.io/badge/schema-1.6.0-purple.svg)](docs/SCHEMA.md)
 [![MCP](https://img.shields.io/badge/MCP-14%20tools-6f42c1.svg)](docs/MCP.md)
@@ -42,7 +42,7 @@ is absent. They never guess, and every claim is checkable.
 
 | If you are… | Use | You get |
 |---|---|---|
-| **A person** reviewing a recording | `sonolytica analyze` + `sonolytica report` | one HTML page with chapters, quotes, keyframes and OCR |
+| **A person** reviewing a recording | `sonolytica analyze` + `sonolytica report` | one searchable HTML page with chapters, quotes, keyframes, OCR and optional player |
 | **An AI agent** answering questions | `sonolytica mcp` + the skill | cited answers and checked absences |
 
 Both paths share the same document and cache. The 5-minute, copy-paste setup for
@@ -62,8 +62,9 @@ document once, locally, and answers from it.
   machine, pinned by SHA-256.
 - **Built for agents.** A typed JSON schema, 17 query subcommands, a 200-line
   skill, and an MCP server for clients that cannot run a shell.
-- **Built for humans too.** One self-contained HTML report with chapters,
-  quotes, keyframes, OCR, faces, objects, pose and captions.
+- **Built for humans too.** One self-contained HTML report with transcript
+  search, optional click-to-seek playback, chapters, quotes, keyframes and OCR;
+  SRT/WebVTT/Markdown export from the same document.
 
 ## What is in the document
 
@@ -170,12 +171,15 @@ sonolytica query captions talk.json --json
 sonolytica query poses talk.json --json
 sonolytica query verify talk.json --claims answer.json  # quote + range check
 
-sonolytica report talk.json --out talk.html # one self-contained human page
+sonolytica report talk.json --out talk.html --media talk.mp4 # searchable page + player
+sonolytica export talk.json --format srt --out talk.srt       # or vtt / markdown
 ```
 
-`report` writes one HTML file plus its keyframes — open it, share it, print it.
-Every quote carries its range; warnings are shown, not hidden. One-file demo:
-`scripts/demo.sh talk.mp4`.
+`report` writes one HTML file plus its keyframes — search the transcript, click
+a range to seek when `--media` is supplied and copy it, then open it, share it
+or print it. `export` produces SRT/WebVTT subtitles or a Markdown transcript
+from the same document. Every quote carries its range; warnings are shown, not
+hidden. One-file demo: `scripts/demo.sh talk.mp4`.
 
 ## Use it from an MCP client
 
@@ -271,7 +275,8 @@ document.
 |---|---|
 | `setup` | one-command onboarding: models + skill |
 | `mcp` | MCP stdio server for shell-less clients |
-| `report` | self-contained HTML + copied keyframes |
+| `report` | self-contained HTML, transcript search, optional player + copied keyframes |
+| `export` | SRT, WebVTT or Markdown from the same document |
 | `install-skill` | embed/install the agent skill (4 harnesses) |
 | `models list\|fetch` | pinned models, license, local verification |
 | `cache` | inspect or clear the analysis cache |
@@ -447,8 +452,8 @@ and overlapping words may be merged into one ASR stream.
 ## Development
 
 ```bash
-cargo test --workspace                 # 184 tests, no models, no cmake, no ONNX runtime
-cargo test --workspace --all-features  # 201 tests, every provider compiled in
+cargo test --workspace                 # 187 tests, no models, no cmake, no ONNX runtime
+cargo test --workspace --all-features  # 204 tests, every provider compiled in
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all -- --check
 ```
@@ -465,6 +470,7 @@ cargo fmt --all -- --check
 
 Design: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/adr/`](docs/adr/).
 Benchmark protocol: [`docs/BENCHMARK.md`](docs/BENCHMARK.md). Release notes:
+[`docs/RELEASE-0.2.4.md`](docs/RELEASE-0.2.4.md) (human editing layer),
 [`docs/RELEASE-0.2.3.md`](docs/RELEASE-0.2.3.md) (two front doors),
 [`docs/RELEASE-0.2.2.md`](docs/RELEASE-0.2.2.md) (trust fixes),
 [`docs/RELEASE-0.2.1.md`](docs/RELEASE-0.2.1.md) (Windows) and

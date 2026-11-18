@@ -14,6 +14,7 @@ use sonolytica_providers::{ModelStore, default_model_dir, find_model, home_dir, 
 use tracing_subscriber::EnvFilter;
 
 mod cache;
+mod export;
 mod mcp;
 mod query;
 mod report;
@@ -56,6 +57,8 @@ enum Command {
     Query(query::QueryArgs),
     /// Render a human-readable HTML report for an analysed document
     Report(ReportArgs),
+    /// Export a document to SRT, WebVTT or Markdown
+    Export(export::ExportArgs),
     /// Install the agent skill into Claude Code, Codex, OpenCode and Cursor
     InstallSkill(InstallSkillArgs),
     /// List or fetch pinned models
@@ -127,6 +130,9 @@ struct ReportArgs {
     /// Output HTML path (default: the document path with `.html`)
     #[arg(short, long)]
     out: Option<PathBuf>,
+    /// Media file to embed for click-to-seek playback (local path)
+    #[arg(long)]
+    media: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
@@ -710,7 +716,18 @@ async fn run(cli: Cli) -> Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Command::Report(args) => {
-            let path = report::run(&args.document, &report::ReportOptions { out: args.out })?;
+            let path = report::run(
+                &args.document,
+                &report::ReportOptions {
+                    out: args.out,
+                    media: args.media,
+                },
+            )?;
+            println!("{}", path.display());
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Export(args) => {
+            let path = export::run(&args)?;
             println!("{}", path.display());
             Ok(ExitCode::SUCCESS)
         }

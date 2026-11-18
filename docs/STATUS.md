@@ -28,8 +28,9 @@ runtime, no GPL.
 
 | Check | Result |
 |---|---|
-| `cargo test --workspace` | 184 passed, 0 failed |
-| with `full,metal` | 201 passed, 0 failed |
+| `cargo test --workspace` | 187 passed, 0 failed |
+| with `full,metal` | 204 passed, 0 failed |
+| Report/export | interactive report search/seek; SRT/VTT/Markdown export |
 | Music false positive | clean JFK speech → `music.present=false`, no BPM/key/chords; click/chord fixtures pass |
 | Fallback warning | missing pyannote is silent when Sortformer covers diarization |
 | `cargo clippy -D warnings` | clean (default and full) |

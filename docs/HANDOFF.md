@@ -1,9 +1,10 @@
 # Handoff — SONOLYTICA after the AOSC streaming cycle
 
-Last updated: 2026-11-13. Branch `main`, working tree clean. Public repo:
-<https://github.com/Neksand/sonolytica>; `v0.2.3` adds two front doors (human
-HTML report and agent MCP path) on top of the v0.2.2 trust fixes, native
-Windows 10/11 and macOS/Linux; Docker is public on GHCR, CI is green.
+Last updated: 2026-11-18. Branch `main`, working tree clean. Public repo:
+<https://github.com/Neksand/sonolytica>; `v0.2.4` adds the human editing layer
+(interactive report, SRT/VTT/Markdown export) on top of the v0.2.3 two front
+doors, the v0.2.2 trust fixes, native Windows 10/11 and macOS/Linux. Docker is
+public on GHCR, CI is green.
 Since `1960e26`: reproducible benchmark + token
 scripts, `brief` v2 (scene cuts, OCR lines, overlap spans), `query verify`,
 HTML `report`, `install-skill` for four harnesses, release workflow, dense
@@ -37,7 +38,7 @@ OCR text, and provenance on every segment. Agents read it via
 | Models | 14, SHA-256 pinned, in `~/.cache/sonolytica/models` |
 | Commands | 17 query subcommands (brief … verify, ask, captions, poses) + `help` + `report`, `install-skill`, `analyze`, `models`, `cache`, `setup`, `mcp`, `completions`, `doctor`, `inspect`, `schema` |
 | Skill | `skills/sonolytica/` (SKILL.md 200 lines + 5 references + 5 workflows) |
-| Tests | **184** model-free / **201** all-features |
+| Tests | **187** model-free / **204** all-features |
 
 Features: `sonolytica-cli --features full-metal` = whisper + silero + diarize +
 ocr + vision + align + metal. `cargo test --workspace` runs without
@@ -302,8 +303,8 @@ cd /Users/neksand/orca/projects/SONOLYTICA
 git status                       # must be clean
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace           # 184, no models
-cargo test --workspace --all-features   # 201
+cargo test --workspace           # 187, no models
+cargo test --workspace --all-features   # 204
 
 # real models (macOS fixtures, ~10 s)
 SONOLYTICA_E2E=1 cargo test -p sonolytica-engine --features "full,metal" --test e2e_speech
