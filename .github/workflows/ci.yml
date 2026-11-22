@@ -28,6 +28,8 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test without any model feature
         run: cargo test --workspace
+      - name: Package marketplace skill
+        run: ./scripts/package-skill.sh /tmp/sonolytica-skill-package
 
   full:
     name: full pipeline (macOS, Metal, native runtimes)

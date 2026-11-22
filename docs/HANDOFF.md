@@ -1,9 +1,9 @@
 # Handoff — SONOLYTICA after the AOSC streaming cycle
 
-Last updated: 2026-11-18. Branch `main`, working tree clean. Public repo:
-<https://github.com/Neksand/sonolytica>; `v0.2.4` adds the human editing layer
-(interactive report, SRT/VTT/Markdown export) on top of the v0.2.3 two front
-doors, the v0.2.2 trust fixes, native Windows 10/11 and macOS/Linux. Docker is
+Last updated: 2026-11-22. Branch `main`, working tree clean. Public repo:
+<https://github.com/Neksand/sonolytica>; `v0.2.5` adds the marketplace skill package and Agensi free-listing
+copy on top of v0.2.4 human editing, v0.2.3 two front doors and the v0.2.2
+trust fixes; native Windows 10/11 and macOS/Linux stay supported. Docker is
 public on GHCR, CI is green.
 Since `1960e26`: reproducible benchmark + token
 scripts, `brief` v2 (scene cuts, OCR lines, overlap spans), `query verify`,

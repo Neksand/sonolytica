@@ -8,10 +8,10 @@ Local, typed, timestamped. Speech with word timings and speaker turns, shots and
 keyframes, on-screen text, faces, objects, pose, captions and music — one
 timeline, provenance on every fact, no cloud.
 
-**v0.2.4** — stable local release; models are opt-in, digest-pinned and never
+**v0.2.5** — stable local release; models are opt-in, digest-pinned and never
 uploaded. macOS arm64, Linux x86_64/arm64, and Windows 10/11 x64.
 
-**Latest:** [v0.2.4 — human editing layer](https://github.com/neksand/sonolytica/releases/tag/v0.2.4) · [release notes](docs/RELEASE-0.2.4.md)
+**Latest:** [v0.2.5 — marketplace skill package](https://github.com/neksand/sonolytica/releases/tag/v0.2.5) · [release notes](docs/RELEASE-0.2.5.md)
 
 [![ci](https://github.com/neksand/sonolytica/actions/workflows/ci.yml/badge.svg)](https://github.com/neksand/sonolytica/actions/workflows/ci.yml)
 [![release](https://img.shields.io/github/v/release/neksand/sonolytica?display_name=tag)](https://github.com/neksand/sonolytica/releases)
@@ -470,12 +470,14 @@ cargo fmt --all -- --check
 
 Design: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/adr/`](docs/adr/).
 Benchmark protocol: [`docs/BENCHMARK.md`](docs/BENCHMARK.md). Release notes:
+[`docs/RELEASE-0.2.5.md`](docs/RELEASE-0.2.5.md) (marketplace package),
 [`docs/RELEASE-0.2.4.md`](docs/RELEASE-0.2.4.md) (human editing layer),
 [`docs/RELEASE-0.2.3.md`](docs/RELEASE-0.2.3.md) (two front doors),
 [`docs/RELEASE-0.2.2.md`](docs/RELEASE-0.2.2.md) (trust fixes),
 [`docs/RELEASE-0.2.1.md`](docs/RELEASE-0.2.1.md) (Windows) and
 [`docs/RELEASE-0.2.0.md`](docs/RELEASE-0.2.0.md). Launch brief:
-[`docs/LAUNCH.md`](docs/LAUNCH.md).
+[`docs/LAUNCH.md`](docs/LAUNCH.md). Marketplace skill package and Agensi
+listing copy: [`docs/AGENSI.md`](docs/AGENSI.md).
 
 Contributions are welcome: open an issue with a minimal reproducer, or a PR
 with a test that would fail on the current main. No GPL dependencies.

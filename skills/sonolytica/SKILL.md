@@ -16,6 +16,31 @@ document, say so.
 told to — do not preload them. Aim for `brief` plus 1–3 targeted queries per
 question; for an absence claim, search the word once and its stem once.
 
+## Prerequisites — install once
+
+This skill calls a local binary and is not self-contained. If `sonolytica`
+is missing or `sonolytica doctor` fails, stop and ask the user to install it;
+do not invent a transcript.
+
+```bash
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/neksand/sonolytica/main/install.sh | sh
+# Windows 10/11 x64 (PowerShell)
+irm https://raw.githubusercontent.com/neksand/sonolytica/main/install.ps1 | iex
+```
+
+Then install FFmpeg 7+ and run:
+
+```bash
+sonolytica setup
+sonolytica doctor
+```
+
+The core models are about 1.5 GB; `setup --full` adds OCR, faces, objects,
+pose and captions. The skill needs an agent with local shell access. For a
+shell-less MCP client (Claude Desktop, Cursor, IDE agents), configure
+`sonolytica mcp` instead; this package does not host a server.
+
 ## Two modes — pick before you run
 
 - **Human-facing request:** "make me a report", "give me notes", "I want to
